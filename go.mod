@@ -3,7 +3,7 @@ module github.com/cnap-tech/cli
 go 1.26.0
 
 require (
-	github.com/charmbracelet/huh v0.8.0
+	github.com/charmbracelet/huh/v2 v2.0.3
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/coder/websocket v1.8.14
 	github.com/oapi-codegen/runtime v1.1.2
