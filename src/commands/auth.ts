@@ -1,7 +1,8 @@
-import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { chmod, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-import { usageError } from "../runtime/errors";
+import { AkuaCliError, usageError } from "../runtime/errors";
 import type { RenderEnvelope } from "../runtime/render";
 
 const CONFIG_FILE_MODE = 0o600;
@@ -161,18 +162,45 @@ async function readConfig(configPath: string): Promise<AkuaConfig> {
     if (error instanceof Error && "code" in error && error.code === "ENOENT") {
       return {};
     }
-    throw error;
+    throw configError("read", configPath, error);
   }
 }
 
 async function writeConfig(configPath: string, config: AkuaConfig): Promise<void> {
-  await mkdir(dirname(configPath), { recursive: true, mode: CONFIG_DIR_MODE });
-  await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, { mode: CONFIG_FILE_MODE });
-  await chmod(configPath, CONFIG_FILE_MODE);
+  const configDir = dirname(configPath);
+  const tempPath = join(configDir, `.config.json.${randomUUID()}.tmp`);
+
+  try {
+    await mkdir(configDir, { recursive: true, mode: CONFIG_DIR_MODE });
+    await chmod(configDir, CONFIG_DIR_MODE);
+    await writeFile(tempPath, `${JSON.stringify(config, null, 2)}\n`, { mode: CONFIG_FILE_MODE, flag: "wx" });
+    await chmod(tempPath, CONFIG_FILE_MODE);
+    await rename(tempPath, configPath);
+    await chmod(configPath, CONFIG_FILE_MODE);
+  } catch (error) {
+    await rm(tempPath, { force: true }).catch(() => undefined);
+    throw configError("write", configPath, error);
+  }
 }
 
 async function removeStoredToken(configPath: string): Promise<void> {
-  await rm(configPath, { force: true });
+  try {
+    await rm(configPath, { force: true });
+  } catch (error) {
+    throw configError("remove", configPath, error);
+  }
+}
+
+function configError(operation: "read" | "write" | "remove", configPath: string, error: unknown): AkuaCliError {
+  return new AkuaCliError({
+    type: "runtime_error",
+    code: "AKUA_CONFIG_ERROR",
+    message: `Failed to ${operation} Akua config at ${configPath}: ${errorMessage(error)}`,
+  });
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function statusObservation(source: CredentialSource): string {

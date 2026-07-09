@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 describe("akua entrypoint", () => {
@@ -130,6 +130,27 @@ describe("akua entrypoint", () => {
     }
   });
 
+  test("auth login replaces an existing protected config file", async () => {
+    const home = await makeTempHome();
+    try {
+      const configPath = join(home, ".config", "akua", "config.json");
+      await runAkua(["auth", "login", "--token", "sk_akua_old", "--quiet"], { HOME: home });
+      await chmod(configPath, 0o444);
+
+      const { stdout, exitCode } = await runAkua(["auth", "login", "--token", "sk_akua_new", "--json"], { HOME: home });
+
+      expect(exitCode).toBe(0);
+      expect(JSON.parse(stdout)).toMatchObject({
+        status: "ok",
+        command: "akua auth login",
+      });
+      expect(JSON.parse(await readFile(configPath, "utf8"))).toEqual({ token: "sk_akua_new" });
+      expect((await stat(configPath)).mode & 0o777).toBe(0o600);
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
   test("auth status gives AKUA_API_TOKEN precedence over stored tokens", async () => {
     const home = await makeTempHome();
     try {
@@ -180,6 +201,29 @@ describe("akua entrypoint", () => {
           source: "none",
         },
       });
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
+  test("auth status reports malformed config as a runtime error", async () => {
+    const home = await makeTempHome();
+    try {
+      const configPath = join(home, ".config", "akua", "config.json");
+      await runAkua(["auth", "login", "--token", "sk_akua_stored", "--quiet"], { HOME: home });
+      await writeFile(configPath, "{not json\n");
+
+      const { stdout, exitCode } = await runAkua(["auth", "status", "--json"], { HOME: home });
+
+      expect(exitCode).toBe(1);
+      expect(JSON.parse(stdout)).toMatchObject({
+        error: {
+          type: "runtime_error",
+          code: "AKUA_CONFIG_ERROR",
+        },
+      });
+      expect(stdout).toContain("Failed to read Akua config");
+      expect(stdout).not.toContain("akua --help");
     } finally {
       await rm(home, { recursive: true, force: true });
     }
