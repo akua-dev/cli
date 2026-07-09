@@ -1,5 +1,37 @@
 [tools]
-go = "1.26.0"
-task = "3.48.0"
-golangci-lint = "2.10.1"
-goreleaser = "2.13.3"
+bun = "1.3.7"
+
+[env]
+AKUA_OPENAPI_URL = "https://api.akua.dev/v1/openapi.json"
+
+[tasks.dev]
+description = "Run the TypeScript CLI entrypoint"
+run = "bun run dev --"
+
+[tasks.build]
+description = "Typecheck and build JavaScript output"
+run = "bun run build"
+
+[tasks."build:binary"]
+description = "Compile a self-contained akua executable with Bun"
+run = "bun run build:binary"
+
+[tasks.test]
+description = "Run tests"
+run = "bun test"
+
+[tasks."spec:fetch"]
+description = "Fetch the production OpenAPI spec snapshot"
+run = "bun run spec:fetch"
+
+[tasks.generate]
+description = "Regenerate generated CLI artifacts"
+run = "bun run generate"
+
+[tasks."generate:check"]
+description = "Verify generated CLI artifacts are current"
+run = "bun run generate:check"
+
+[tasks.check]
+description = "Run the local validation suite"
+depends = ["generate:check", "build", "test"]

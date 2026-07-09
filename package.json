@@ -1,0 +1,26 @@
+{
+  "name": "@akua-dev/cli",
+  "version": "0.0.0",
+  "private": false,
+  "type": "module",
+  "description": "Akua Cloud CLI",
+  "bin": {
+    "akua": "./src/bin/akua.ts"
+  },
+  "scripts": {
+    "dev": "bun src/bin/akua.ts",
+    "build": "tsc --noEmit && bun build src/bin/akua.ts --target=bun --outdir=dist/js",
+    "build:binary": "bun build src/bin/akua.ts --compile --target=bun --outfile dist/akua",
+    "spec:fetch": "bun scripts/fetch-openapi.ts",
+    "generate": "bun scripts/generate-commands.ts",
+    "generate:check": "bun scripts/generate-commands.ts --check",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.0",
+    "typescript": "^5.9.0"
+  },
+  "engines": {
+    "bun": ">=1.3.7"
+  }
+}
