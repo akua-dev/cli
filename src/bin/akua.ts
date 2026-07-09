@@ -2,14 +2,15 @@
 import { buildHomeView } from "../commands/home";
 import { commandRegistry } from "../generated/commands.gen";
 import { AkuaCliError, commandNotImplemented, usageError } from "../runtime/errors";
-import { detectOutputMode } from "../runtime/mode";
+import { detectOutputMode, type OutputMode } from "../runtime/mode";
 import { renderError, renderSuccess, type RenderEnvelope } from "../runtime/render";
 
 const VERSION = "0.0.0";
 
 export async function main(argv = process.argv.slice(2), env = process.env): Promise<number> {
-  const mode = detectOutputMode({ argv, env, stdoutIsTTY: process.stdout.isTTY });
+  let mode: OutputMode = fallbackErrorMode(argv);
   try {
+    mode = detectOutputMode({ argv, env, stdoutIsTTY: process.stdout.isTTY });
     const command = route(stripGlobalFlags(argv));
     process.stdout.write(renderSuccess(command, mode));
     return 0;
@@ -55,10 +56,7 @@ function route(argv: readonly string[]): RenderEnvelope {
 }
 
 function commandsView(argv: readonly string[]): RenderEnvelope {
-  assertKnownFlags(argv, new Set(["--operation-id", "--resource", "--limit"]));
-  const operationId = readFlag(argv, "--operation-id");
-  const resource = readFlag(argv, "--resource");
-  const limit = Number(readFlag(argv, "--limit") ?? "20");
+  const { operationId, resource, limit } = parseCommandsFlags(argv);
   const filtered = commandRegistry
     .filter((command) => !operationId || command.operation_id === operationId)
     .filter((command) => !resource || command.resource === resource)
@@ -119,33 +117,85 @@ function stripGlobalFlags(argv: readonly string[]): string[] {
   return stripped;
 }
 
-function readFlag(argv: readonly string[], flag: string): string | undefined {
-  for (let index = 0; index < argv.length; index += 1) {
-    const value = argv[index];
-    if (value === flag) {
-      return argv[index + 1];
-    }
-    if (value.startsWith(`${flag}=`)) {
-      return value.slice(flag.length + 1);
-    }
-  }
-  return undefined;
+interface CommandsFilters {
+  operationId?: string;
+  resource?: string;
+  limit: number;
 }
 
-function assertKnownFlags(argv: readonly string[], knownFlags: ReadonlySet<string>): void {
-  for (const value of argv) {
+function parseCommandsFlags(argv: readonly string[]): CommandsFilters {
+  const knownFlags = new Set(["--operation-id", "--resource", "--limit"]);
+  let operationId: string | undefined;
+  let resource: string | undefined;
+  let limit = 20;
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const value = argv[index];
     if (!value.startsWith("-")) {
       continue;
     }
+
     const name = flagName(value);
     if (!knownFlags.has(name)) {
       throw usageError(`Unknown flag: ${name}`);
     }
+
+    const raw = readFlagValue(argv, index, name);
+    if (raw.value === undefined || raw.value === "") {
+      throw usageError(`Missing value for ${name}.`);
+    }
+    if (raw.consumedNext) {
+      index += 1;
+    }
+
+    if (name === "--operation-id") {
+      operationId = raw.value;
+    } else if (name === "--resource") {
+      resource = raw.value;
+    } else {
+      limit = parsePositiveInteger(raw.value, name);
+    }
   }
+
+  return { operationId, resource, limit };
+}
+
+function readFlagValue(
+  argv: readonly string[],
+  index: number,
+  flag: string,
+): { value: string | undefined; consumedNext: boolean } {
+  const value = argv[index];
+  if (value === flag) {
+    const next = argv[index + 1];
+    if (next === undefined || (next.startsWith("-") && !(flag === "--limit" && /^-\d/.test(next)))) {
+      return { value: undefined, consumedNext: false };
+    }
+    return { value: next, consumedNext: true };
+  }
+
+  return { value: value.slice(flag.length + 1), consumedNext: false };
 }
 
 function flagName(value: string): string {
   return value.includes("=") ? value.slice(0, value.indexOf("=")) : value;
+}
+
+function parsePositiveInteger(value: string, flag: string): number {
+  if (!/^[1-9]\d*$/.test(value)) {
+    throw usageError(`Invalid value for ${flag}: ${value}. Expected a positive integer.`);
+  }
+  return Number(value);
+}
+
+function fallbackErrorMode(argv: readonly string[]): OutputMode {
+  if (argv.includes("--json")) {
+    return "json";
+  }
+  if (argv.includes("--quiet") || argv.includes("-q")) {
+    return "quiet";
+  }
+  return "human";
 }
 
 if (import.meta.main) {
