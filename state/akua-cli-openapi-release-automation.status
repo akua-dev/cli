@@ -1,0 +1,23 @@
+PR: https://github.com/akua-dev/cli/pull/16
+Branch: codex/openapi-idempotent-release-please
+Base: main
+Status: PR open; no merge performed.
+
+Validation:
+- Local `mise run check`: passed after trusting this checkout's `mise.toml`.
+- no-mistakes: checks-passed for PR #16.
+- GitHub CI: `check` passed on head `0cdebe5c36a5cc03b404ad8fe3158b9ba051f494`.
+- OpenAPI workflow no-op simulation: `changed=false`; create-pull-request condition evaluates false.
+
+Implemented:
+- `.github/workflows/update-openapi.yml` fetches/generates, rejects unexpected tracked or untracked files, and only runs validation/PR creation when `openapi/public.json` or `src/generated/commands.gen.ts` changed.
+- Release Please manifest-mode automation added for the root Bun/TypeScript CLI package.
+- Release Please uses `include-component-in-tag: false` to keep `v*` tags compatible with the existing tag-based release workflow.
+- Release Please is configured to update `src/bin/akua.ts` so `akua --version` tracks released versions.
+- Release Please workflow uses `secrets.RELEASE_PLEASE_TOKEN` instead of the default `GITHUB_TOKEN`.
+- Focused tests cover release-please config, explicit token usage, CLI version targeting, and semver-shaped manifest state.
+
+Blockers / follow-up approval packet:
+- Repository maintainers must install `RELEASE_PLEASE_TOKEN` as a repo or org Actions secret. Use a PAT or GitHub App token with permissions to open/update release PRs and create GitHub releases/tags, so release-please-created `v*` tags can trigger the existing `.github/workflows/release.yml` binary upload workflow.
+- `gh-axi` was requested/preferred but is not installed in this environment (`command not found`), so standard `gh` was used for PR inspection.
+- No live infrastructure mutations, secret mutations, repository settings changes, publishing expansion, package publishing, or merge were performed.
