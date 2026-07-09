@@ -45,4 +45,10 @@ describe("release-please configuration", () => {
 
     expect(manifest).toEqual({ ".": "0.6.1" });
   });
+
+  test("uses an explicit token so release PRs and tags trigger follow-up workflows", () => {
+    const workflow = readFileSync(".github/workflows/release-please.yml", "utf8");
+
+    expect(workflow).toContain("token: ${{ secrets.RELEASE_PLEASE_TOKEN }}");
+  });
 });
