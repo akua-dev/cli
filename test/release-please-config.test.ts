@@ -40,10 +40,11 @@ describe("release-please configuration", () => {
     expect(cli).toMatch(/const VERSION = "\d+\.\d+\.\d+(?:[-+][^"]+)?"; \/\/ x-release-please-version/);
   });
 
-  test("bootstraps from the latest existing repository release", () => {
+  test("tracks the root package release version", () => {
     const manifest = JSON.parse(readFileSync(".release-please-manifest.json", "utf8")) as Record<string, string>;
 
-    expect(manifest).toEqual({ ".": "0.6.1" });
+    expect(Object.keys(manifest)).toEqual(["."]);
+    expect(manifest["."]).toMatch(/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/);
   });
 
   test("uses an explicit token so release PRs and tags trigger follow-up workflows", () => {
