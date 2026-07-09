@@ -70,8 +70,8 @@ override URLs.
 
 Default output is adaptive:
 
-- coding-agent, CI, non-TTY, and automation signals use compact structured
-  agent output;
+- `AGENT` names/flags, coding-agent, CI, non-TTY, and automation signals use
+  compact structured agent output;
 - interactive TTY sessions use human output;
 - `--json`, `--quiet`, `-q`, `--output <mode>`, `-o <mode>`, and `AKUA_OUTPUT`
   override detection.
