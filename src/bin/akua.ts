@@ -132,7 +132,7 @@ function parseCommandsFlags(argv: readonly string[]): CommandsFilters {
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index];
     if (!value.startsWith("-")) {
-      continue;
+      throw usageError(`Unexpected argument for commands: ${value}`);
     }
 
     const name = flagName(value);

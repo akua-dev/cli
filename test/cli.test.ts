@@ -70,6 +70,26 @@ describe("akua entrypoint", () => {
       },
     });
   });
+
+  test("rejects unexpected commands positional arguments", async () => {
+    const resource = await runAkua(["commands", "workspaces", "--json"]);
+    expect(resource.exitCode).toBe(2);
+    expect(JSON.parse(resource.stdout)).toMatchObject({
+      error: {
+        type: "usage_error",
+        code: "AKUA_USAGE_ERROR",
+        message: "Unexpected argument for commands: workspaces",
+      },
+    });
+
+    const extra = await runAkua(["commands", "--limit", "5", "extra", "--json"]);
+    expect(extra.exitCode).toBe(2);
+    expect(JSON.parse(extra.stdout)).toMatchObject({
+      error: {
+        message: "Unexpected argument for commands: extra",
+      },
+    });
+  });
 });
 
 async function runAkua(args: readonly string[], env: Record<string, string> = {}) {
