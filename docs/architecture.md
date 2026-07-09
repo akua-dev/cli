@@ -130,7 +130,8 @@ stored with user-only file permissions.
 The default output mode is adaptive:
 
 - `human`: interactive TTY without automation or coding-agent signals;
-- `agent`: known coding-agent env vars, CI env vars, or non-TTY stdout;
+- `agent`: `AGENT` names/flags, known coding-agent env vars, CI env vars, or
+  non-TTY stdout;
 - `json`: explicit `--json`, `--output json`, `-o json`, or
   `AKUA_OUTPUT=json`;
 - `quiet`: explicit `--quiet`, `-q`, `--output quiet`, `-o quiet`, or

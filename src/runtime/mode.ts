@@ -9,6 +9,7 @@ export interface OutputModeInput {
 }
 
 const AGENT_ENV_VARS = [
+  "AGENT",
   "CODEX_SANDBOX",
   "CODEX_CLI",
   "OPENAI_CODEX",
