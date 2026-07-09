@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { authView } from "../commands/auth";
 import { buildHomeView } from "../commands/home";
 import { commandRegistry } from "../generated/commands.gen";
 import { AkuaCliError, commandNotImplemented, usageError } from "../runtime/errors";
@@ -11,7 +12,7 @@ export async function main(argv = process.argv.slice(2), env = process.env): Pro
   let mode: OutputMode = fallbackErrorMode(argv);
   try {
     mode = detectOutputMode({ argv, env, stdoutIsTTY: process.stdout.isTTY });
-    const command = route(stripGlobalFlags(argv));
+    const command = await route(stripGlobalFlags(argv), env);
     process.stdout.write(renderSuccess(command, mode));
     return 0;
   } catch (error) {
@@ -21,7 +22,7 @@ export async function main(argv = process.argv.slice(2), env = process.env): Pro
   }
 }
 
-function route(argv: readonly string[]): RenderEnvelope {
+async function route(argv: readonly string[], env: Record<string, string | undefined>): Promise<RenderEnvelope> {
   if (argv.length === 0) {
     return buildHomeView();
   }
@@ -40,6 +41,10 @@ function route(argv: readonly string[]): RenderEnvelope {
 
   if (argv[0] === "commands") {
     return commandsView(argv.slice(1));
+  }
+
+  if (argv[0] === "auth") {
+    return authView(argv.slice(1), env);
   }
 
   const unknownFlag = argv.find((arg) => arg.startsWith("-"));
@@ -87,6 +92,9 @@ function helpView(): RenderEnvelope {
       "Usage: akua [--output human|agent|json|quiet] <command>",
       "Commands:",
       "  akua                  Show compact home view",
+      "  akua auth login       Save a local API token",
+      "  akua auth status      Show local authentication status",
+      "  akua auth logout      Remove the saved local API token",
       "  akua commands         List generated public OpenAPI command registry",
       "  akua --help           Show help",
       "  akua --version        Show version",

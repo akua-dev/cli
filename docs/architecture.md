@@ -1,6 +1,6 @@
 # Akua Cloud CLI Architecture
 
-Status: initial greenfield spec and scaffold.
+Status: greenfield scaffold with local auth/config MVP.
 
 ## Decisions And Non-Goals
 
@@ -9,7 +9,7 @@ Status: initial greenfield spec and scaffold.
 - Repository: standalone open-source `akua-dev/cli`.
 - Packaging: Bun self-contained executable via `bun build --compile`.
 - API source of truth: `https://api.akua.dev/v1/openapi.json`.
-- First release: public API commands only.
+- First release: local auth/config plus public API commands only.
 - Compatibility: no `cnap` binary, Go module, config path, env var, or command
   compatibility unless a later captain decision changes this.
 - No live infrastructure mutation is required for development or tests. The
@@ -26,6 +26,7 @@ openapi/public.json              fetched public OpenAPI snapshot
 scripts/fetch-openapi.ts         guarded production spec fetcher
 scripts/generate-commands.ts     operationId-driven command registry generator
 src/bin/akua.ts                  executable entrypoint
+src/commands/auth.ts             local auth/config command implementation
 src/runtime/                     output, errors, exit codes, command contracts
 src/generated/commands.gen.ts    generated public command registry
 .github/workflows/update-openapi.yml
@@ -36,7 +37,7 @@ src/generated/commands.gen.ts    generated public command registry
 release-please-config.json       Release Please manifest-mode config
 .release-please-manifest.json    Release Please root package version manifest
 docs/architecture.md             this spec
-test/                            Bun tests for scaffold contracts
+test/                            Bun tests for scaffold and auth/config contracts
 ```
 
 ## OpenAPI And Command Generation
@@ -105,6 +106,7 @@ Authentication:
 
 - bearer tokens use `Authorization: Bearer sk_akua_...`;
 - `AKUA_API_TOKEN` is the primary noninteractive credential env var;
+- `AKUA_API_TOKEN` takes precedence over stored credentials;
 - broad tokens select workspace/scope with the `Akua-Context` header;
 - workspace-owned tokens may imply workspace context.
 
@@ -114,6 +116,11 @@ Configuration should live under the Akua namespace:
 ~/.config/akua/config.json
 ```
 
+The implemented config file is JSON. The local auth MVP stores a `token` string
+there while preserving unrelated keys. Writes create `~/.config/akua` with
+user-only `0700` permissions and `config.json` with user-only `0600`
+permissions.
+
 Recommended config precedence:
 
 1. command flags such as `--api-url`, `--workspace`, and `--profile`;
@@ -121,9 +128,19 @@ Recommended config precedence:
 3. profile config;
 4. built-in production defaults.
 
-The first release should implement `akua auth login --token <token>`, `akua auth
-status`, and `akua auth logout` before browser/device login. Tokens must be
-stored with user-only file permissions.
+The first implemented local auth/config slice is:
+
+```sh
+akua auth login --token <token>  # save a token in ~/.config/akua/config.json
+akua auth status                 # show whether auth comes from env, config, or none
+akua auth logout                 # remove only the stored config token
+```
+
+`auth login` requires `HOME` so it can locate the config file. `auth status`
+honors `AKUA_API_TOKEN` even when `HOME` is unset, and otherwise reads the
+stored token. `auth logout` leaves `AKUA_API_TOKEN` untouched and reports env
+auth as still active when that variable is set. Browser/device login remains out
+of scope.
 
 ## Output And UX Modes
 
@@ -156,10 +173,13 @@ Human mode can use tables and prose, but should stay content-first. A no-args
 `akua` invocation should show live state once API execution exists; the scaffold
 currently shows registry state and next-step commands.
 
-The implemented scaffold command surface is intentionally small:
+The implemented command surface is intentionally small:
 
 ```sh
 akua                                      # registry status home view
+akua auth login --token <token>           # save a local API token
+akua auth status                          # show effective auth source
+akua auth logout                          # remove the saved local API token
 akua commands                            # first 20 generated public commands
 akua commands --resource workspaces      # resource filter
 akua commands --operation-id workspaces.list
@@ -207,14 +227,14 @@ This can be simplified later, but it must remain deterministic and tested.
 
 ## Public-Only First Release
 
-The first release command surface is generated only from public operations.
+The first release API command surface is generated only from public operations.
 Internal, admin, preview, trusted-partner, and private operations must be absent
 from generated commands and docs unless a separate build target is deliberately
 added later.
 
 Recommended MVP order:
 
-1. `auth` and config/profile commands;
+1. local `auth` and token config commands (implemented);
 2. workspace/context commands;
 3. read-only `list` and `get` commands for public resources;
 4. operations status/watch commands;
@@ -262,6 +282,8 @@ uploading the Linux x64 binary artifact.
 Current tests cover:
 
 - CLI routing and usage validation for the scaffold commands;
+- local auth login/status/logout behavior, env credential precedence, config
+  preservation, malformed config handling, and user-only config permissions;
 - output mode detection;
 - agent and JSON rendering;
 - structured error payloads;
@@ -275,7 +297,7 @@ registry drift.
 Next tests should add:
 
 - golden command output by mode;
-- mocked API calls for auth, workspace, list/get, and operation flows;
+- mocked API calls for workspace, list/get, and operation flows;
 - destructive command refusal tests in CI/non-TTY/agent modes;
 - packaging smoke test for `dist/akua --help`.
 

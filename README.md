@@ -10,8 +10,9 @@ release.
 ## Current Status
 
 This scaffold establishes the architecture, packaging path, OpenAPI fetch task,
-public operation registry generation, release automation, and output/error
-runtime contract. It does not yet implement full API command execution.
+public operation registry generation, release automation, output/error runtime
+contract, and local auth/config token handling. It does not yet implement full
+API command execution.
 
 ## Development
 
@@ -40,10 +41,13 @@ mise run generate               # regenerate public command registry
 mise run generate:check         # verify generated registry is current
 ```
 
-Implemented scaffold commands:
+Implemented commands:
 
 ```sh
 akua                                      # show compact registry status
+akua auth login --token <token>           # save a local API token
+akua auth status                          # show effective auth source
+akua auth logout                          # remove the saved local API token
 akua commands                            # list first 20 generated public commands
 akua commands --resource workspaces      # filter by generated resource
 akua commands --operation-id workspaces.list
@@ -51,6 +55,15 @@ akua commands --limit 5
 akua --help                              # also -h
 akua --version                           # also -v or -V
 ```
+
+## Authentication
+
+`AKUA_API_TOKEN` is the primary noninteractive credential and takes precedence
+over any stored token. `akua auth login --token <token>` writes the token to
+`~/.config/akua/config.json`, preserving unrelated config keys and setting the
+Akua config directory to `0700` and file to `0600`. `akua auth logout` removes
+only the stored token; it does not clear `AKUA_API_TOKEN`. Browser/device login
+is not implemented in this MVP slice.
 
 ## OpenAPI Source
 
