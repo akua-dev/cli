@@ -6,7 +6,7 @@ Status: PR open; no merge performed.
 Validation:
 - Local `mise run check`: passed after trusting this checkout's `mise.toml`.
 - no-mistakes: checks-passed for PR #16.
-- GitHub CI: `check` passed on head `0cdebe5c36a5cc03b404ad8fe3158b9ba051f494`.
+- GitHub CI: `check` passed on the PR branch after rerunning a runner-queued/cancelled attempt.
 - OpenAPI workflow no-op simulation: `changed=false`; create-pull-request condition evaluates false.
 
 Implemented:
