@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { join } from "node:path";
 
 describe("akua entrypoint", () => {
   test("fails loudly on unknown flags", async () => {
@@ -100,12 +102,120 @@ describe("akua entrypoint", () => {
       },
     });
   });
+
+  test("auth login stores a token with user-only permissions", async () => {
+    const home = await makeTempHome();
+    try {
+      const token = "sk_akua_test_login";
+      const { stdout, exitCode } = await runAkua(["auth", "login", "--token", token, "--json"], { HOME: home });
+      const payload = JSON.parse(stdout);
+      const configPath = join(home, ".config", "akua", "config.json");
+
+      expect(exitCode).toBe(0);
+      expect(stdout).not.toContain(token);
+      expect(payload).toMatchObject({
+        status: "ok",
+        command: "akua auth login",
+        data: {
+          authenticated: true,
+          source: "config",
+          config_path: configPath,
+        },
+      });
+      expect(JSON.parse(await readFile(configPath, "utf8"))).toEqual({ token });
+      expect((await stat(join(home, ".config", "akua"))).mode & 0o777).toBe(0o700);
+      expect((await stat(configPath)).mode & 0o777).toBe(0o600);
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
+  test("auth status gives AKUA_API_TOKEN precedence over stored tokens", async () => {
+    const home = await makeTempHome();
+    try {
+      await runAkua(["auth", "login", "--token", "sk_akua_stored", "--quiet"], { HOME: home });
+      const { stdout, exitCode } = await runAkua(["auth", "status", "--json"], {
+        HOME: home,
+        AKUA_API_TOKEN: "sk_akua_env",
+      });
+
+      expect(exitCode).toBe(0);
+      expect(JSON.parse(stdout)).toMatchObject({
+        status: "ok",
+        command: "akua auth status",
+        observations: ["Authenticated with AKUA_API_TOKEN."],
+        data: {
+          authenticated: true,
+          source: "env",
+        },
+      });
+      expect(stdout).not.toContain("sk_akua_env");
+      expect(stdout).not.toContain("sk_akua_stored");
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
+  test("auth logout removes stored token without clearing AKUA_API_TOKEN", async () => {
+    const home = await makeTempHome();
+    try {
+      await runAkua(["auth", "login", "--token", "sk_akua_stored", "--quiet"], { HOME: home });
+      const { stdout, exitCode } = await runAkua(["auth", "logout", "--json"], {
+        HOME: home,
+        AKUA_API_TOKEN: "sk_akua_env",
+      });
+      const status = await runAkua(["auth", "status", "--json"], { HOME: home });
+
+      expect(exitCode).toBe(0);
+      expect(JSON.parse(stdout)).toMatchObject({
+        observations: ["Stored authentication token removed. AKUA_API_TOKEN is still active."],
+        data: {
+          authenticated: true,
+          source: "env",
+        },
+      });
+      expect(JSON.parse(status.stdout)).toMatchObject({
+        data: {
+          authenticated: false,
+          source: "none",
+        },
+      });
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
+  test("auth login requires an explicit token flag", async () => {
+    const home = await makeTempHome();
+    try {
+      const missingFlag = await runAkua(["auth", "login", "--json"], { HOME: home });
+      expect(missingFlag.exitCode).toBe(2);
+      expect(JSON.parse(missingFlag.stdout)).toMatchObject({
+        error: {
+          message: "Missing required --token flag.",
+        },
+      });
+
+      const missingValue = await runAkua(["auth", "login", "--token", "--json"], { HOME: home });
+      expect(missingValue.exitCode).toBe(2);
+      expect(JSON.parse(missingValue.stdout)).toMatchObject({
+        error: {
+          message: "Missing value for --token.",
+        },
+      });
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
 });
 
 async function runAkua(args: readonly string[], env: Record<string, string> = {}) {
   const childEnv = { ...process.env, ...env };
   if (!("AKUA_OUTPUT" in env)) {
     delete childEnv.AKUA_OUTPUT;
+  }
+  if (!("AKUA_API_TOKEN" in env)) {
+    delete childEnv.AKUA_API_TOKEN;
   }
 
   const proc = Bun.spawn({
@@ -121,4 +231,8 @@ async function runAkua(args: readonly string[], env: Record<string, string> = {}
     proc.exited,
   ]);
   return { stdout, stderr, exitCode };
+}
+
+async function makeTempHome(): Promise<string> {
+  return mkdtemp(join(process.cwd(), ".tmp-akua-home-"));
 }
