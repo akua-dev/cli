@@ -107,9 +107,6 @@ function readEnvOutputMode(env: Record<string, string | undefined>): OutputMode 
 }
 
 function parseOutputMode(value: string, source = "--output"): OutputMode {
-  if (value === "toon") {
-    return "agent";
-  }
   if (EXPLICIT_OUTPUT_MODES.includes(value as OutputMode)) {
     return value as OutputMode;
   }

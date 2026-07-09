@@ -19,4 +19,13 @@ describe("detectOutputMode", () => {
   test("uses human output for interactive sessions without automation signals", () => {
     expect(detectOutputMode({ argv: [], env: {}, stdoutIsTTY: true })).toBe("human");
   });
+
+  test("rejects undocumented output aliases", () => {
+    expect(() => detectOutputMode({ argv: ["--output", "toon"], env: {}, stdoutIsTTY: true })).toThrow(
+      "Invalid --output value: toon",
+    );
+    expect(() => detectOutputMode({ argv: [], env: { AKUA_OUTPUT: "toon" }, stdoutIsTTY: true })).toThrow(
+      "Invalid AKUA_OUTPUT value: toon",
+    );
+  });
 });

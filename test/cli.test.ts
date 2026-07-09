@@ -19,6 +19,16 @@ describe("akua entrypoint", () => {
     expect(stdout).toContain("Invalid --output value: yaml");
   });
 
+  test("rejects undocumented toon output mode", async () => {
+    const flag = await runAkua(["--output", "toon", "--version"]);
+    expect(flag.exitCode).toBe(2);
+    expect(flag.stdout).toContain("Invalid --output value: toon");
+
+    const env = await runAkua(["--version"], { AKUA_OUTPUT: "toon" });
+    expect(env.exitCode).toBe(2);
+    expect(env.stdout).toContain("Invalid AKUA_OUTPUT value: toon");
+  });
+
   test("fails missing explicit output mode values before routing", async () => {
     const { stdout, exitCode } = await runAkua(["--output", "--version"]);
     expect(exitCode).toBe(2);
