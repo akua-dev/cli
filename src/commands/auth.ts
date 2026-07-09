@@ -36,7 +36,7 @@ export async function authView(argv: readonly string[], env: Record<string, stri
     return logoutView(argv.slice(1), env);
   }
 
-  throw usageError(`Unknown auth subcommand: ${subcommand}`);
+  throw usageError("Unknown auth subcommand.");
 }
 
 async function loginView(argv: readonly string[], env: Record<string, string | undefined>): Promise<RenderEnvelope> {
@@ -127,7 +127,7 @@ function rejectUnexpectedAuthArgs(subcommand: string, argv: readonly string[]): 
     const first = argv[0];
     throw first.startsWith("-")
       ? usageError(`Unknown flag: ${flagName(first)}`)
-      : usageError(`Unexpected argument for auth ${subcommand}: ${first}`);
+      : usageError(`Unexpected argument for auth ${subcommand}.`);
   }
 }
 

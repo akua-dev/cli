@@ -316,6 +316,41 @@ describe("akua entrypoint", () => {
       await rm(home, { recursive: true, force: true });
     }
   });
+
+  test("auth positional usage errors do not echo token-like values", async () => {
+    const home = await makeTempHome();
+    try {
+      const tokenLikeValue = "sk_akua_secret_positional";
+      const unknownSubcommand = await runAkua(["auth", tokenLikeValue, "--json"], { HOME: home });
+      expect(unknownSubcommand.exitCode).toBe(2);
+      expect(JSON.parse(unknownSubcommand.stdout)).toMatchObject({
+        error: {
+          message: "Unknown auth subcommand.",
+        },
+      });
+      expect(unknownSubcommand.stdout).not.toContain(tokenLikeValue);
+
+      const statusExtra = await runAkua(["auth", "status", tokenLikeValue, "--json"], { HOME: home });
+      expect(statusExtra.exitCode).toBe(2);
+      expect(JSON.parse(statusExtra.stdout)).toMatchObject({
+        error: {
+          message: "Unexpected argument for auth status.",
+        },
+      });
+      expect(statusExtra.stdout).not.toContain(tokenLikeValue);
+
+      const logoutExtra = await runAkua(["auth", "logout", tokenLikeValue, "--json"], { HOME: home });
+      expect(logoutExtra.exitCode).toBe(2);
+      expect(JSON.parse(logoutExtra.stdout)).toMatchObject({
+        error: {
+          message: "Unexpected argument for auth logout.",
+        },
+      });
+      expect(logoutExtra.stdout).not.toContain(tokenLikeValue);
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
 });
 
 async function runAkua(args: readonly string[], env: Record<string, string> = {}) {
