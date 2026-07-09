@@ -18,6 +18,26 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: mise run spec:fetch
       - run: mise run generate
+      - name: Guard OpenAPI update scope
+        run: |
+          changed_files="$(git status --porcelain --untracked-files=all)"
+          unexpected_files="$(printf '%s\n' "$changed_files" | awk '
+            NF {
+              path = substr($0, 4)
+              if ($0 ~ /^[RC]/) {
+                split(path, parts, " -> ")
+                path = parts[2]
+              }
+              if (path != "openapi/public.json" && path != "src/generated/commands.gen.ts") {
+                print path
+              }
+            }
+          ')"
+          if [ -n "$unexpected_files" ]; then
+            echo "Unexpected files changed during OpenAPI update:"
+            printf '%s\n' "$unexpected_files"
+            exit 1
+          fi
       - name: Detect OpenAPI changes
         id: openapi-diff
         run: |
@@ -28,16 +48,6 @@ jobs:
             echo "changed=true" >> "$GITHUB_OUTPUT"
             echo "OpenAPI changes detected:"
             git diff --stat -- openapi/public.json src/generated/commands.gen.ts
-          fi
-      - name: Guard OpenAPI update scope
-        if: steps.openapi-diff.outputs.changed == 'true'
-        run: |
-          changed_files="$(git diff --name-only)"
-          unexpected_files="$(printf '%s\n' "$changed_files" | grep -v -E '^(openapi/public\.json|src/generated/commands\.gen\.ts)$' || true)"
-          if [ -n "$unexpected_files" ]; then
-            echo "Unexpected files changed during OpenAPI update:"
-            printf '%s\n' "$unexpected_files"
-            exit 1
           fi
       - run: mise run check
         if: steps.openapi-diff.outputs.changed == 'true'
