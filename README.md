@@ -1,187 +1,81 @@
-# CNAP CLI
+# Akua CLI
 
-Command-line interface for managing CNAP workspaces, clusters, and deployments.
+Greenfield Akua Cloud CLI prototype.
 
-## Install
+The canonical binary is `akua`. This repository is intentionally moving away
+from the old CNAP-era Go CLI; no `cnap` binary or
+`github.com/cnap-tech/cli` compatibility is required for the first Akua
+release.
 
-```bash
-# Homebrew (macOS / Linux) — includes shell completions
-brew install cnap-tech/tap/cnap
+## Current Status
 
-# Go
-go install github.com/cnap-tech/cli/cmd/cnap@latest
-
-# GitHub Releases — download binary for your platform
-# https://github.com/cnap-tech/cli/releases
-```
-
-## Quick Start
-
-```bash
-# Authenticate via browser (stores session token)
-cnap auth login
-
-# Or authenticate with a Personal Access Token (for CI/CD)
-cnap auth login --token cnap_pat_...
-
-# List and select a workspace
-cnap workspaces list
-cnap workspaces switch <workspace-id>
-
-# Manage clusters
-cnap clusters list
-cnap clusters get <cluster-id>
-
-# Deploy a product
-cnap installs create --product <product-id> --region <region-id>
-
-# Stream logs
-cnap installs logs <install-id> --follow
-```
-
-## Shell Completions
-
-Homebrew installs completions automatically. For manual installs:
-
-### Zsh
-
-```bash
-# Current session
-source <(cnap completion zsh)
-
-# Permanent (macOS with Homebrew)
-cnap completion zsh > $(brew --prefix)/share/zsh/site-functions/_cnap
-
-# Permanent (Linux)
-cnap completion zsh > "${fpath[1]}/_cnap"
-```
-
-If completions don't work, ensure `compinit` is loaded in your `~/.zshrc`:
-
-```bash
-autoload -U compinit; compinit
-```
-
-### Bash
-
-Requires the `bash-completion` package (`brew install bash-completion@2` on macOS).
-
-```bash
-# Current session
-source <(cnap completion bash)
-
-# Permanent (macOS with Homebrew)
-cnap completion bash > $(brew --prefix)/etc/bash_completion.d/cnap
-
-# Permanent (Linux)
-cnap completion bash > /etc/bash_completion.d/cnap
-```
-
-### Fish
-
-```bash
-# Current session
-cnap completion fish | source
-
-# Permanent
-cnap completion fish > ~/.config/fish/completions/cnap.fish
-```
-
-## Configuration
-
-Config is stored at `~/.cnap/config.yaml`. Environment variables take priority:
-
-| Env Var | Description |
-|---------|-------------|
-| `CNAP_API_TOKEN` | API token — PAT or session token (overrides config) |
-| `CNAP_API_URL` | API base URL (overrides config) |
-| `CNAP_AUTH_URL` | Auth base URL (overrides config) |
-| `CNAP_DEBUG` | Enable debug logging (set to any value) |
-| `CNAP_NO_UPDATE_NOTIFIER` | Disable update notifications (set to any value) |
-
-## Global Flags
-
-| Flag | Description |
-|------|-------------|
-| `-o, --output` | Output format: `table`, `json`, `quiet` |
-| `--api-url` | API base URL override |
-| `--debug` | Enable debug logging (HTTP traces to stderr) |
-
-## Commands
-
-All resource commands support singular and plural forms (e.g. `cnap cluster` or `cnap clusters`),
-short aliases (e.g. `cl`, `inst`, `tpl`), and `ls` as an alias for `list`.
-
-When run interactively without an ID argument, commands show a picker to select a resource.
-Delete commands prompt for confirmation unless `--yes`/`-y` is passed.
-
-| Command | Description |
-|---------|-------------|
-| **Auth** | |
-| `cnap auth login` | Authenticate via browser (stores session token) |
-| `cnap auth login --token <token>` | Authenticate with a PAT |
-| `cnap auth logout` | Remove credentials (revokes session) |
-| `cnap auth status` | Show auth status and token type |
-| **Workspaces** | |
-| `cnap workspaces list` | List workspaces |
-| `cnap workspaces switch [id]` | Set active workspace |
-| **Clusters** | |
-| `cnap clusters list` | List clusters |
-| `cnap clusters get [id]` | Get cluster details |
-| `cnap clusters update [id]` | Update cluster |
-| `cnap clusters delete [id]` | Delete cluster (confirms interactively) |
-| `cnap clusters kubeconfig [id]` | Download admin kubeconfig |
-| **Templates** | |
-| `cnap templates list` | List templates |
-| `cnap templates get [id]` | Get template with helm sources |
-| `cnap templates delete [id]` | Delete template (confirms interactively) |
-| **Products** | |
-| `cnap products list` | List products |
-| `cnap products get [id]` | Get product details |
-| `cnap products delete [id]` | Delete product (confirms interactively) |
-| **Installs** | |
-| `cnap installs list` | List installs |
-| `cnap installs get [id]` | Get install details |
-| `cnap installs create --product <id> --region <id>` | Create product install |
-| `cnap installs update-values [id] --source <id> -f values.yaml` | Update template values |
-| `cnap installs update-overrides [id] --source <id> -f values.yaml` | Update install overrides |
-| `cnap installs delete [id]` | Delete install (confirms interactively) |
-| `cnap installs pods [id]` | List pods |
-| `cnap installs logs [id] [--pod X] [--follow] [--tail N]` | Stream logs |
-| `cnap installs exec [id] [--pod X] [--container X]` | Open interactive shell in pod |
-| **Regions** | |
-| `cnap regions list` | List regions |
-| `cnap regions create --name <name>` | Create region |
-| **Registry** | |
-| `cnap registry list` | List registry credentials |
-| `cnap registry delete [id]` | Delete registry credential (confirms interactively) |
-| **Shell Completions** | |
-| `cnap completion bash` | Generate bash completions |
-| `cnap completion zsh` | Generate zsh completions |
-| `cnap completion fish` | Generate fish completions |
+This scaffold establishes the architecture, packaging path, OpenAPI fetch task,
+public operation registry generation, and output/error runtime contract. It does
+not yet implement full API command execution.
 
 ## Development
 
-Prerequisites: [mise](https://mise.jdx.dev) for tool management.
+Prerequisites:
 
-```bash
-# Install tools (Go, golangci-lint, goreleaser, task)
+- [mise](https://mise.jdx.dev/)
+- Bun, installed by `mise install`
+
+```sh
 mise install
-
-# Regenerate API client from OpenAPI spec
-task generate
-
-# Run all checks (vet + lint + test)
-task check
-
-# Individual commands
-task build          # Build binary
-task lint           # Run golangci-lint
-task vet            # Run go vet
-task fmt            # Format code
-task test           # Run tests
-task release:snapshot  # Build snapshot release locally
-task clean          # Remove build artifacts
+bun install
+mise run spec:fetch
+mise run generate
+mise run check
 ```
 
-The API client is auto-generated from the OpenAPI spec at `internal/api/openapi.json` using [oapi-codegen](https://github.com/oapi-codegen/oapi-codegen).
+Useful tasks:
+
+```sh
+mise run dev -- --help          # run the TypeScript entrypoint
+mise run build                  # typecheck and build JS into dist/js/
+mise run build:binary           # compile self-contained dist/akua
+mise run test                   # run Bun tests
+mise run spec:fetch             # fetch https://api.akua.dev/v1/openapi.json
+mise run generate               # regenerate public command registry
+mise run generate:check         # verify generated registry is current
+```
+
+Implemented scaffold commands:
+
+```sh
+akua                                      # show compact registry status
+akua commands                            # list first 20 generated public commands
+akua commands --resource workspaces      # filter by generated resource
+akua commands --operation-id workspaces.list
+akua commands --limit 5
+akua --help                              # also -h
+akua --version                           # also -v or -V
+```
+
+## OpenAPI Source
+
+The live production source of truth is:
+
+```text
+https://api.akua.dev/v1/openapi.json
+```
+
+`mise run spec:fetch` writes the fetched snapshot to `openapi/public.json`.
+`mise run generate` reads that snapshot and writes
+`src/generated/commands.gen.ts`.
+The fetcher defaults to `AKUA_OPENAPI_URL` when set and rejects non-HTTPS
+override URLs.
+
+## Runtime Contract
+
+Default output is adaptive:
+
+- coding-agent, CI, non-TTY, and automation signals use compact structured
+  agent output;
+- interactive TTY sessions use human output;
+- `--json`, `--quiet`, `-q`, `--output <mode>`, `-o <mode>`, and `AKUA_OUTPUT`
+  override detection.
+
+Supported output modes are `human`, `agent`, `json`, and `quiet`.
+
+See [docs/architecture.md](docs/architecture.md) for the full CLI spec.

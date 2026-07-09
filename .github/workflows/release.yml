@@ -11,13 +11,16 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          - linux-x64
     steps:
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
       - uses: jdx/mise-action@v2
-      - run: task check
-      - run: goreleaser release --clean
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+      - run: bun install --frozen-lockfile
+      - run: mise run check
+      - run: bun build src/bin/akua.ts --compile --target=bun-${{ matrix.target }} --outfile dist/akua-${{ matrix.target }}
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/akua-${{ matrix.target }}

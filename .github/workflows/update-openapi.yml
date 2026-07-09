@@ -1,0 +1,33 @@
+name: Update OpenAPI
+
+on:
+  schedule:
+    - cron: "0 9 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v2
+      - run: bun install --frozen-lockfile
+      - run: mise run spec:fetch
+      - run: mise run generate
+      - run: mise run check
+      - uses: peter-evans/create-pull-request@v8
+        with:
+          branch: chore/update-openapi
+          commit-message: "chore: update OpenAPI spec and command registry"
+          title: "chore: update OpenAPI spec and command registry"
+          body: |
+            Automated weekly update of the public Akua OpenAPI snapshot.
+
+            - Fetched `https://api.akua.dev/v1/openapi.json`
+            - Regenerated the public operation command registry
+            - Verified `mise run check`
+          delete-branch: true
