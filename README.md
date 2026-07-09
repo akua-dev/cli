@@ -32,12 +32,24 @@ Useful tasks:
 
 ```sh
 mise run dev -- --help          # run the TypeScript entrypoint
-mise run build                  # typecheck and build JS into dist/
+mise run build                  # typecheck and build JS into dist/js/
 mise run build:binary           # compile self-contained dist/akua
 mise run test                   # run Bun tests
 mise run spec:fetch             # fetch https://api.akua.dev/v1/openapi.json
 mise run generate               # regenerate public command registry
 mise run generate:check         # verify generated registry is current
+```
+
+Implemented scaffold commands:
+
+```sh
+akua                                      # show compact registry status
+akua commands                            # list first 20 generated public commands
+akua commands --resource workspaces      # filter by generated resource
+akua commands --operation-id workspaces.list
+akua commands --limit 5
+akua --help                              # also -h
+akua --version                           # also -v or -V
 ```
 
 ## OpenAPI Source
@@ -51,6 +63,8 @@ https://api.akua.dev/v1/openapi.json
 `mise run spec:fetch` writes the fetched snapshot to `openapi/public.json`.
 `mise run generate` reads that snapshot and writes
 `src/generated/commands.gen.ts`.
+The fetcher defaults to `AKUA_OPENAPI_URL` when set and rejects non-HTTPS
+override URLs.
 
 ## Runtime Contract
 
@@ -59,6 +73,9 @@ Default output is adaptive:
 - coding-agent, CI, non-TTY, and automation signals use compact structured
   agent output;
 - interactive TTY sessions use human output;
-- `--json`, `--quiet`, and `--output <mode>` override detection.
+- `--json`, `--quiet`, `-q`, `--output <mode>`, `-o <mode>`, and `AKUA_OUTPUT`
+  override detection.
+
+Supported output modes are `human`, `agent`, `json`, and `quiet`.
 
 See [docs/architecture.md](docs/architecture.md) for the full CLI spec.

@@ -13,7 +13,8 @@ Status: initial greenfield spec and scaffold.
 - Compatibility: no `cnap` binary, Go module, config path, env var, or command
   compatibility unless a later captain decision changes this.
 - No live infrastructure mutation is required for development or tests. The
-  spec fetch task performs only a read-only OpenAPI GET.
+  spec fetch task performs only a read-only OpenAPI GET and rejects non-HTTPS
+  source URLs.
 
 ## Current Repo Boundary
 
@@ -37,10 +38,10 @@ The CLI is operationId-driven. Public OpenAPI operations become generated comman
 definitions when all of these are true:
 
 - `x-platform-visibility` is `PUBLIC`;
-- `operationId` is present and unique;
+- `operationId` is present;
 - HTTP method and path are present;
-- tags, summary, auth requirement, and parameters are copied into the command
-  model.
+- tags, summary, operation-level auth requirement, and parameters are copied
+  into the command model when present.
 
 The initial command derivation is mechanical:
 
@@ -50,7 +51,15 @@ command:     akua workspaces list
 
 operationId: customDomains.delete
 command:     akua custom-domains delete
+
+operationId: health
+command:     akua health get
 ```
+
+An operationId segment before the first dot becomes the resource, the next
+segment becomes the action, and single-segment operationIds fall back to the
+HTTP method as the action. The generator assumes OpenAPI operationIds are
+unique; it does not currently enforce uniqueness itself.
 
 The generator deliberately produces a registry, not hand-written API coverage.
 Execution is stubbed until the API client and request/body binding layer lands.
@@ -66,6 +75,12 @@ mise run spec:fetch      # writes openapi/public.json
 mise run generate        # writes src/generated/commands.gen.ts
 mise run generate:check  # fails on drift
 ```
+
+`mise run spec:fetch` defaults to `AKUA_OPENAPI_URL`, which is set to the
+production source in `mise.toml`, and `scripts/fetch-openapi.ts` also accepts an
+explicit URL argument. The scheduled `Update OpenAPI` workflow runs weekly and
+opens a pull request after fetching the snapshot, regenerating the registry, and
+running `mise run check`.
 
 ## API, Auth, And Config Model
 
@@ -105,8 +120,13 @@ The default output mode is adaptive:
 
 - `human`: interactive TTY without automation or coding-agent signals;
 - `agent`: known coding-agent env vars, CI env vars, or non-TTY stdout;
-- `json`: explicit `--json` or `--output json`;
-- `quiet`: explicit `--quiet`, `-q`, or `--output quiet`.
+- `json`: explicit `--json`, `--output json`, `-o json`, or
+  `AKUA_OUTPUT=json`;
+- `quiet`: explicit `--quiet`, `-q`, `--output quiet`, `-o quiet`, or
+  `AKUA_OUTPUT=quiet`.
+
+`--output`/`-o` and `AKUA_OUTPUT` accept only `human`, `agent`, `json`, and
+`quiet`. `--json` and `--quiet` take precedence over other output mode signals.
 
 Agent mode follows AXI patterns studied from `https://axi.md/` and the public
 `gh-axi` example:
@@ -118,11 +138,23 @@ Agent mode follows AXI patterns studied from `https://axi.md/` and the public
 - stdout for success data and structured errors;
 - stderr for progress, debug logs, and warnings;
 - no spinners or prompts in agent, JSON, quiet, CI, or non-TTY modes;
-- unknown commands and flags must fail loudly.
+- unknown routed commands and flags must fail loudly.
 
 Human mode can use tables and prose, but should stay content-first. A no-args
 `akua` invocation should show live state once API execution exists; the scaffold
 currently shows registry state and next-step commands.
+
+The implemented scaffold command surface is intentionally small:
+
+```sh
+akua                                      # registry status home view
+akua commands                            # first 20 generated public commands
+akua commands --resource workspaces      # resource filter
+akua commands --operation-id workspaces.list
+akua commands --limit 5                  # positive integer limit
+akua --help                              # also -h
+akua --version                           # also -v or -V
+```
 
 ## Structured Errors
 
@@ -137,7 +169,6 @@ Errors preserve API envelope details instead of collapsing them into strings:
     "message": "workspace_id is required",
     "path": ["body", "workspace_id"],
     "request_id": "req_123",
-    "retry_after": null,
     "next_steps": [
       {"command": "akua workspaces list --fields id,name"}
     ]
@@ -206,16 +237,19 @@ matrix targets should be added once the scaffold is validated on CI.
 
 Current tests cover:
 
+- CLI routing and usage validation for the scaffold commands;
 - output mode detection;
 - agent and JSON rendering;
 - structured error payloads;
 - OpenAPI fetch guard and document shape validation;
 - public-only operation collection.
 
+Current validation also runs `mise run generate:check` to catch generated
+registry drift.
+
 Next tests should add:
 
 - golden command output by mode;
-- generated registry drift checks;
 - mocked API calls for auth, workspace, list/get, and operation flows;
 - destructive command refusal tests in CI/non-TTY/agent modes;
 - packaging smoke test for `dist/akua --help`.
