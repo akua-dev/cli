@@ -1,0 +1,9 @@
+{
+  "packages": {
+    ".": {
+      "release-type": "node",
+      "package-name": "@akua-dev/cli",
+      "changelog-path": "CHANGELOG.md"
+    }
+  }
+}
