@@ -11,6 +11,14 @@ describe("detectOutputMode", () => {
     expect(detectOutputMode({ argv: [], env: { CODEX_SANDBOX: "1" }, stdoutIsTTY: true })).toBe("agent");
   });
 
+  test("detects universal agent environment flag", () => {
+    expect(detectOutputMode({ argv: [], env: { AGENT: "true" }, stdoutIsTTY: true })).toBe("agent");
+  });
+
+  test("detects universal agent environment name", () => {
+    expect(detectOutputMode({ argv: [], env: { AGENT: "codex" }, stdoutIsTTY: true })).toBe("agent");
+  });
+
   test("detects CI and non-tty automation", () => {
     expect(detectOutputMode({ argv: [], env: { CI: "true" }, stdoutIsTTY: true })).toBe("agent");
     expect(detectOutputMode({ argv: [], env: {}, stdoutIsTTY: false })).toBe("agent");
