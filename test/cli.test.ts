@@ -229,6 +229,35 @@ describe("akua entrypoint", () => {
     }
   });
 
+  test("auth logout removes malformed stored config", async () => {
+    const home = await makeTempHome();
+    try {
+      const configPath = join(home, ".config", "akua", "config.json");
+      await runAkua(["auth", "login", "--token", "sk_akua_stored", "--quiet"], { HOME: home });
+      await writeFile(configPath, "{not json\n");
+
+      const { stdout, exitCode } = await runAkua(["auth", "logout", "--json"], { HOME: home });
+      const status = await runAkua(["auth", "status", "--json"], { HOME: home });
+
+      expect(exitCode).toBe(0);
+      expect(JSON.parse(stdout)).toMatchObject({
+        observations: ["Stored authentication token removed."],
+        data: {
+          authenticated: false,
+          source: "none",
+        },
+      });
+      expect(JSON.parse(status.stdout)).toMatchObject({
+        data: {
+          authenticated: false,
+          source: "none",
+        },
+      });
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
   test("auth login requires an explicit token flag", async () => {
     const home = await makeTempHome();
     try {
@@ -247,6 +276,16 @@ describe("akua entrypoint", () => {
           message: "Missing value for --token.",
         },
       });
+
+      const tokenLikePositional = "sk_akua_secret_positional";
+      const positional = await runAkua(["auth", "login", tokenLikePositional, "--json"], { HOME: home });
+      expect(positional.exitCode).toBe(2);
+      expect(JSON.parse(positional.stdout)).toMatchObject({
+        error: {
+          message: "Unexpected argument for auth login.",
+        },
+      });
+      expect(positional.stdout).not.toContain(tokenLikePositional);
     } finally {
       await rm(home, { recursive: true, force: true });
     }

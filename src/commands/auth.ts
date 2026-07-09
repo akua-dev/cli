@@ -77,7 +77,7 @@ async function statusView(argv: readonly string[], env: Record<string, string | 
 async function logoutView(argv: readonly string[], env: Record<string, string | undefined>): Promise<RenderEnvelope> {
   rejectUnexpectedAuthArgs("logout", argv);
   const configPath = resolveConfigPath(env);
-  const hadStoredToken = (await readConfig(configPath)).token !== undefined;
+  const hadStoredToken = await mayHaveStoredToken(configPath);
   await removeStoredToken(configPath);
   const envStillAuthenticated = hasEnvToken(env);
 
@@ -98,7 +98,7 @@ function parseLoginFlags(argv: readonly string[]): string {
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index];
     if (!value.startsWith("-")) {
-      throw usageError(`Unexpected argument for auth login: ${value}`);
+      throw usageError("Unexpected argument for auth login.");
     }
 
     const name = flagName(value);
@@ -139,6 +139,14 @@ async function credentialSource(env: Record<string, string | undefined>, configP
     return "config";
   }
   return "none";
+}
+
+async function mayHaveStoredToken(configPath: string): Promise<boolean> {
+  try {
+    return (await readConfig(configPath)).token !== undefined;
+  } catch {
+    return true;
+  }
 }
 
 function hasEnvToken(env: Record<string, string | undefined>): boolean {
