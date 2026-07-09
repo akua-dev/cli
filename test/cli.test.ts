@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { chmod, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { authView } from "../src/commands/auth";
@@ -154,6 +154,31 @@ describe("akua entrypoint", () => {
     }
   });
 
+  test("auth login preserves unrelated config keys", async () => {
+    const home = await makeTempHome();
+    try {
+      const configDir = join(home, ".config", "akua");
+      const configPath = join(configDir, "config.json");
+      await mkdir(configDir, { recursive: true });
+      await writeFile(
+        configPath,
+        `${JSON.stringify({ profile: "dev", endpoint: "https://api.example.test", token: "sk_akua_old" }, null, 2)}\n`,
+      );
+
+      const { exitCode } = await runAkua(["auth", "login", "--token", "sk_akua_new", "--json"], { HOME: home });
+
+      expect(exitCode).toBe(0);
+      expect(JSON.parse(await readFile(configPath, "utf8"))).toEqual({
+        profile: "dev",
+        endpoint: "https://api.example.test",
+        token: "sk_akua_new",
+      });
+      expect((await stat(configPath)).mode & 0o777).toBe(0o600);
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
   test("auth status gives AKUA_API_TOKEN precedence over stored tokens", async () => {
     const home = await makeTempHome();
     try {
@@ -227,6 +252,44 @@ describe("akua entrypoint", () => {
           source: "none",
         },
       });
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
+  test("auth logout removes only the stored token", async () => {
+    const home = await makeTempHome();
+    try {
+      const configDir = join(home, ".config", "akua");
+      const configPath = join(configDir, "config.json");
+      await mkdir(configDir, { recursive: true });
+      await writeFile(
+        configPath,
+        `${JSON.stringify({ profile: "dev", endpoint: "https://api.example.test", token: "sk_akua_stored" }, null, 2)}\n`,
+      );
+
+      const { stdout, exitCode } = await runAkua(["auth", "logout", "--json"], { HOME: home });
+      const status = await runAkua(["auth", "status", "--json"], { HOME: home });
+
+      expect(exitCode).toBe(0);
+      expect(JSON.parse(stdout)).toMatchObject({
+        observations: ["Stored authentication token removed."],
+        data: {
+          authenticated: false,
+          source: "none",
+        },
+      });
+      expect(JSON.parse(await readFile(configPath, "utf8"))).toEqual({
+        profile: "dev",
+        endpoint: "https://api.example.test",
+      });
+      expect(JSON.parse(status.stdout)).toMatchObject({
+        data: {
+          authenticated: false,
+          source: "none",
+        },
+      });
+      expect((await stat(configPath)).mode & 0o777).toBe(0o600);
     } finally {
       await rm(home, { recursive: true, force: true });
     }

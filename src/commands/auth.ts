@@ -8,9 +8,9 @@ import type { RenderEnvelope } from "../runtime/render";
 const CONFIG_FILE_MODE = 0o600;
 const CONFIG_DIR_MODE = 0o700;
 
-interface AkuaConfig {
+type AkuaConfig = Record<string, unknown> & {
   token?: string;
-}
+};
 
 type CredentialSource = "env" | "config" | "none";
 
@@ -19,6 +19,8 @@ interface AuthStatus {
   source: CredentialSource;
   config_path?: string;
 }
+
+class ConfigParseError extends AkuaCliError {}
 
 export async function authView(argv: readonly string[], env: Record<string, string | undefined>): Promise<RenderEnvelope> {
   const subcommand = argv[0];
@@ -42,7 +44,7 @@ export async function authView(argv: readonly string[], env: Record<string, stri
 async function loginView(argv: readonly string[], env: Record<string, string | undefined>): Promise<RenderEnvelope> {
   const token = parseLoginFlags(argv);
   const configPath = resolveConfigPath(env);
-  await writeConfig(configPath, { token });
+  await saveStoredToken(configPath, token);
 
   return {
     command: "akua auth login",
@@ -77,8 +79,7 @@ async function statusView(argv: readonly string[], env: Record<string, string | 
 async function logoutView(argv: readonly string[], env: Record<string, string | undefined>): Promise<RenderEnvelope> {
   rejectUnexpectedAuthArgs("logout", argv);
   const configPath = resolveConfigPath(env);
-  const hadStoredToken = await mayHaveStoredToken(configPath);
-  await removeStoredToken(configPath);
+  const hadStoredToken = await removeStoredToken(configPath);
   const envStillAuthenticated = hasEnvToken(env);
 
   return {
@@ -132,18 +133,10 @@ function rejectUnexpectedAuthArgs(subcommand: string, argv: readonly string[]): 
 }
 
 async function storedCredentialSource(configPath: string): Promise<CredentialSource> {
-  if ((await readConfig(configPath)).token !== undefined) {
+  if (hasStoredToken(await readConfig(configPath))) {
     return "config";
   }
   return "none";
-}
-
-async function mayHaveStoredToken(configPath: string): Promise<boolean> {
-  try {
-    return (await readConfig(configPath)).token !== undefined;
-  } catch {
-    return true;
-  }
 }
 
 function hasEnvToken(env: Record<string, string | undefined>): boolean {
@@ -164,16 +157,43 @@ function optionalConfigPath(env: Record<string, string | undefined>): string | u
 }
 
 async function readConfig(configPath: string): Promise<AkuaConfig> {
+  const raw = await readConfigText(configPath);
+  if (raw === undefined) {
+    return {};
+  }
+  return parseConfig(raw, configPath);
+}
+
+async function readConfigText(configPath: string): Promise<string | undefined> {
   try {
-    const raw = await readFile(configPath, "utf8");
-    const parsed = JSON.parse(raw) as AkuaConfig;
-    return typeof parsed.token === "string" && parsed.token !== "" ? { token: parsed.token } : {};
+    return await readFile(configPath, "utf8");
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT") {
-      return {};
+      return undefined;
     }
     throw configError("read", configPath, error);
   }
+}
+
+function parseConfig(raw: string, configPath: string): AkuaConfig {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (isConfigObject(parsed)) {
+      return parsed;
+    }
+    throw new Error("Akua config must be a JSON object.");
+  } catch (error) {
+    throw new ConfigParseError({
+      type: "runtime_error",
+      code: "AKUA_CONFIG_ERROR",
+      message: `Failed to read Akua config at ${configPath}: ${errorMessage(error)}`,
+    });
+  }
+}
+
+async function saveStoredToken(configPath: string, token: string): Promise<void> {
+  const config = await readConfig(configPath);
+  await writeConfig(configPath, { ...config, token });
 }
 
 async function writeConfig(configPath: string, config: AkuaConfig): Promise<void> {
@@ -193,12 +213,47 @@ async function writeConfig(configPath: string, config: AkuaConfig): Promise<void
   }
 }
 
-async function removeStoredToken(configPath: string): Promise<void> {
+async function removeStoredToken(configPath: string): Promise<boolean> {
+  const raw = await readConfigText(configPath);
+  if (raw === undefined) {
+    return false;
+  }
+
+  let config: AkuaConfig;
   try {
-    await rm(configPath, { force: true });
+    config = parseConfig(raw, configPath);
   } catch (error) {
+    if (error instanceof ConfigParseError) {
+      try {
+        await rm(configPath, { force: true });
+        return true;
+      } catch (removeError) {
+        throw configError("remove", configPath, removeError);
+      }
+    }
     throw configError("remove", configPath, error);
   }
+
+  const hadStoredToken = hasStoredToken(config);
+  if (!hasOwnToken(config)) {
+    return false;
+  }
+
+  delete config.token;
+  await writeConfig(configPath, config);
+  return hadStoredToken;
+}
+
+function isConfigObject(value: unknown): value is AkuaConfig {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasStoredToken(config: AkuaConfig): boolean {
+  return typeof config.token === "string" && config.token !== "";
+}
+
+function hasOwnToken(config: AkuaConfig): boolean {
+  return Object.prototype.hasOwnProperty.call(config, "token");
 }
 
 function configError(operation: "read" | "write" | "remove", configPath: string, error: unknown): AkuaCliError {
