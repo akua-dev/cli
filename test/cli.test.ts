@@ -2,6 +2,9 @@ import { describe, expect, test } from "bun:test";
 import { chmod, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import { authView } from "../src/commands/auth";
+import { renderSuccess } from "../src/runtime/render";
+
 describe("akua entrypoint", () => {
   test("fails loudly on unknown flags", async () => {
     const { stdout, exitCode } = await runAkua(["commands", "--bogus", "--output", "json"]);
@@ -174,6 +177,29 @@ describe("akua entrypoint", () => {
       expect(stdout).not.toContain("sk_akua_stored");
     } finally {
       await rm(home, { recursive: true, force: true });
+    }
+  });
+
+  test("auth status honors AKUA_API_TOKEN without HOME", async () => {
+    for (const home of [undefined, ""]) {
+      const envelope = await authView(["status"], {
+        HOME: home,
+        AKUA_API_TOKEN: "sk_akua_env",
+      });
+      const stdout = renderSuccess(envelope, "json");
+      const payload = JSON.parse(stdout);
+
+      expect(payload).toMatchObject({
+        status: "ok",
+        command: "akua auth status",
+        observations: ["Authenticated with AKUA_API_TOKEN."],
+        data: {
+          authenticated: true,
+          source: "env",
+        },
+      });
+      expect(payload.data).not.toHaveProperty("config_path");
+      expect(stdout).not.toContain("sk_akua_env");
     }
   });
 

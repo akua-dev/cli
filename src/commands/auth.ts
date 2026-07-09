@@ -17,7 +17,7 @@ type CredentialSource = "env" | "config" | "none";
 interface AuthStatus {
   authenticated: boolean;
   source: CredentialSource;
-  config_path: string;
+  config_path?: string;
 }
 
 export async function authView(argv: readonly string[], env: Record<string, string | undefined>): Promise<RenderEnvelope> {
@@ -58,8 +58,8 @@ async function loginView(argv: readonly string[], env: Record<string, string | u
 
 async function statusView(argv: readonly string[], env: Record<string, string | undefined>): Promise<RenderEnvelope> {
   rejectUnexpectedAuthArgs("status", argv);
-  const configPath = resolveConfigPath(env);
-  const source = await credentialSource(env, configPath);
+  const configPath = optionalConfigPath(env);
+  const source = hasEnvToken(env) ? "env" : await storedCredentialSource(configPath ?? resolveConfigPath(env));
   const authenticated = source !== "none";
 
   return {
@@ -131,10 +131,7 @@ function rejectUnexpectedAuthArgs(subcommand: string, argv: readonly string[]): 
   }
 }
 
-async function credentialSource(env: Record<string, string | undefined>, configPath: string): Promise<CredentialSource> {
-  if (hasEnvToken(env)) {
-    return "env";
-  }
+async function storedCredentialSource(configPath: string): Promise<CredentialSource> {
   if ((await readConfig(configPath)).token !== undefined) {
     return "config";
   }
@@ -159,6 +156,11 @@ function resolveConfigPath(env: Record<string, string | undefined>): string {
     throw usageError("HOME is required to locate ~/.config/akua/config.json.");
   }
   return join(home, ".config", "akua", "config.json");
+}
+
+function optionalConfigPath(env: Record<string, string | undefined>): string | undefined {
+  const home = env.HOME;
+  return home === undefined || home === "" ? undefined : join(home, ".config", "akua", "config.json");
 }
 
 async function readConfig(configPath: string): Promise<AkuaConfig> {
