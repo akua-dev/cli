@@ -10,8 +10,8 @@ release.
 ## Current Status
 
 This scaffold establishes the architecture, packaging path, OpenAPI fetch task,
-public operation registry generation, and output/error runtime contract. It does
-not yet implement full API command execution.
+public operation registry generation, release automation, and output/error
+runtime contract. It does not yet implement full API command execution.
 
 ## Development
 
@@ -65,6 +65,26 @@ https://api.akua.dev/v1/openapi.json
 `src/generated/commands.gen.ts`.
 The fetcher defaults to `AKUA_OPENAPI_URL` when set and rejects non-HTTPS
 override URLs.
+
+The scheduled `Update OpenAPI` workflow is idempotent: after fetching and
+generating, it opens a pull request only when `openapi/public.json` or
+`src/generated/commands.gen.ts` changed. The workflow fails if the update touches
+any other tracked or untracked files.
+
+## Release Automation
+
+Release Please runs in manifest mode from `release-please-config.json` and
+`.release-please-manifest.json`. It prepares release pull requests for the root
+Bun package, updates package metadata, `CHANGELOG.md`, and the `akua --version`
+marker in `src/bin/akua.ts`, and creates `v*` version tags and GitHub releases
+after release PRs merge.
+
+The workflow uses `secrets.RELEASE_PLEASE_TOKEN` so release-created tags can
+trigger the tag-based release workflow.
+
+The separate tag-triggered release workflow builds and uploads the Linux x64
+binary artifact. The Release Please config does not add npm publishing or expand
+binary publishing behavior.
 
 ## Runtime Contract
 

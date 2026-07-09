@@ -28,6 +28,13 @@ scripts/generate-commands.ts     operationId-driven command registry generator
 src/bin/akua.ts                  executable entrypoint
 src/runtime/                     output, errors, exit codes, command contracts
 src/generated/commands.gen.ts    generated public command registry
+.github/workflows/update-openapi.yml
+                                 idempotent public OpenAPI update automation
+.github/workflows/release-please.yml
+                                 release PR, tag, and GitHub release automation
+.github/workflows/release.yml    tag-triggered binary artifact build
+release-please-config.json       Release Please manifest-mode config
+.release-please-manifest.json    Release Please root package version manifest
 docs/architecture.md             this spec
 test/                            Bun tests for scaffold contracts
 ```
@@ -78,9 +85,13 @@ mise run generate:check  # fails on drift
 
 `mise run spec:fetch` defaults to `AKUA_OPENAPI_URL`, which is set to the
 production source in `mise.toml`, and `scripts/fetch-openapi.ts` also accepts an
-explicit URL argument. The scheduled `Update OpenAPI` workflow runs weekly and
-opens a pull request after fetching the snapshot, regenerating the registry, and
-running `mise run check`.
+explicit URL argument. The scheduled `Update OpenAPI` workflow runs weekly,
+fetches the snapshot, regenerates the registry, and then fails if tracked or
+untracked files outside `openapi/public.json` and
+`src/generated/commands.gen.ts` changed. It is idempotent when those files match
+the repository: unchanged runs report a no-op and do not run `mise run check` or
+open/update a pull request. Changed runs execute `mise run check` and open or
+update a pull request containing only the snapshot and generated registry.
 
 ## API, Auth, And Config Model
 
@@ -233,6 +244,18 @@ The local task `mise run build:binary` compiles a host binary at `dist/akua`.
 The initial release workflow builds a Linux x64 artifact; macOS and Windows
 matrix targets should be added once the scaffold is validated on CI.
 
+Release Please runs in manifest mode for the root Bun package. It uses
+`release-please-config.json` and `.release-please-manifest.json` to prepare
+release PRs, update package metadata and `CHANGELOG.md`, keep the
+`src/bin/akua.ts` `x-release-please-version` marker aligned with
+`akua --version`, create `v*` version tags without a component prefix, and
+create GitHub releases after release PRs merge. The workflow uses
+`secrets.RELEASE_PLEASE_TOKEN` instead of the default `GITHUB_TOKEN` so
+release-created tags can trigger the tag-based binary workflow. The config
+deliberately omits npm publishing and does not expand the binary publishing
+surface; the existing tag-triggered release workflow remains responsible for
+uploading the Linux x64 binary artifact.
+
 ## Testing Strategy
 
 Current tests cover:
@@ -242,7 +265,8 @@ Current tests cover:
 - agent and JSON rendering;
 - structured error payloads;
 - OpenAPI fetch guard and document shape validation;
-- public-only operation collection.
+- public-only operation collection;
+- Release Please config, manifest, token, and CLI version marker validation.
 
 Current validation also runs `mise run generate:check` to catch generated
 registry drift.

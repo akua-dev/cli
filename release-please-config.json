@@ -1,0 +1,16 @@
+{
+  "include-component-in-tag": false,
+  "packages": {
+    ".": {
+      "release-type": "node",
+      "package-name": "@akua-dev/cli",
+      "changelog-path": "CHANGELOG.md",
+      "extra-files": [
+        {
+          "type": "generic",
+          "path": "src/bin/akua.ts"
+        }
+      ]
+    }
+  }
+}
