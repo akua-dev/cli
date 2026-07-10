@@ -92,8 +92,10 @@ Bun package, updates package metadata, `CHANGELOG.md`, and the `akua --version`
 marker in `src/bin/akua.ts`, and creates `v*` version tags and GitHub releases
 after release PRs merge.
 
-The workflow uses `secrets.RELEASE_PLEASE_TOKEN` so release-created tags can
-trigger the tag-based release workflow.
+The workflow uses `secrets.RELEASE_PLEASE_TOKEN` when configured and otherwise
+falls back to its job-scoped `GITHUB_TOKEN`. The optional release token lets
+release-created tags trigger the tag-based release workflow; GitHub suppresses
+that follow-up workflow when a tag is created with `GITHUB_TOKEN`.
 
 The separate tag-triggered release workflow builds and uploads the Linux x64
 binary artifact. The Release Please config does not add npm publishing or expand

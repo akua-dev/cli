@@ -47,9 +47,9 @@ describe("release-please configuration", () => {
     expect(manifest["."]).toMatch(/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/);
   });
 
-  test("uses an explicit token so release PRs and tags trigger follow-up workflows", () => {
+  test("falls back to the job token when the optional release token is unavailable", () => {
     const workflow = readFileSync(".github/workflows/release-please.yml", "utf8");
 
-    expect(workflow).toContain("token: ${{ secrets.RELEASE_PLEASE_TOKEN }}");
+    expect(workflow).toContain("token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}");
   });
 });

@@ -271,8 +271,10 @@ release PRs, update package metadata and `CHANGELOG.md`, keep the
 `src/bin/akua.ts` `x-release-please-version` marker aligned with
 `akua --version`, create `v*` version tags without a component prefix, and
 create GitHub releases after release PRs merge. The workflow uses
-`secrets.RELEASE_PLEASE_TOKEN` instead of the default `GITHUB_TOKEN` so
-release-created tags can trigger the tag-based binary workflow. The config
+`secrets.RELEASE_PLEASE_TOKEN` when configured and otherwise falls back to its
+job-scoped `GITHUB_TOKEN`. The optional release token is required for
+release-created tags to trigger the tag-based binary workflow because GitHub
+suppresses follow-up workflows for tags created with `GITHUB_TOKEN`. The config
 deliberately omits npm publishing and does not expand the binary publishing
 surface; the existing tag-triggered release workflow remains responsible for
 uploading the Linux x64 binary artifact.
