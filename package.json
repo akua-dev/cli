@@ -14,6 +14,9 @@
     "spec:fetch": "bun scripts/fetch-openapi.ts",
     "generate": "bun scripts/generate-commands.ts",
     "generate:check": "bun scripts/generate-commands.ts --check",
+    "release:package": "bun scripts/release.ts package --version $npm_package_version --output dist/release",
+    "release:verify": "bun scripts/release.ts verify --version $npm_package_version --output dist/release",
+    "release:smoke": "bun scripts/release.ts smoke --version $npm_package_version --output dist/release",
     "test": "bun test"
   },
   "devDependencies": {

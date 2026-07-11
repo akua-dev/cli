@@ -33,7 +33,7 @@ src/generated/commands.gen.ts    generated public command registry
                                  idempotent public OpenAPI update automation
 .github/workflows/release-please.yml
                                  release PR, tag, and GitHub release automation
-.github/workflows/release.yml    tag-triggered binary artifact build
+.github/workflows/release.yml    reusable binary publication and tap handoff
 release-please-config.json       Release Please manifest-mode config
 .release-please-manifest.json    Release Please root package version manifest
 docs/architecture.md             this spec
@@ -255,29 +255,47 @@ For create/update/delete commands:
 
 ## Packaging
 
-The packaging path is:
+`scripts/release.ts` owns the release matrix and packaging contract. The
+published targets are:
 
-```sh
-bun build src/bin/akua.ts --compile --target=bun-linux-x64 --outfile dist/akua-linux-x64
-```
+- `bun-darwin-arm64` and `bun-darwin-x64`;
+- `bun-linux-arm64` and `bun-linux-x64-baseline` (glibc);
+- `bun-windows-x64-baseline`.
 
-The local task `mise run build:binary` compiles a host binary at `dist/akua`.
-The initial release workflow builds a Linux x64 artifact; macOS and Windows
-matrix targets should be added once the scaffold is validated on CI.
+Each Unix `.tar.gz` contains only executable `akua` with mode `0755`; the
+Windows `.zip` contains only `akua.exe`. Stable names have the form
+`akua-v<version>-<os>-<arch>.<archive>`. Every archive has an adjacent
+`.sha256`, appears in `checksums.txt`, and is described in the release manifest.
+The generated Homebrew manifest maps the four macOS/Linux formula selectors to
+exact release URLs and SHA-256 digests.
+
+`mise run build:binary` remains the fast host-only developer build. `mise run
+release:package` cross-compiles and verifies the whole release directory, while
+`mise run release:smoke` extracts and executes the current host archive. CI
+builds the candidate once, then macOS arm64/x64, Linux arm64/x64, and Windows x64
+hosted runners execute `akua --version`, `akua --help`, and `akua commands
+--limit 1` from their extracted archive.
 
 Release Please runs in manifest mode for the root Bun package. It uses
 `release-please-config.json` and `.release-please-manifest.json` to prepare
 release PRs, update package metadata and `CHANGELOG.md`, keep the
 `src/bin/akua.ts` `x-release-please-version` marker aligned with
 `akua --version`, create `v*` version tags without a component prefix, and
-create GitHub releases after release PRs merge. The workflow uses
-`secrets.RELEASE_PLEASE_TOKEN` when configured and otherwise falls back to its
-job-scoped `GITHUB_TOKEN`. The optional release token is required for
-release-created tags to trigger the tag-based binary workflow because GitHub
-suppresses follow-up workflows for tags created with `GITHUB_TOKEN`. The config
-deliberately omits npm publishing and does not expand the binary publishing
-surface; the existing tag-triggered release workflow remains responsible for
-uploading the Linux x64 binary artifact.
+create GitHub releases after release PRs merge. Release Please calls the
+reusable artifact workflow from its `release_created` output; publication does
+not rely on a tag event, because GitHub suppresses workflow events created with
+the job token.
+
+The artifact workflow validates tag/version equality, runs the full checks,
+packages and native-smokes every target, then uploads without clobbering. It
+downloads the published assets and re-verifies names, contents, sizes, and
+checksums. Only then does it dispatch the Homebrew manifest URL to
+`akua-dev/homebrew-tap`. The tap owns formula validation and its reviewed PR;
+this repository never pushes formula commits. `HOMEBREW_TAP_TOKEN` must be a
+fine-grained token scoped only to the tap repository capability required for
+repository dispatch. Publication or dispatch failures stay visible in the
+release workflow. Package metadata remains for development and versioning; no
+package-registry publication is configured.
 
 ## Testing Strategy
 
@@ -290,18 +308,22 @@ Current tests cover:
 - agent and JSON rendering;
 - structured error payloads;
 - OpenAPI fetch guard and document shape validation;
-- public-only operation collection;
-- Release Please config, manifest, token, and CLI version marker validation.
+- public-only, deterministic operationId collection;
+- Release Please config, manifest, token, and CLI version marker validation;
+- release target naming, archive contents/modes, manifests, checksums, and
+  tamper rejection;
+- native install-smoke and workflow ordering/permission contracts;
+- public install/auth/output/codegen documentation and source skill validation.
 
 Current validation also runs `mise run generate:check` to catch generated
 registry drift.
 
-Next tests should add:
+Future execution slices should add:
 
 - golden command output by mode;
 - mocked API calls for workspace, list/get, and operation flows;
 - destructive command refusal tests in CI/non-TTY/agent modes;
-- packaging smoke test for `dist/akua --help`.
+- API-backed generated command integration tests.
 
 ## Migration Boundary
 

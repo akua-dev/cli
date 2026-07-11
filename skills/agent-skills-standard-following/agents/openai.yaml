@@ -1,0 +1,4 @@
+interface:
+  display_name: "Akua Agent Workflow"
+  short_description: "Use Akua safely from coding agents"
+  default_prompt: "Use $agent-skills-standard-following to inspect Akua capabilities and work safely."
