@@ -9,6 +9,11 @@
         {
           "type": "generic",
           "path": "src/bin/akua.ts"
+        },
+        {
+          "type": "json",
+          "path": "skills/agent-skills-standard-following/skill-package.json",
+          "jsonpath": "$.version"
         }
       ]
     }
