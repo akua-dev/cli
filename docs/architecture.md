@@ -313,7 +313,7 @@ Current tests cover:
 - release target naming, archive contents/modes, manifests, checksums, and
   tamper rejection;
 - native install-smoke and workflow ordering/permission contracts;
-- public install/auth/output/codegen documentation and source skill validation.
+- public install/auth/output/codegen documentation and source-skill ownership.
 
 Current validation also runs `mise run generate:check` to catch generated
 registry drift.
