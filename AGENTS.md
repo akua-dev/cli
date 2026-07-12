@@ -16,7 +16,7 @@
 ## Ownership boundaries
 
 - This CLI repository owns the canonical `akua` executable, release artifacts,
-  and `skills/agent-skills-standard-following/SKILL.md` source.
+  and `skills/akua/SKILL.md` source with skill name `akua`.
 - `akua-dev/skills` owns importing and syncing the source skill.
 - `akua-dev/homebrew-tap` owns the `akua` formula, formula tests, and the reviewed
   formula-update PR. CLI automation sends only the verified release manifest

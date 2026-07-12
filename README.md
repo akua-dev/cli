@@ -197,7 +197,7 @@ so OpenAPI updates remain idempotent and scope-limited.
 ## CLI-owned agent skill
 
 This repository owns the canonical source location at
-`skills/agent-skills-standard-following/SKILL.md`. The source is versioned
+`skills/akua/SKILL.md` with skill name `akua`. The source is versioned
 independently of the CLI release automation, so use it only from a branch or tag
 that contains the file.
 

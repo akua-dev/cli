@@ -38,12 +38,14 @@ describe("distribution documentation", () => {
       "mise run generate",
       "mise run generate:check",
       "operationId",
-      "skills/agent-skills-standard-following/SKILL.md",
+      "skills/akua/SKILL.md",
       "brew upgrade akua",
     ]) {
       expect(readme).toContain(value);
     }
     expect(readme).toContain("private");
+    expect(readme).toContain("skill name `akua`");
+    expect(readme).not.toContain("agent-skills-standard-following");
     expect(readme).not.toContain("skills add akua-dev/skills");
   });
 
