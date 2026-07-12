@@ -292,6 +292,25 @@ describe("release target contract", () => {
     expect(() => hostTargetId("win32", "arm64")).toThrow("Unsupported release host");
   });
 
+  test("forces Windows tar to treat drive-letter archive paths as local", async () => {
+    const release = await import("../scripts/release") as Record<string, unknown>;
+    const archiveExtractCommand = release.archiveExtractCommand as (
+      archive: "tar.gz" | "zip",
+      archivePath: string,
+      installRoot: string,
+      platform: NodeJS.Platform,
+    ) => string[];
+
+    expect(archiveExtractCommand("zip", "D:\\a\\cli\\akua.zip", "C:\\install", "win32")).toEqual([
+      "tar",
+      "--force-local",
+      "-xf",
+      "D:\\a\\cli\\akua.zip",
+      "-C",
+      "C:\\install",
+    ]);
+  });
+
   test("extracts and executes all install-smoke commands for the native artifact", async () => {
     const release = await import("../scripts/release") as Record<string, unknown>;
     const targets = release.RELEASE_TARGETS as Array<{ id: string }>;

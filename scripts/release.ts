@@ -286,6 +286,18 @@ export function hostTargetId(platform = process.platform, arch = process.arch): 
   return target.id;
 }
 
+export function archiveExtractCommand(
+  archive: ReleaseTarget["archive"],
+  archivePath: string,
+  installRoot: string,
+  platform = process.platform,
+): string[] {
+  if (archive === "zip" && platform !== "win32") {
+    return ["unzip", "-q", archivePath, "-d", installRoot];
+  }
+  return ["tar", ...(platform === "win32" ? ["--force-local"] : []), "-xf", archivePath, "-C", installRoot];
+}
+
 export async function smokeReleaseArtifact(input: {
   version: string;
   outputDir: string;
@@ -299,11 +311,7 @@ export async function smokeReleaseArtifact(input: {
   const installRoot = await mkdtemp(join(tmpdir(), "akua-release-smoke-"));
   try {
     const archivePath = resolve(input.outputDir, artifactName(input.version, target));
-    if (target.archive === "zip" && process.platform !== "win32") {
-      await run(["unzip", "-q", archivePath, "-d", installRoot]);
-    } else {
-      await run(["tar", "-xf", archivePath, "-C", installRoot]);
-    }
+    await run(archiveExtractCommand(target.archive, archivePath, installRoot));
     const executable = join(installRoot, target.executable);
     if (target.os !== "windows") {
       await chmod(executable, 0o755);
