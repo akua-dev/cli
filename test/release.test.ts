@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { parse, join } from "node:path";
 
 test("release packaging has a dedicated implementation module", async () => {
   expect(await Bun.file("scripts/release.ts").exists()).toBe(true);
@@ -74,6 +74,21 @@ describe("release target contract", () => {
         runner: "windows-2025",
       },
     ]);
+  });
+
+  test("derives the GitHub Actions matrix from the release target contract", async () => {
+    const release = await import("../scripts/release") as Record<string, unknown>;
+    const releaseMatrix = release.releaseMatrix as () => { include: Array<{ target: string; runner: string }> };
+
+    expect(releaseMatrix()).toEqual({
+      include: [
+        { target: "darwin-arm64", runner: "macos-15" },
+        { target: "darwin-x64", runner: "macos-15-intel" },
+        { target: "linux-arm64", runner: "ubuntu-24.04-arm" },
+        { target: "linux-x64", runner: "ubuntu-24.04" },
+        { target: "windows-x64", runner: "windows-2025" },
+      ],
+    });
   });
 
   test("derives versioned archive and checksum names", async () => {
@@ -188,6 +203,47 @@ describe("release target contract", () => {
       await writeFile(join(outputDir, "akua-v1.2.3-linux-x64.tar.gz"), "tampered");
 
       await expect(verifyReleaseDirectory(outputDir, "1.2.3")).rejects.toThrow("checksum mismatch");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects release output directories that could erase the checkout or filesystem root", async () => {
+    const release = await import("../scripts/release") as Record<string, unknown>;
+    const assertSafeOutputDirectory = release.assertSafeOutputDirectory as (outputDir: string) => void;
+
+    expect(() => assertSafeOutputDirectory(process.cwd())).toThrow("Unsafe release output directory");
+    expect(() => assertSafeOutputDirectory(parse(process.cwd()).root)).toThrow("Unsafe release output directory");
+    expect(() => assertSafeOutputDirectory(join(process.cwd(), "dist", "release"))).not.toThrow();
+  });
+
+  test("verification rejects a Homebrew manifest that does not match verified assets", async () => {
+    const release = await import("../scripts/release") as Record<string, unknown>;
+    const targets = release.RELEASE_TARGETS as Array<{ id: string }>;
+    const packageExistingExecutables = release.packageExistingExecutables as (input: {
+      version: string;
+      outputDir: string;
+      binaries: Record<string, string>;
+    }) => Promise<void>;
+    const verifyReleaseDirectory = release.verifyReleaseDirectory as (outputDir: string, version: string) => Promise<void>;
+    const root = await mkdtemp(join(process.cwd(), ".tmp-akua-release-"));
+
+    try {
+      const source = join(root, "akua-fixture");
+      const outputDir = join(root, "release");
+      await writeFile(source, "#!/bin/sh\necho akua fixture\n");
+      await chmod(source, 0o755);
+      await packageExistingExecutables({
+        version: "1.2.3",
+        outputDir,
+        binaries: Object.fromEntries(targets.map((target) => [target.id, source])),
+      });
+      const manifestPath = join(outputDir, "akua-v1.2.3-homebrew.json");
+      const homebrew = JSON.parse(await readFile(manifestPath, "utf8"));
+      homebrew.platforms.linux_intel.sha256 = "0".repeat(64);
+      await writeFile(manifestPath, `${JSON.stringify(homebrew, null, 2)}\n`);
+
+      await expect(verifyReleaseDirectory(outputDir, "1.2.3")).rejects.toThrow("Homebrew manifest mismatch");
     } finally {
       await rm(root, { recursive: true, force: true });
     }

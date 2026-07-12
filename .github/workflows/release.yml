@@ -29,6 +29,10 @@ on:
 permissions:
   contents: read
 
+env:
+  TAG: ${{ inputs.tag }}
+  VERSION: ${{ inputs.version }}
+
 concurrency:
   group: publish-release-${{ inputs.tag }}
   cancel-in-progress: false
@@ -36,20 +40,26 @@ concurrency:
 jobs:
   package:
     runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.release-matrix.outputs.matrix }}
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag }}
       - uses: jdx/mise-action@v2
       - run: bun install --frozen-lockfile
+      - name: Derive native smoke matrix
+        id: release-matrix
+        shell: bash
+        run: echo "matrix=$(bun scripts/release.ts matrix)" >> "$GITHUB_OUTPUT"
       - name: Validate tag and package version
         shell: bash
         run: |
-          test "${{ inputs.tag }}" = "v${{ inputs.version }}"
-          test "$(bun -p "require('./package.json').version")" = "${{ inputs.version }}"
+          test "$TAG" = "v$VERSION"
+          test "$(bun -p "require('./package.json').version")" = "$VERSION"
       - run: mise run check
       - name: Build and verify all release artifacts
-        run: bun scripts/release.ts package --version "${{ inputs.version }}" --output dist/release
+        run: bun scripts/release.ts package --version "$VERSION" --output dist/release
       - uses: actions/upload-artifact@v4
         with:
           name: akua-release-${{ inputs.version }}
@@ -60,18 +70,7 @@ jobs:
     needs: package
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - target: darwin-arm64
-            runner: macos-15
-          - target: darwin-x64
-            runner: macos-15-intel
-          - target: linux-arm64
-            runner: ubuntu-24.04-arm
-          - target: linux-x64
-            runner: ubuntu-24.04
-          - target: windows-x64
-            runner: windows-2025
+      matrix: ${{ fromJSON(needs.package.outputs.matrix) }}
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
@@ -85,7 +84,7 @@ jobs:
           path: dist/release
       - name: Extract, install, and smoke ${{ matrix.target }}
         shell: bash
-        run: bun scripts/release.ts smoke --version "${{ inputs.version }}" --output dist/release --target "${{ matrix.target }}"
+        run: bun scripts/release.ts smoke --version "$VERSION" --output dist/release --target "${{ matrix.target }}"
 
   publish:
     needs: [package, install-smoke]
@@ -103,18 +102,18 @@ jobs:
           name: akua-release-${{ inputs.version }}
           path: dist/release
       - name: Verify release candidate
-        run: bun scripts/release.ts verify --version "${{ inputs.version }}" --output dist/release
+        run: bun scripts/release.ts verify --version "$VERSION" --output dist/release
       - name: Publish assets without replacement
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ inputs.tag }}" dist/release/*
+        run: gh release upload "$TAG" dist/release/*
       - name: Download and verify published assets
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p dist/published
-          gh release download "${{ inputs.tag }}" --dir dist/published
-          bun scripts/release.ts verify --version "${{ inputs.version }}" --output dist/published
+          gh release download "$TAG" --dir dist/published
+          bun scripts/release.ts verify --version "$VERSION" --output dist/published
 
   tap-update:
     needs: publish

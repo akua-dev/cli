@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { chmod, copyFile, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { isAbsolute, join, parse, relative, resolve } from "node:path";
 
 export type ReleaseTargetId = "darwin-arm64" | "darwin-x64" | "linux-arm64" | "linux-x64" | "windows-x64";
 
@@ -70,6 +70,12 @@ export const RELEASE_TARGETS: readonly ReleaseTarget[] = [
     runner: "windows-2025",
   },
 ] as const;
+
+export function releaseMatrix(): { include: Array<{ target: ReleaseTargetId; runner: string }> } {
+  return {
+    include: RELEASE_TARGETS.map((target) => ({ target: target.id, runner: target.runner })),
+  };
+}
 
 export function artifactName(version: string, target: Pick<ReleaseTarget, "id" | "archive">): string {
   return `akua-v${version}-${target.id}.${target.archive}`;
@@ -147,9 +153,25 @@ export function releaseAssetNames(version: string): string[] {
   ];
 }
 
+export function assertSafeOutputDirectory(outputDirInput: string): void {
+  const outputDir = resolve(outputDirInput);
+  const workspace = resolve(process.cwd());
+  const workspaceRelativePath = relative(workspace, outputDir);
+  if (
+    outputDir === parse(outputDir).root ||
+    workspaceRelativePath === "" ||
+    workspaceRelativePath === ".." ||
+    workspaceRelativePath.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`) ||
+    isAbsolute(workspaceRelativePath)
+  ) {
+    throw new Error(`Unsafe release output directory: ${outputDir}`);
+  }
+}
+
 export async function packageExistingExecutables(input: PackageExistingExecutablesInput): Promise<void> {
   validateVersion(input.version);
   const outputDir = resolve(input.outputDir);
+  assertSafeOutputDirectory(outputDir);
   const stagingRoot = join(outputDir, ".staging");
   await rm(outputDir, { recursive: true, force: true });
   await mkdir(stagingRoot, { recursive: true });
@@ -294,7 +316,14 @@ export async function verifyReleaseDirectory(outputDirInput: string, version: st
   validateVersion(version);
   const outputDir = resolve(outputDirInput);
   const manifest = JSON.parse(await readFile(join(outputDir, releaseManifestName(version)), "utf8")) as ReleaseManifest;
-  if (manifest.version !== version || manifest.executable !== "akua" || manifest.assets.length !== RELEASE_TARGETS.length) {
+  if (
+    manifest.schema_version !== 1 ||
+    manifest.version !== version ||
+    manifest.executable !== "akua" ||
+    manifest.checksums !== "checksums.txt" ||
+    manifest.homebrew_manifest !== homebrewManifestName(version) ||
+    manifest.assets.length !== RELEASE_TARGETS.length
+  ) {
     throw new Error("Release manifest does not match the requested release contract");
   }
 
@@ -303,7 +332,16 @@ export async function verifyReleaseDirectory(outputDirInput: string, version: st
     const target = RELEASE_TARGETS[index];
     const asset = manifest.assets[index];
     const expectedFile = artifactName(version, target);
-    if (asset.target !== target.id || asset.file !== expectedFile || asset.executable !== target.executable) {
+    if (
+      asset.target !== target.id ||
+      asset.bun_target !== target.bunTarget ||
+      asset.os !== target.os ||
+      asset.arch !== target.arch ||
+      asset.archive !== target.archive ||
+      asset.file !== expectedFile ||
+      asset.checksum_file !== `${expectedFile}.sha256` ||
+      asset.executable !== target.executable
+    ) {
       throw new Error(`Release manifest target mismatch for ${target.id}`);
     }
 
@@ -327,6 +365,12 @@ export async function verifyReleaseDirectory(outputDirInput: string, version: st
   const aggregate = await readFile(join(outputDir, manifest.checksums), "utf8");
   if (aggregate !== aggregateLines.join("")) {
     throw new Error("Aggregate checksum file mismatch");
+  }
+
+  const homebrewManifest = await readFile(join(outputDir, manifest.homebrew_manifest), "utf8");
+  const expectedHomebrewManifest = stableJson(createHomebrewManifest(version, manifest.assets));
+  if (homebrewManifest !== expectedHomebrewManifest) {
+    throw new Error("Homebrew manifest mismatch");
   }
 
   const actualNames = (await readdir(outputDir)).sort();
@@ -404,8 +448,14 @@ function stableJson(value: unknown): string {
 
 function readCliFlags(argv: readonly string[]): { command: string; version: string; outputDir: string; targetId?: string } {
   const [command, ...flags] = argv;
-  if (!command || !["package", "verify", "smoke"].includes(command)) {
-    throw new Error("Usage: bun scripts/release.ts <package|verify|smoke> --version <version> --output <directory> [--target <target>]");
+  if (!command || !["matrix", "package", "verify", "smoke"].includes(command)) {
+    throw new Error("Usage: bun scripts/release.ts <matrix|package|verify|smoke> --version <version> --output <directory> [--target <target>]");
+  }
+  if (command === "matrix") {
+    if (flags.length !== 0) {
+      throw new Error("The matrix command does not accept arguments");
+    }
+    return { command, version: "", outputDir: "" };
   }
   const values: Record<string, string> = {};
   for (let index = 0; index < flags.length; index += 2) {
@@ -425,7 +475,9 @@ function readCliFlags(argv: readonly string[]): { command: string; version: stri
 if (import.meta.main) {
   try {
     const input = readCliFlags(process.argv.slice(2));
-    if (input.command === "package") {
+    if (input.command === "matrix") {
+      console.log(JSON.stringify(releaseMatrix()));
+    } else if (input.command === "package") {
       await packageRelease({ version: input.version, outputDir: input.outputDir });
     } else if (input.command === "verify") {
       await verifyReleaseDirectory(input.outputDir, input.version);
@@ -436,7 +488,9 @@ if (import.meta.main) {
         targetId: input.targetId ?? hostTargetId(),
       });
     }
-    console.error(`Release ${input.command} succeeded for v${input.version}.`);
+    if (input.command !== "matrix") {
+      console.error(`Release ${input.command} succeeded for v${input.version}.`);
+    }
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
     process.exit(1);

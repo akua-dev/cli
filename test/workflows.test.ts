@@ -2,12 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 
 describe("distribution workflows", () => {
-  test("the release workflow no longer publishes only Linux x64", async () => {
+  test("the release workflow consumes the complete release target matrix", async () => {
     const workflow = await readFile(".github/workflows/release.yml", "utf8");
 
-    for (const target of ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64", "windows-x64"]) {
-      expect(workflow).toContain(target);
-    }
+    expect(workflow).toContain("bun scripts/release.ts matrix");
+    expect(workflow).toContain("fromJSON(needs.package.outputs.matrix)");
   });
 
   test("CI packages once and install-smokes every runnable target natively", async () => {
@@ -15,10 +14,28 @@ describe("distribution workflows", () => {
 
     expect(workflow).toContain("package-release:");
     expect(workflow).toContain("install-smoke:");
-    for (const runner of ["macos-15", "macos-15-intel", "ubuntu-24.04-arm", "ubuntu-24.04", "windows-2025"]) {
-      expect(workflow).toContain(runner);
-    }
+    expect(workflow).toContain("bun scripts/release.ts matrix");
+    expect(workflow).toContain("fromJSON(needs.package-release.outputs.matrix)");
     expect(workflow).toContain("bun scripts/release.ts smoke");
+  });
+
+  test("release inputs reach shell scripts only through quoted environment variables", async () => {
+    const workflow = await readFile(".github/workflows/release.yml", "utf8");
+
+    expect(workflow).not.toContain('test "${{ inputs.tag }}"');
+    expect(workflow).not.toContain('--version "${{ inputs.version }}"');
+    expect(workflow).not.toContain('gh release upload "${{ inputs.tag }}"');
+    expect(workflow).not.toContain('gh release download "${{ inputs.tag }}"');
+    expect(workflow).toContain("TAG: ${{ inputs.tag }}");
+    expect(workflow).toContain("VERSION: ${{ inputs.version }}");
+    expect(workflow).toContain('test "$TAG" = "v$VERSION"');
+  });
+
+  test("release smoke runners are derived from the release target contract", async () => {
+    const workflow = await readFile(".github/workflows/release.yml", "utf8");
+
+    expect(workflow).toContain("bun scripts/release.ts matrix");
+    expect(workflow).toContain("fromJSON(needs.package.outputs.matrix)");
   });
 
   test("Release Please invokes artifact publication without relying on a tag event", async () => {
