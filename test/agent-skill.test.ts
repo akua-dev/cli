@@ -52,9 +52,10 @@ describe("canonical Akua agent skill", () => {
   });
 
   test("rejects task-shaped public skill identities", () => {
+    const taskShapedPath = "skills/agent-skill-compliance-task/SKILL.md";
     const taskShaped = `---\nname: agent-skill-compliance-task\ndescription: Use when working with Akua.\n---\n# Akua\n`;
 
-    expect(() => validateFrontmatter(SKILL_PATH, taskShaped)).toThrow("must match its parent directory");
+    expect(() => validateFrontmatter(taskShapedPath, taskShaped)).toThrow("must use the canonical Akua identity");
   });
 
   test("rejects stale version and provenance metadata", () => {
@@ -122,6 +123,9 @@ function validateFrontmatter(path: string, source: string): void {
   }
   if (name !== basename(dirname(path))) {
     throw new Error("skill name must match its parent directory");
+  }
+  if (name !== SKILL_NAME) {
+    throw new Error("skill name must use the canonical Akua identity");
   }
   if (description.length > 1024) {
     throw new Error("skill description must not exceed 1024 characters");
