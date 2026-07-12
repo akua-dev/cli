@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { chmod, copyFile, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { isAbsolute, join, parse, relative, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 
 export type ReleaseTargetId = "darwin-arm64" | "darwin-x64" | "linux-arm64" | "linux-x64" | "windows-x64";
 
@@ -156,13 +156,12 @@ export function releaseAssetNames(version: string): string[] {
 export function assertSafeOutputDirectory(outputDirInput: string): void {
   const outputDir = resolve(outputDirInput);
   const workspace = resolve(process.cwd());
-  const workspaceRelativePath = relative(workspace, outputDir);
+  const releaseOutputRoot = join(workspace, "dist", "release");
+  const releaseRelativePath = relative(releaseOutputRoot, outputDir);
   if (
-    outputDir === parse(outputDir).root ||
-    workspaceRelativePath === "" ||
-    workspaceRelativePath === ".." ||
-    workspaceRelativePath.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`) ||
-    isAbsolute(workspaceRelativePath)
+    releaseRelativePath === ".." ||
+    releaseRelativePath.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`) ||
+    isAbsolute(releaseRelativePath)
   ) {
     throw new Error(`Unsafe release output directory: ${outputDir}`);
   }

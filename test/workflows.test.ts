@@ -31,6 +31,19 @@ describe("distribution workflows", () => {
     expect(workflow).toContain('test "$TAG" = "v$VERSION"');
   });
 
+  test("release jobs checkout and verify the immutable tag commit", async () => {
+    const workflow = await readFile(".github/workflows/release.yml", "utf8");
+
+    expect(workflow.match(/ref: refs\/tags\/\$\{\{ inputs\.tag \}\}/g)).toHaveLength(3);
+    expect(workflow).toContain('git rev-parse --verify "refs/tags/$TAG^{commit}"');
+    expect(workflow).toContain("commit: ${{ steps.release-ref.outputs.commit }}");
+    expect(workflow).toContain("EXPECTED_COMMIT: ${{ needs.package.outputs.commit }}");
+    expect(workflow.indexOf("Validate immutable release tag and package version"))
+      .toBeLessThan(workflow.indexOf("bun install --frozen-lockfile"));
+    expect(workflow.indexOf("Validate immutable release tag and package version"))
+      .toBeLessThan(workflow.indexOf("bun scripts/release.ts matrix"));
+  });
+
   test("release smoke runners are derived from the release target contract", async () => {
     const workflow = await readFile(".github/workflows/release.yml", "utf8");
 

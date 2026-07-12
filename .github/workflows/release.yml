@@ -42,21 +42,27 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       matrix: ${{ steps.release-matrix.outputs.matrix }}
+      commit: ${{ steps.release-ref.outputs.commit }}
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.tag }}
+          ref: refs/tags/${{ inputs.tag }}
+          fetch-depth: 0
       - uses: jdx/mise-action@v2
+      - name: Validate immutable release tag and package version
+        id: release-ref
+        shell: bash
+        run: |
+          test "$TAG" = "v$VERSION"
+          tag_commit="$(git rev-parse --verify "refs/tags/$TAG^{commit}")"
+          test "$(git rev-parse HEAD)" = "$tag_commit"
+          test "$(bun -p "require('./package.json').version")" = "$VERSION"
+          echo "commit=$tag_commit" >> "$GITHUB_OUTPUT"
       - run: bun install --frozen-lockfile
       - name: Derive native smoke matrix
         id: release-matrix
         shell: bash
         run: echo "matrix=$(bun scripts/release.ts matrix)" >> "$GITHUB_OUTPUT"
-      - name: Validate tag and package version
-        shell: bash
-        run: |
-          test "$TAG" = "v$VERSION"
-          test "$(bun -p "require('./package.json').version")" = "$VERSION"
       - run: mise run check
       - name: Build and verify all release artifacts
         run: bun scripts/release.ts package --version "$VERSION" --output dist/release
@@ -68,6 +74,8 @@ jobs:
 
   install-smoke:
     needs: package
+    env:
+      EXPECTED_COMMIT: ${{ needs.package.outputs.commit }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.package.outputs.matrix) }}
@@ -75,7 +83,14 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.tag }}
+          ref: refs/tags/${{ inputs.tag }}
+          fetch-depth: 0
+      - name: Verify immutable release tag
+        shell: bash
+        run: |
+          tag_commit="$(git rev-parse --verify "refs/tags/$TAG^{commit}")"
+          test "$(git rev-parse HEAD)" = "$tag_commit"
+          test "$tag_commit" = "$EXPECTED_COMMIT"
       - uses: jdx/mise-action@v2
       - run: bun install --frozen-lockfile
       - uses: actions/download-artifact@v4
@@ -89,12 +104,21 @@ jobs:
   publish:
     needs: [package, install-smoke]
     runs-on: ubuntu-24.04
+    env:
+      EXPECTED_COMMIT: ${{ needs.package.outputs.commit }}
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.tag }}
+          ref: refs/tags/${{ inputs.tag }}
+          fetch-depth: 0
+      - name: Verify immutable release tag
+        shell: bash
+        run: |
+          tag_commit="$(git rev-parse --verify "refs/tags/$TAG^{commit}")"
+          test "$(git rev-parse HEAD)" = "$tag_commit"
+          test "$tag_commit" = "$EXPECTED_COMMIT"
       - uses: jdx/mise-action@v2
       - run: bun install --frozen-lockfile
       - uses: actions/download-artifact@v4

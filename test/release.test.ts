@@ -3,6 +3,12 @@ import { createHash } from "node:crypto";
 import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { parse, join } from "node:path";
 
+async function makeReleaseTempDir(): Promise<string> {
+  const releaseRoot = join(process.cwd(), "dist", "release");
+  await mkdir(releaseRoot, { recursive: true });
+  return mkdtemp(join(releaseRoot, ".tmp-akua-release-"));
+}
+
 test("release packaging has a dedicated implementation module", async () => {
   expect(await Bun.file("scripts/release.ts").exists()).toBe(true);
 });
@@ -127,7 +133,7 @@ describe("release target contract", () => {
       binaries: Record<string, string>;
     }) => Promise<void>;
     const verifyReleaseDirectory = release.verifyReleaseDirectory as (outputDir: string, version: string) => Promise<void>;
-    const root = await mkdtemp(join(process.cwd(), ".tmp-akua-release-"));
+    const root = await makeReleaseTempDir();
 
     try {
       const source = join(root, "akua-fixture");
@@ -188,7 +194,7 @@ describe("release target contract", () => {
       binaries: Record<string, string>;
     }) => Promise<void>;
     const verifyReleaseDirectory = release.verifyReleaseDirectory as (outputDir: string, version: string) => Promise<void>;
-    const root = await mkdtemp(join(process.cwd(), ".tmp-akua-release-"));
+    const root = await makeReleaseTempDir();
 
     try {
       const source = join(root, "akua-fixture");
@@ -214,6 +220,9 @@ describe("release target contract", () => {
 
     expect(() => assertSafeOutputDirectory(process.cwd())).toThrow("Unsafe release output directory");
     expect(() => assertSafeOutputDirectory(parse(process.cwd()).root)).toThrow("Unsafe release output directory");
+    expect(() => assertSafeOutputDirectory(join(process.cwd(), "src"))).toThrow("Unsafe release output directory");
+    expect(() => assertSafeOutputDirectory(join(process.cwd(), "docs"))).toThrow("Unsafe release output directory");
+    expect(() => assertSafeOutputDirectory(join(process.cwd(), "dist", "js"))).toThrow("Unsafe release output directory");
     expect(() => assertSafeOutputDirectory(join(process.cwd(), "dist", "release"))).not.toThrow();
   });
 
@@ -226,7 +235,7 @@ describe("release target contract", () => {
       binaries: Record<string, string>;
     }) => Promise<void>;
     const verifyReleaseDirectory = release.verifyReleaseDirectory as (outputDir: string, version: string) => Promise<void>;
-    const root = await mkdtemp(join(process.cwd(), ".tmp-akua-release-"));
+    const root = await makeReleaseTempDir();
 
     try {
       const source = join(root, "akua-fixture");
@@ -275,7 +284,7 @@ describe("release target contract", () => {
       outputDir: string;
       targetId: string;
     }) => Promise<void>;
-    const root = await mkdtemp(join(process.cwd(), ".tmp-akua-release-"));
+    const root = await makeReleaseTempDir();
 
     try {
       const source = join(root, "akua-fixture");
