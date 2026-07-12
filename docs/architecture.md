@@ -9,7 +9,8 @@ Status: greenfield scaffold with local auth/config MVP.
 - Repository: standalone open-source `akua-dev/cli`.
 - Packaging: Bun self-contained executable via `bun build --compile`.
 - API source of truth: `https://api.akua.dev/v1/openapi.json`.
-- First release: local auth/config plus public API commands only.
+- First release CLI command surface: local auth/config plus public API commands
+  only.
 - Compatibility: no `cnap` binary, Go module, config path, env var, or command
   compatibility unless a later captain decision changes this.
 - No live infrastructure mutation is required for development or tests. The
@@ -29,6 +30,7 @@ src/bin/akua.ts                  executable entrypoint
 src/commands/auth.ts             local auth/config command implementation
 src/runtime/                     output, errors, exit codes, command contracts
 src/generated/commands.gen.ts    generated public command registry
+skills/akua/                     canonical versioned Akua agent skill artifact
 .github/workflows/update-openapi.yml
                                  idempotent public OpenAPI update automation
 .github/workflows/release-please.yml
@@ -37,7 +39,7 @@ src/generated/commands.gen.ts    generated public command registry
 release-please-config.json       Release Please manifest-mode config
 .release-please-manifest.json    Release Please root package version manifest
 docs/architecture.md             this spec
-test/                            Bun tests for scaffold and auth/config contracts
+test/                            Bun tests for CLI and artifact contracts
 ```
 
 ## OpenAPI And Command Generation
@@ -269,8 +271,9 @@ Release Please runs in manifest mode for the root Bun package. It uses
 `release-please-config.json` and `.release-please-manifest.json` to prepare
 release PRs, update package metadata and `CHANGELOG.md`, keep the
 `src/bin/akua.ts` `x-release-please-version` marker aligned with
-`akua --version`, create `v*` version tags without a component prefix, and
-create GitHub releases after release PRs merge. The workflow uses
+`akua --version`, keep the canonical agent skill package version aligned with
+the CLI release, create `v*` version tags without a component prefix, and create
+GitHub releases after release PRs merge. The workflow uses
 `secrets.RELEASE_PLEASE_TOKEN` when configured and otherwise falls back to its
 job-scoped `GITHUB_TOKEN`. The optional release token is required for
 release-created tags to trigger the tag-based binary workflow because GitHub
@@ -291,6 +294,8 @@ Current tests cover:
 - structured error payloads;
 - OpenAPI fetch guard and document shape validation;
 - public-only operation collection;
+- canonical agent skill identity, frontmatter, provenance, deterministic package
+  digest, and release version wiring;
 - Release Please config, manifest, token, and CLI version marker validation.
 
 Current validation also runs `mise run generate:check` to catch generated
