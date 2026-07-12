@@ -39,6 +39,12 @@ describe("canonical Akua agent skill", () => {
     expect(() => validateFrontmatter(SKILL_PATH, malformed)).toThrow("frontmatter keys");
   });
 
+  test("rejects invalid YAML frontmatter syntax", () => {
+    const invalidYaml = `---\nname: ${SKILL_NAME}\ndescription: [unterminated\n---\n# Akua\n`;
+
+    expect(() => validateFrontmatter(SKILL_PATH, invalidYaml)).toThrow();
+  });
+
   test("rejects skill path and name drift", () => {
     const drifted = `---\nname: another-skill\ndescription: Use when working with Akua.\n---\n# Akua\n`;
 
@@ -88,25 +94,30 @@ function validateFrontmatter(path: string, source: string): void {
     throw new Error("SKILL.md must contain YAML frontmatter followed by Markdown");
   }
 
-  const entries = match[1].split("\n").map((line) => {
-    const separator = line.indexOf(":");
-    if (separator <= 0) {
-      throw new Error("frontmatter must contain scalar key-value pairs");
-    }
-    return [line.slice(0, separator), line.slice(separator + 1).trim()] as const;
-  });
-  const fields = Object.fromEntries(entries);
-
-  if (entries.map(([key]) => key).join(",") !== "name,description" || !fields.name || !fields.description) {
+  const parsed: unknown = Bun.YAML.parse(match[1]);
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     throw new Error("frontmatter keys must be exactly name and description");
   }
-  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(fields.name) || fields.name.length > 64) {
+
+  const fields = parsed as Record<string, unknown>;
+  const name = fields.name;
+  const description = fields.description;
+  if (
+    Object.keys(fields).join(",") !== "name,description" ||
+    typeof name !== "string" ||
+    !name ||
+    typeof description !== "string" ||
+    !description
+  ) {
+    throw new Error("frontmatter keys must be exactly name and description");
+  }
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name) || name.length > 64) {
     throw new Error("skill name must follow the Agent Skills naming rules");
   }
-  if (fields.name !== basename(dirname(path))) {
+  if (name !== basename(dirname(path))) {
     throw new Error("skill name must match its parent directory");
   }
-  if (fields.description.length > 1024) {
+  if (description.length > 1024) {
     throw new Error("skill description must not exceed 1024 characters");
   }
 }
