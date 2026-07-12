@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { parse, join } from "node:path";
 
 async function makeReleaseTempDir(): Promise<string> {
@@ -216,14 +216,36 @@ describe("release target contract", () => {
 
   test("rejects release output directories that could erase the checkout or filesystem root", async () => {
     const release = await import("../scripts/release") as Record<string, unknown>;
-    const assertSafeOutputDirectory = release.assertSafeOutputDirectory as (outputDir: string) => void;
+    const assertSafeOutputDirectory = release.assertSafeOutputDirectory as (outputDir: string) => Promise<void>;
 
-    expect(() => assertSafeOutputDirectory(process.cwd())).toThrow("Unsafe release output directory");
-    expect(() => assertSafeOutputDirectory(parse(process.cwd()).root)).toThrow("Unsafe release output directory");
-    expect(() => assertSafeOutputDirectory(join(process.cwd(), "src"))).toThrow("Unsafe release output directory");
-    expect(() => assertSafeOutputDirectory(join(process.cwd(), "docs"))).toThrow("Unsafe release output directory");
-    expect(() => assertSafeOutputDirectory(join(process.cwd(), "dist", "js"))).toThrow("Unsafe release output directory");
-    expect(() => assertSafeOutputDirectory(join(process.cwd(), "dist", "release"))).not.toThrow();
+    await expect(assertSafeOutputDirectory(process.cwd())).rejects.toThrow("Unsafe release output directory");
+    await expect(assertSafeOutputDirectory(parse(process.cwd()).root))
+      .rejects.toThrow("Unsafe release output directory");
+    await expect(assertSafeOutputDirectory(join(process.cwd(), "src")))
+      .rejects.toThrow("Unsafe release output directory");
+    await expect(assertSafeOutputDirectory(join(process.cwd(), "docs")))
+      .rejects.toThrow("Unsafe release output directory");
+    await expect(assertSafeOutputDirectory(join(process.cwd(), "dist", "js")))
+      .rejects.toThrow("Unsafe release output directory");
+    await expect(assertSafeOutputDirectory(join(process.cwd(), "dist", "release")))
+      .resolves.toBeUndefined();
+  });
+
+  test("rejects release output paths beneath a symlinked ancestor", async () => {
+    const release = await import("../scripts/release") as Record<string, unknown>;
+    const assertSafeOutputDirectory = release.assertSafeOutputDirectory as (outputDir: string) => Promise<void>;
+    const root = await makeReleaseTempDir();
+    const target = await mkdtemp(join(process.cwd(), ".tmp-akua-release-target-"));
+    const linkedDirectory = join(root, "linked-output");
+
+    try {
+      await symlink(target, linkedDirectory, "dir");
+      await expect(assertSafeOutputDirectory(join(linkedDirectory, "release")))
+        .rejects.toThrow("symlink");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+      await rm(target, { recursive: true, force: true });
+    }
   });
 
   test("verification rejects a Homebrew manifest that does not match verified assets", async () => {

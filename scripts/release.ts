@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import { chmod, copyFile, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, copyFile, lstat, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { isAbsolute, join, relative, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 
 export type ReleaseTargetId = "darwin-arm64" | "darwin-x64" | "linux-arm64" | "linux-x64" | "windows-x64";
 
@@ -153,7 +153,7 @@ export function releaseAssetNames(version: string): string[] {
   ];
 }
 
-export function assertSafeOutputDirectory(outputDirInput: string): void {
+export async function assertSafeOutputDirectory(outputDirInput: string): Promise<void> {
   const outputDir = resolve(outputDirInput);
   const workspace = resolve(process.cwd());
   const releaseOutputRoot = join(workspace, "dist", "release");
@@ -165,12 +165,27 @@ export function assertSafeOutputDirectory(outputDirInput: string): void {
   ) {
     throw new Error(`Unsafe release output directory: ${outputDir}`);
   }
+
+  let currentPath = workspace;
+  for (const segment of relative(workspace, outputDir).split(sep)) {
+    currentPath = join(currentPath, segment);
+    try {
+      if ((await lstat(currentPath)).isSymbolicLink()) {
+        throw new Error(`Unsafe release output directory contains a symlink: ${currentPath}`);
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        break;
+      }
+      throw error;
+    }
+  }
 }
 
 export async function packageExistingExecutables(input: PackageExistingExecutablesInput): Promise<void> {
   validateVersion(input.version);
   const outputDir = resolve(input.outputDir);
-  assertSafeOutputDirectory(outputDir);
+  await assertSafeOutputDirectory(outputDir);
   const stagingRoot = join(outputDir, ".staging");
   await rm(outputDir, { recursive: true, force: true });
   await mkdir(stagingRoot, { recursive: true });
