@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { parse, join } from "node:path";
 
 async function makeReleaseTempDir(): Promise<string> {
@@ -122,6 +122,72 @@ describe("release target contract", () => {
     expect(checksumLine("akua-v1.2.3-linux-x64.tar.gz", digest)).toBe(
       `${digest}  akua-v1.2.3-linux-x64.tar.gz\n`,
     );
+  });
+
+  test("plans uploads for only release assets missing from an identical existing subset", async () => {
+    const release = await import("../scripts/release") as Record<string, unknown>;
+    expect(typeof release.planReleaseUploads).toBe("function");
+    if (typeof release.planReleaseUploads !== "function") {
+      return;
+    }
+    const planReleaseUploads = release.planReleaseUploads as (
+      candidateDir: string,
+      existingDir: string,
+      version: string,
+    ) => Promise<string[]>;
+    const releaseAssetNames = release.releaseAssetNames as (version: string) => string[];
+    const root = await makeReleaseTempDir();
+
+    try {
+      const candidateDir = join(root, "candidate");
+      const existingDir = join(root, "existing");
+      const assetNames = releaseAssetNames("1.2.3");
+      await mkdir(candidateDir);
+      await mkdir(existingDir);
+      for (const name of assetNames) {
+        await writeFile(join(candidateDir, name), `candidate ${name}\n`);
+      }
+      await copyFile(join(candidateDir, assetNames[0]), join(existingDir, assetNames[0]));
+      await copyFile(join(candidateDir, assetNames[4]), join(existingDir, assetNames[4]));
+
+      await expect(planReleaseUploads(candidateDir, existingDir, "1.2.3")).resolves.toEqual(
+        assetNames.filter((_, index) => index !== 0 && index !== 4).map((name) => join(candidateDir, name)),
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects an existing release asset that differs from the candidate", async () => {
+    const release = await import("../scripts/release") as Record<string, unknown>;
+    expect(typeof release.planReleaseUploads).toBe("function");
+    if (typeof release.planReleaseUploads !== "function") {
+      return;
+    }
+    const planReleaseUploads = release.planReleaseUploads as (
+      candidateDir: string,
+      existingDir: string,
+      version: string,
+    ) => Promise<string[]>;
+    const releaseAssetNames = release.releaseAssetNames as (version: string) => string[];
+    const root = await makeReleaseTempDir();
+
+    try {
+      const candidateDir = join(root, "candidate");
+      const existingDir = join(root, "existing");
+      const assetNames = releaseAssetNames("1.2.3");
+      await mkdir(candidateDir);
+      await mkdir(existingDir);
+      for (const name of assetNames) {
+        await writeFile(join(candidateDir, name), `candidate ${name}\n`);
+      }
+      await writeFile(join(existingDir, assetNames[0]), "different bytes\n");
+
+      await expect(planReleaseUploads(candidateDir, existingDir, "1.2.3"))
+        .rejects.toThrow(`Existing release asset does not match candidate: ${assetNames[0]}`);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   test("packages executable-only archives, manifests, and matching checksums", async () => {
@@ -332,7 +398,7 @@ describe("release target contract", () => {
       const outputDir = join(root, "release");
       await writeFile(
         source,
-        "#!/bin/sh\ncase \"$1\" in\n  --version) echo 'akua 1.2.3' ;;\n  --help) echo 'Usage: akua' ;;\n  commands) echo 'commands[1]' ;;\n  *) exit 2 ;;\nesac\n",
+        "#!/bin/sh\ncase \"$1\" in\n  --version) echo '{\"status\":\"ok\",\"data\":{\"version\":\"1.2.3\"}}' ;;\n  --help) echo 'Usage: akua' ;;\n  commands) echo 'commands[1]' ;;\n  *) exit 2 ;;\nesac\n",
       );
       await chmod(source, 0o755);
       await packageExistingExecutables({
@@ -346,6 +412,46 @@ describe("release target contract", () => {
         outputDir,
         targetId: hostTargetId(process.platform, process.arch),
       })).resolves.toBeUndefined();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects an install-smoke executable whose longer version contains the expected version", async () => {
+    const release = await import("../scripts/release") as Record<string, unknown>;
+    const targets = release.RELEASE_TARGETS as Array<{ id: string }>;
+    const hostTargetId = release.hostTargetId as (platform: string, arch: string) => string;
+    const packageExistingExecutables = release.packageExistingExecutables as (input: {
+      version: string;
+      outputDir: string;
+      binaries: Record<string, string>;
+    }) => Promise<void>;
+    const smokeReleaseArtifact = release.smokeReleaseArtifact as (input: {
+      version: string;
+      outputDir: string;
+      targetId: string;
+    }) => Promise<void>;
+    const root = await makeReleaseTempDir();
+
+    try {
+      const source = join(root, "akua-fixture");
+      const outputDir = join(root, "release");
+      await writeFile(
+        source,
+        "#!/bin/sh\ncase \"$1\" in\n  --version) echo '{\"status\":\"ok\",\"data\":{\"version\":\"11.2.3\"}}' ;;\n  --help) echo 'Usage: akua' ;;\n  commands) echo 'commands[1]' ;;\n  *) exit 2 ;;\nesac\n",
+      );
+      await chmod(source, 0o755);
+      await packageExistingExecutables({
+        version: "1.2.3",
+        outputDir,
+        binaries: Object.fromEntries(targets.map((target) => [target.id, source])),
+      });
+
+      await expect(smokeReleaseArtifact({
+        version: "1.2.3",
+        outputDir,
+        targetId: hostTargetId(process.platform, process.arch),
+      })).rejects.toThrow("unexpected version");
     } finally {
       await rm(root, { recursive: true, force: true });
     }

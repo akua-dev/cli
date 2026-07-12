@@ -153,6 +153,38 @@ export function releaseAssetNames(version: string): string[] {
   ];
 }
 
+export async function planReleaseUploads(
+  candidateDirInput: string,
+  existingDirInput: string,
+  version: string,
+): Promise<string[]> {
+  const candidateDir = resolve(candidateDirInput);
+  const existingDir = resolve(existingDirInput);
+  const expectedNames = releaseAssetNames(version);
+  const candidateNames = (await readdir(candidateDir)).sort();
+  if (JSON.stringify(candidateNames) !== JSON.stringify([...expectedNames].sort())) {
+    throw new Error(`Unexpected release files: ${candidateNames.join(", ")}`);
+  }
+
+  const existingNames = await readdir(existingDir);
+  const expectedNameSet = new Set(expectedNames);
+  for (const name of existingNames) {
+    if (!expectedNameSet.has(name)) {
+      throw new Error(`Unexpected existing release asset: ${name}`);
+    }
+    const [candidateBytes, existingBytes] = await Promise.all([
+      readFile(join(candidateDir, name)),
+      readFile(join(existingDir, name)),
+    ]);
+    if (!candidateBytes.equals(existingBytes)) {
+      throw new Error(`Existing release asset does not match candidate: ${name}`);
+    }
+  }
+
+  const existingNameSet = new Set(existingNames);
+  return expectedNames.filter((name) => !existingNameSet.has(name)).map((name) => join(candidateDir, name));
+}
+
 export async function assertSafeOutputDirectory(outputDirInput: string): Promise<void> {
   const outputDir = resolve(outputDirInput);
   const workspace = resolve(process.cwd());
@@ -329,8 +361,15 @@ export async function smokeReleaseArtifact(input: {
       await chmod(executable, 0o755);
     }
 
-    const versionOutput = await run([executable, "--version"], { AKUA_OUTPUT: "agent" });
-    if (!versionOutput.includes(input.version)) {
+    const versionOutput = await run([executable, "--version", "--json"]);
+    let reportedVersion: unknown;
+    try {
+      const versionPayload = JSON.parse(versionOutput) as { data?: { version?: unknown } };
+      reportedVersion = versionPayload.data?.version;
+    } catch {
+      reportedVersion = undefined;
+    }
+    if (reportedVersion !== input.version) {
       throw new Error(`Installed ${target.id} executable reported an unexpected version: ${versionOutput.trim()}`);
     }
     const helpOutput = await run([executable, "--help"], { AKUA_OUTPUT: "agent" });
@@ -480,10 +519,16 @@ function stableJson(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
-function readCliFlags(argv: readonly string[]): { command: string; version: string; outputDir: string; targetId?: string } {
+function readCliFlags(argv: readonly string[]): {
+  command: string;
+  version: string;
+  outputDir: string;
+  targetId?: string;
+  existingDir?: string;
+} {
   const [command, ...flags] = argv;
-  if (!command || !["matrix", "package", "verify", "smoke"].includes(command)) {
-    throw new Error("Usage: bun scripts/release.ts <matrix|package|verify|smoke> --version <version> --output <directory> [--target <target>]");
+  if (!command || !["matrix", "package", "verify", "smoke", "upload-plan"].includes(command)) {
+    throw new Error("Usage: bun scripts/release.ts <matrix|package|verify|smoke|upload-plan> --version <version> --output <directory> [--target <target>] [--existing <directory>]");
   }
   if (command === "matrix") {
     if (flags.length !== 0) {
@@ -503,7 +548,16 @@ function readCliFlags(argv: readonly string[]): { command: string; version: stri
   if (!values.version || !values.output) {
     throw new Error("Both --version and --output are required");
   }
-  return { command, version: values.version, outputDir: values.output, targetId: values.target };
+  if (command === "upload-plan" && !values.existing) {
+    throw new Error("--existing is required for upload-plan");
+  }
+  return {
+    command,
+    version: values.version,
+    outputDir: values.output,
+    targetId: values.target,
+    existingDir: values.existing,
+  };
 }
 
 if (import.meta.main) {
@@ -515,6 +569,8 @@ if (import.meta.main) {
       await packageRelease({ version: input.version, outputDir: input.outputDir });
     } else if (input.command === "verify") {
       await verifyReleaseDirectory(input.outputDir, input.version);
+    } else if (input.command === "upload-plan") {
+      console.log(JSON.stringify(await planReleaseUploads(input.outputDir, input.existingDir!, input.version)));
     } else {
       await smokeReleaseArtifact({
         version: input.version,
@@ -522,7 +578,7 @@ if (import.meta.main) {
         targetId: input.targetId ?? hostTargetId(),
       });
     }
-    if (input.command !== "matrix") {
+    if (input.command !== "matrix" && input.command !== "upload-plan") {
       console.error(`Release ${input.command} succeeded for v${input.version}.`);
     }
   } catch (error) {

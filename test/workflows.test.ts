@@ -44,6 +44,13 @@ describe("distribution workflows", () => {
       .toBeLessThan(workflow.indexOf("bun scripts/release.ts matrix"));
   });
 
+  test("the contents-write publish checkout does not persist its credential", async () => {
+    const workflow = await readFile(".github/workflows/release.yml", "utf8");
+    const publishJob = workflow.slice(workflow.indexOf("  publish:"), workflow.indexOf("  tap-update:"));
+
+    expect(publishJob).toContain("persist-credentials: false");
+  });
+
   test("release smoke runners are derived from the release target contract", async () => {
     const workflow = await readFile(".github/workflows/release.yml", "utf8");
 
@@ -65,7 +72,11 @@ describe("distribution workflows", () => {
 
     expect(workflow).toContain("workflow_call:");
     expect(workflow).toContain("workflow_dispatch:");
-    expect(workflow).toContain("gh release upload");
+    expect(workflow).toContain("bun scripts/release.ts upload-plan");
+    expect(workflow).toContain('gh release view "$TAG" --json assets');
+    expect(workflow).toContain('gh release download "$TAG" --dir dist/existing');
+    expect(workflow).toContain('gh release upload "$TAG" "${assets[@]}"');
+    expect(workflow).not.toContain('gh release upload "$TAG" dist/release/*');
     expect(workflow).not.toContain("--clobber");
     expect(workflow).toContain("gh release download");
     expect(workflow).toContain("bun scripts/release.ts verify");

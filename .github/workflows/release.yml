@@ -113,6 +113,7 @@ jobs:
         with:
           ref: refs/tags/${{ inputs.tag }}
           fetch-depth: 0
+          persist-credentials: false
       - name: Verify immutable release tag
         shell: bash
         run: |
@@ -127,10 +128,21 @@ jobs:
           path: dist/release
       - name: Verify release candidate
         run: bun scripts/release.ts verify --version "$VERSION" --output dist/release
-      - name: Publish assets without replacement
+      - name: Reconcile and publish assets without replacement
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$TAG" dist/release/*
+        shell: bash
+        run: |
+          mkdir -p dist/existing
+          asset_count="$(gh release view "$TAG" --json assets --jq '.assets | length')"
+          if [ "$asset_count" -gt 0 ]; then
+            gh release download "$TAG" --dir dist/existing
+          fi
+          upload_plan="$(bun scripts/release.ts upload-plan --version "$VERSION" --output dist/release --existing dist/existing)"
+          mapfile -t assets < <(jq -r '.[]' <<< "$upload_plan")
+          if [ "${#assets[@]}" -gt 0 ]; then
+            gh release upload "$TAG" "${assets[@]}"
+          fi
       - name: Download and verify published assets
         env:
           GH_TOKEN: ${{ github.token }}
