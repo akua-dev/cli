@@ -11,9 +11,8 @@ release.
 
 This scaffold establishes the architecture, packaging path, OpenAPI fetch task,
 public operation registry generation, release automation, output/error runtime
-contract, local auth/config token handling, and the canonical versioned Akua
-[agent skill artifact](skills/agent-skills-standard-following/SKILL.md). It does
-not yet implement full API command execution.
+contract, and local auth/config token handling. It does not yet implement full
+API command execution.
 
 ## Development
 
@@ -90,9 +89,8 @@ any other tracked or untracked files.
 Release Please runs in manifest mode from `release-please-config.json` and
 `.release-please-manifest.json`. It prepares release pull requests for the root
 Bun package, updates package metadata, `CHANGELOG.md`, and the `akua --version`
-marker in `src/bin/akua.ts`, keeps the canonical agent skill package version
-aligned, and creates `v*` version tags and GitHub releases after release PRs
-merge.
+marker in `src/bin/akua.ts`, and creates `v*` version tags and GitHub releases
+after release PRs merge.
 
 The workflow uses `secrets.RELEASE_PLEASE_TOKEN` when configured and otherwise
 falls back to its job-scoped `GITHUB_TOKEN`. The optional release token lets
