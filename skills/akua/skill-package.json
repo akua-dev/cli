@@ -1,16 +1,16 @@
 {
   "schema_version": 1,
-  "name": "agent-skills-standard-following",
+  "name": "akua",
   "version": "0.7.0",
   "provenance": {
     "repository": "https://github.com/akua-dev/cli",
-    "path": "skills/agent-skills-standard-following/SKILL.md",
+    "path": "skills/akua/SKILL.md",
     "revision_source": "git"
   },
   "files": [
     {
       "path": "SKILL.md",
-      "sha256": "49ceb008dce8f6f1fbfc51fdb389f09986556db406331e0b9870006752f877ee"
+      "sha256": "01e1d7a7812ec3026419aebecfb27e54cbaff18c8386e9e50451f9af2a635979"
     }
   ]
 }

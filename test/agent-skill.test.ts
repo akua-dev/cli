@@ -3,9 +3,9 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { basename, dirname } from "node:path";
 
-const SKILL_PATH = "skills/agent-skills-standard-following/SKILL.md";
-const PACKAGE_PATH = "skills/agent-skills-standard-following/skill-package.json";
-const SKILL_NAME = "agent-skills-standard-following";
+const SKILL_PATH = "skills/akua/SKILL.md";
+const PACKAGE_PATH = "skills/akua/skill-package.json";
+const SKILL_NAME = "akua";
 const SOURCE_REPOSITORY = "https://github.com/akua-dev/cli";
 
 interface SkillPackage {
@@ -49,6 +49,12 @@ describe("canonical Akua agent skill", () => {
     const drifted = `---\nname: another-skill\ndescription: Use when working with Akua.\n---\n# Akua\n`;
 
     expect(() => validateFrontmatter(SKILL_PATH, drifted)).toThrow("must match its parent directory");
+  });
+
+  test("rejects task-shaped public skill identities", () => {
+    const taskShaped = `---\nname: agent-skill-compliance-task\ndescription: Use when working with Akua.\n---\n# Akua\n`;
+
+    expect(() => validateFrontmatter(SKILL_PATH, taskShaped)).toThrow("must match its parent directory");
   });
 
   test("rejects stale version and provenance metadata", () => {

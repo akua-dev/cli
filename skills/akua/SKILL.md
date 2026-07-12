@@ -1,5 +1,5 @@
 ---
-name: agent-skills-standard-following
+name: akua
 description: Guide agents working with Akua documentation, workspaces, authentication, generated CLI commands, structured output, and approval-safe operations. Use for Akua setup, inspection, troubleshooting, or change requests.
 ---
 

@@ -30,7 +30,7 @@ describe("release-please configuration", () => {
         },
         {
           type: "json",
-          path: "skills/agent-skills-standard-following/skill-package.json",
+          path: "skills/akua/skill-package.json",
           jsonpath: "$.version",
         },
       ],
