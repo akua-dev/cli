@@ -68,8 +68,7 @@ install -m 0755 akua "$HOME/.local/bin/akua"
 ```
 
 Ensure `~/.local/bin` is on `PATH`. Manual upgrades repeat these steps with a
-newer `VERSION`, atomically replacing `~/.local/bin/akua`. The CLI does not
-self-update.
+newer `VERSION`, replacing `~/.local/bin/akua`. The CLI does not self-update.
 
 ### GitHub Release: Windows x64
 
