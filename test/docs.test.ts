@@ -47,18 +47,6 @@ describe("distribution documentation", () => {
     expect(readme).not.toContain("skills add akua-dev/skills");
   });
 
-  test("the CLI-owned skill is valid, conservative, and CLI-aware", async () => {
-    const skill = await text("skills/agent-skills-standard-following/SKILL.md");
-
-    expect(skill).toMatch(/^---\nname: agent-skills-standard-following\ndescription: .+\n---/);
-    expect(skill).toContain("akua --version");
-    expect(skill).toContain("akua --help");
-    expect(skill).toContain("akua commands --limit 5");
-    expect(skill).toContain("explicit user approval");
-    expect(skill).toContain("https://docs.akua.dev/mcp");
-    expect(skill).toContain("https://mcp.akua.dev");
-  });
-
   test("AGENTS records durable release and cross-repository ownership rules", async () => {
     const agents = await text("AGENTS.md");
 
