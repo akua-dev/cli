@@ -294,15 +294,15 @@ export function archiveExtractCommand(
 ): string[] {
   if (archive === "zip") {
     if (platform === "win32") {
+      const archiveLiteral = `'${archivePath.replaceAll("'", "''")}'`;
+      const installRootLiteral = `'${installRoot.replaceAll("'", "''")}'`;
       return [
         "powershell.exe",
         "-NoLogo",
         "-NoProfile",
         "-NonInteractive",
         "-Command",
-        "Expand-Archive -LiteralPath $args[0] -DestinationPath $args[1]",
-        archivePath,
-        installRoot,
+        `Expand-Archive -LiteralPath ${archiveLiteral} -DestinationPath ${installRootLiteral}`,
       ];
     }
     return ["unzip", "-q", archivePath, "-d", installRoot];

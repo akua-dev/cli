@@ -301,15 +301,13 @@ describe("release target contract", () => {
       platform: NodeJS.Platform,
     ) => string[];
 
-    expect(archiveExtractCommand("zip", "D:\\a\\cli\\akua.zip", "C:\\install", "win32")).toEqual([
+    expect(archiveExtractCommand("zip", "D:\\a\\Robin's build\\akua.zip", "C:\\install dir", "win32")).toEqual([
       "powershell.exe",
       "-NoLogo",
       "-NoProfile",
       "-NonInteractive",
       "-Command",
-      "Expand-Archive -LiteralPath $args[0] -DestinationPath $args[1]",
-      "D:\\a\\cli\\akua.zip",
-      "C:\\install",
+      "Expand-Archive -LiteralPath 'D:\\a\\Robin''s build\\akua.zip' -DestinationPath 'C:\\install dir'",
     ]);
   });
 
