@@ -292,10 +292,22 @@ export function archiveExtractCommand(
   installRoot: string,
   platform = process.platform,
 ): string[] {
-  if (archive === "zip" && platform !== "win32") {
+  if (archive === "zip") {
+    if (platform === "win32") {
+      return [
+        "powershell.exe",
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "Expand-Archive -LiteralPath $args[0] -DestinationPath $args[1]",
+        archivePath,
+        installRoot,
+      ];
+    }
     return ["unzip", "-q", archivePath, "-d", installRoot];
   }
-  return ["tar", ...(platform === "win32" ? ["--force-local"] : []), "-xf", archivePath, "-C", installRoot];
+  return ["tar", "-xf", archivePath, "-C", installRoot];
 }
 
 export async function smokeReleaseArtifact(input: {

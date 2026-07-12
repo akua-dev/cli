@@ -292,7 +292,7 @@ describe("release target contract", () => {
     expect(() => hostTargetId("win32", "arm64")).toThrow("Unsupported release host");
   });
 
-  test("forces Windows tar to treat drive-letter archive paths as local", async () => {
+  test("extracts Windows zip archives with native PowerShell", async () => {
     const release = await import("../scripts/release") as Record<string, unknown>;
     const archiveExtractCommand = release.archiveExtractCommand as (
       archive: "tar.gz" | "zip",
@@ -302,11 +302,13 @@ describe("release target contract", () => {
     ) => string[];
 
     expect(archiveExtractCommand("zip", "D:\\a\\cli\\akua.zip", "C:\\install", "win32")).toEqual([
-      "tar",
-      "--force-local",
-      "-xf",
+      "powershell.exe",
+      "-NoLogo",
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      "Expand-Archive -LiteralPath $args[0] -DestinationPath $args[1]",
       "D:\\a\\cli\\akua.zip",
-      "-C",
       "C:\\install",
     ]);
   });
