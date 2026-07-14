@@ -17,3 +17,45 @@ jobs:
       - uses: jdx/mise-action@v2
       - run: bun install --frozen-lockfile
       - run: mise run check
+
+  package-release:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.release-matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v2
+      - run: bun install --frozen-lockfile
+      - name: Derive native smoke matrix
+        id: release-matrix
+        shell: bash
+        run: echo "matrix=$(bun scripts/release.ts matrix)" >> "$GITHUB_OUTPUT"
+      - name: Build and verify all release artifacts
+        run: |
+          version="$(bun -p "require('./package.json').version")"
+          bun scripts/release.ts package --version "$version" --output dist/release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: akua-release-candidate
+          path: dist/release/
+          if-no-files-found: error
+
+  install-smoke:
+    needs: package-release
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.package-release.outputs.matrix) }}
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v2
+      - run: bun install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          name: akua-release-candidate
+          path: dist/release
+      - name: Extract, install, and smoke ${{ matrix.target }}
+        shell: bash
+        run: |
+          version="$(bun -p "require('./package.json').version")"
+          bun scripts/release.ts smoke --version "$version" --output dist/release --target "${{ matrix.target }}"

@@ -8,7 +8,20 @@ describe("detectOutputMode", () => {
   });
 
   test("detects known coding agent environments", () => {
-    expect(detectOutputMode({ argv: [], env: { CODEX_SANDBOX: "1" }, stdoutIsTTY: true })).toBe("agent");
+    for (const name of [
+      "CODEX_SANDBOX",
+      "CLAUDECODE",
+      "CURSOR_AGENT",
+      "AIDER",
+      "DEVIN",
+      "OPENCODE",
+      "AMP",
+      "CODY_AGENT",
+      "REPLIT_AGENT",
+      "WINDSURF_AGENT",
+    ]) {
+      expect(detectOutputMode({ argv: [], env: { [name]: "1" }, stdoutIsTTY: true })).toBe("agent");
+    }
   });
 
   test("detects universal agent environment flag", () => {
@@ -17,6 +30,12 @@ describe("detectOutputMode", () => {
 
   test("detects universal agent environment name", () => {
     expect(detectOutputMode({ argv: [], env: { AGENT: "codex" }, stdoutIsTTY: true })).toBe("agent");
+  });
+
+  test("ignores false universal agent values", () => {
+    for (const value of ["", "0", "false", "FALSE"]) {
+      expect(detectOutputMode({ argv: [], env: { AGENT: value }, stdoutIsTTY: true })).toBe("human");
+    }
   });
 
   test("detects CI and non-tty automation", () => {

@@ -1,26 +1,172 @@
-name: Release
+name: Publish Release Artifacts
 
 on:
-  push:
-    tags:
-      - "v*"
+  workflow_call:
+    inputs:
+      tag:
+        description: Existing immutable Git tag and GitHub Release name
+        required: true
+        type: string
+      version:
+        description: SemVer without the v prefix
+        required: true
+        type: string
+    secrets:
+      HOMEBREW_TAP_TOKEN:
+        description: Fine-grained token scoped only to dispatch akua-dev/homebrew-tap
+        required: true
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing immutable Git tag and GitHub Release name
+        required: true
+        type: string
+      version:
+        description: SemVer without the v prefix
+        required: true
+        type: string
 
 permissions:
-  contents: write
+  contents: read
+
+env:
+  TAG: ${{ inputs.tag }}
+  VERSION: ${{ inputs.version }}
+
+concurrency:
+  group: publish-release-${{ inputs.tag }}
+  cancel-in-progress: false
 
 jobs:
-  release:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        target:
-          - linux-x64
+  package:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.release-matrix.outputs.matrix }}
+      commit: ${{ steps.release-ref.outputs.commit }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+          fetch-depth: 0
+      - uses: jdx/mise-action@v2
+      - name: Validate immutable release tag and package version
+        id: release-ref
+        shell: bash
+        run: |
+          test "$TAG" = "v$VERSION"
+          tag_commit="$(git rev-parse --verify "refs/tags/$TAG^{commit}")"
+          test "$(git rev-parse HEAD)" = "$tag_commit"
+          test "$(bun -p "require('./package.json').version")" = "$VERSION"
+          echo "commit=$tag_commit" >> "$GITHUB_OUTPUT"
+      - run: bun install --frozen-lockfile
+      - name: Derive native smoke matrix
+        id: release-matrix
+        shell: bash
+        run: echo "matrix=$(bun scripts/release.ts matrix)" >> "$GITHUB_OUTPUT"
+      - run: mise run check
+      - name: Build and verify all release artifacts
+        run: bun scripts/release.ts package --version "$VERSION" --output dist/release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: akua-release-${{ inputs.version }}
+          path: dist/release/
+          if-no-files-found: error
+
+  install-smoke:
+    needs: package
+    env:
+      EXPECTED_COMMIT: ${{ needs.package.outputs.commit }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.package.outputs.matrix) }}
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+          fetch-depth: 0
+      - name: Verify immutable release tag
+        shell: bash
+        run: |
+          tag_commit="$(git rev-parse --verify "refs/tags/$TAG^{commit}")"
+          test "$(git rev-parse HEAD)" = "$tag_commit"
+          test "$tag_commit" = "$EXPECTED_COMMIT"
       - uses: jdx/mise-action@v2
       - run: bun install --frozen-lockfile
-      - run: mise run check
-      - run: bun build src/bin/akua.ts --compile --target=bun-${{ matrix.target }} --outfile dist/akua-${{ matrix.target }}
-      - uses: softprops/action-gh-release@v2
+      - uses: actions/download-artifact@v4
         with:
-          files: dist/akua-${{ matrix.target }}
+          name: akua-release-${{ inputs.version }}
+          path: dist/release
+      - name: Extract, install, and smoke ${{ matrix.target }}
+        shell: bash
+        run: bun scripts/release.ts smoke --version "$VERSION" --output dist/release --target "${{ matrix.target }}"
+
+  publish:
+    needs: [package, install-smoke]
+    runs-on: ubuntu-24.04
+    env:
+      EXPECTED_COMMIT: ${{ needs.package.outputs.commit }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify immutable release tag
+        shell: bash
+        run: |
+          tag_commit="$(git rev-parse --verify "refs/tags/$TAG^{commit}")"
+          test "$(git rev-parse HEAD)" = "$tag_commit"
+          test "$tag_commit" = "$EXPECTED_COMMIT"
+      - uses: jdx/mise-action@v2
+      - run: bun install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          name: akua-release-${{ inputs.version }}
+          path: dist/release
+      - name: Verify release candidate
+        run: bun scripts/release.ts verify --version "$VERSION" --output dist/release
+      - name: Reconcile and publish assets without replacement
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          mkdir -p dist/existing
+          asset_count="$(gh release view "$TAG" --json assets --jq '.assets | length')"
+          if [ "$asset_count" -gt 0 ]; then
+            gh release download "$TAG" --dir dist/existing
+          fi
+          upload_plan="$(bun scripts/release.ts upload-plan --version "$VERSION" --output dist/release --existing dist/existing)"
+          mapfile -t assets < <(jq -r '.[]' <<< "$upload_plan")
+          if [ "${#assets[@]}" -gt 0 ]; then
+            gh release upload "$TAG" "${assets[@]}"
+          fi
+      - name: Download and verify published assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p dist/published
+          gh release download "$TAG" --dir dist/published
+          bun scripts/release.ts verify --version "$VERSION" --output dist/published
+
+  tap-update:
+    needs: publish
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Request a reviewed Homebrew formula update
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          VERSION: ${{ inputs.version }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          jq -n \
+            --arg version "$VERSION" \
+            --arg tag "$TAG" \
+            --arg release_url "https://github.com/akua-dev/cli/releases/tag/$TAG" \
+            --arg homebrew_manifest_url "https://github.com/akua-dev/cli/releases/download/$TAG/akua-v$VERSION-homebrew.json" \
+            '{event_type:"akua-cli-release-published",client_payload:{version:$version,tag:$tag,release_url:$release_url,homebrew_manifest_url:$homebrew_manifest_url}}' \
+            | gh api --method POST repos/akua-dev/homebrew-tap/dispatches --input -

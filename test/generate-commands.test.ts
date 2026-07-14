@@ -33,4 +33,25 @@ describe("collectPublicCommands", () => {
       requires_auth: true,
     });
   });
+
+  test("sorts generated commands deterministically by operationId", () => {
+    const commands = collectPublicCommands({
+      paths: {
+        "/z": {
+          get: {
+            "x-platform-visibility": "PUBLIC",
+            operationId: "zebras.list",
+          },
+        },
+        "/a": {
+          get: {
+            "x-platform-visibility": "PUBLIC",
+            operationId: "agents.list",
+          },
+        },
+      },
+    });
+
+    expect(commands.map((command) => command.operation_id)).toEqual(["agents.list", "zebras.list"]);
+  });
 });

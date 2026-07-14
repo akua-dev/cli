@@ -16,6 +16,18 @@ run = "bun run build"
 description = "Compile a self-contained akua executable with Bun"
 run = "bun run build:binary"
 
+[tasks."release:package"]
+description = "Build and verify every self-contained release archive"
+run = "bun run release:package"
+
+[tasks."release:verify"]
+description = "Verify release manifests, archives, and checksums"
+run = "bun run release:verify"
+
+[tasks."release:smoke"]
+description = "Install and smoke the release archive for this host"
+run = "bun run release:smoke"
+
 [tasks.test]
 description = "Run tests"
 run = "bun test"
