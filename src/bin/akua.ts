@@ -100,7 +100,7 @@ function helpView(): RenderEnvelope {
       "  akua auth login       Save a local API token",
       "  akua auth status      Show local authentication status",
       "  akua auth logout      Remove the saved local API token",
-      "  akua agent-os load-hcloud-provider --workspace <exact-name-or-ws_id> --token-file <absolute-path>",
+      "  akua agent-os load-hcloud-provider --workspace <exact-name-or-ws_id> --token-file <absolute-path> --project-anchor-ssh-key-fingerprint <SHA256:fingerprint>",
       "  akua commands         List generated public OpenAPI command registry",
       "  akua --help           Show help",
       "  akua --version        Show version",

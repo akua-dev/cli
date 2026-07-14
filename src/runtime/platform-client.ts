@@ -51,6 +51,7 @@ export interface HCloudProviderLoadInput {
   workspace: string;
   callerToken: string;
   providerToken: Uint8Array;
+  projectAnchorSshKeyFingerprint: string;
   idempotencyKey: string;
 }
 
@@ -66,7 +67,7 @@ export async function submitHcloudProviderLoad(
 ): Promise<HCloudProviderLoadResult> {
   let body: Uint8Array | undefined;
   try {
-    body = encodeProviderTokenBody(input.providerToken);
+    body = encodeProviderTokenBody(input.providerToken, input.projectAnchorSshKeyFingerprint);
     const response = await dependencies.send({
       url: HCloudProviderLoadUrl,
       method: "POST",
@@ -117,10 +118,18 @@ async function sendHttpsRequest(request: HCloudProviderLoadRequest): Promise<HCl
   }
 }
 
-function encodeProviderTokenBody(providerToken: Uint8Array): Uint8Array {
-  const prefix = new Uint8Array([123, 34, 112, 114, 111, 118, 105, 100, 101, 114, 95, 116, 111, 107, 101, 110, 34, 58, 34]);
+function encodeProviderTokenBody(providerToken: Uint8Array, projectAnchorSshKeyFingerprint: string): Uint8Array {
+  const prefix = new Uint8Array([
+    123, 34, 112, 114, 111, 106, 101, 99, 116, 95, 97, 110, 99, 104, 111, 114, 95, 115, 115, 104, 95, 107, 101, 121,
+    95, 102, 105, 110, 103, 101, 114, 112, 114, 105, 110, 116, 34, 58, 34,
+  ]);
+  const separator = new Uint8Array([34, 44, 34, 112, 114, 111, 118, 105, 100, 101, 114, 95, 116, 111, 107, 101, 110, 34, 58, 34]);
   const suffix = new Uint8Array([34, 125]);
-  let encodedLength = prefix.byteLength + suffix.byteLength;
+  const fingerprintBytes = new TextEncoder().encode(projectAnchorSshKeyFingerprint);
+  let encodedLength = prefix.byteLength + separator.byteLength + suffix.byteLength;
+  for (const byte of fingerprintBytes) {
+    encodedLength += escapedLength(byte);
+  }
   for (const byte of providerToken) {
     encodedLength += escapedLength(byte);
   }
@@ -128,7 +137,17 @@ function encodeProviderTokenBody(providerToken: Uint8Array): Uint8Array {
   let cursor = 0;
   body.set(prefix, cursor);
   cursor += prefix.byteLength;
-  for (const byte of providerToken) {
+  cursor = writeEscapedBytes(body, cursor, fingerprintBytes);
+  body.set(separator, cursor);
+  cursor += separator.byteLength;
+  cursor = writeEscapedBytes(body, cursor, providerToken);
+  body.set(suffix, cursor);
+  return body;
+}
+
+function writeEscapedBytes(body: Uint8Array, start: number, bytes: Uint8Array): number {
+  let cursor = start;
+  for (const byte of bytes) {
     if (byte === 34 || byte === 92) {
       body[cursor++] = 92;
       body[cursor++] = byte;
@@ -154,9 +173,7 @@ function encodeProviderTokenBody(providerToken: Uint8Array): Uint8Array {
       body[cursor++] = byte;
     }
   }
-  body.set(suffix, cursor);
-  cursor += suffix.byteLength;
-  return body;
+  return cursor;
 }
 
 function escapedLength(byte: number): number {

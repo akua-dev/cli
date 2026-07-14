@@ -50,6 +50,7 @@ export async function agentOsView(
       workspace: options.workspace,
       callerToken,
       providerToken,
+      projectAnchorSshKeyFingerprint: options.projectAnchorSshKeyFingerprint,
       idempotencyKey: dependencies.createIdempotencyKey(),
     });
     return {
@@ -64,18 +65,20 @@ export async function agentOsView(
 interface LoadHcloudProviderOptions {
   workspace: string;
   tokenFile: string;
+  projectAnchorSshKeyFingerprint: string;
 }
 
 function parseLoadHcloudProviderFlags(argv: readonly string[]): LoadHcloudProviderOptions {
   let workspace: string | undefined;
   let tokenFile: string | undefined;
+  let projectAnchorSshKeyFingerprint: string | undefined;
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index];
     if (!value.startsWith("-")) {
       throw usageError("Unexpected argument for agent-os provider loader.");
     }
     const name = flagName(value);
-    if (name !== "--workspace" && name !== "--token-file") {
+    if (name !== "--workspace" && name !== "--token-file" && name !== "--project-anchor-ssh-key-fingerprint") {
       throw usageError("Unsupported agent-os provider loader option.");
     }
     const parsed = readFlagValue(argv, index, name);
@@ -90,11 +93,16 @@ function parseLoadHcloudProviderFlags(argv: readonly string[]): LoadHcloudProvid
         throw usageError("The workspace may be specified only once.");
       }
       workspace = parsed.value;
-    } else {
+    } else if (name === "--token-file") {
       if (tokenFile !== undefined) {
         throw usageError("The token file may be specified only once.");
       }
       tokenFile = parsed.value;
+    } else {
+      if (projectAnchorSshKeyFingerprint !== undefined) {
+        throw usageError("The project anchor SSH fingerprint may be specified only once.");
+      }
+      projectAnchorSshKeyFingerprint = parsed.value;
     }
   }
   if (workspace === undefined) {
@@ -103,10 +111,16 @@ function parseLoadHcloudProviderFlags(argv: readonly string[]): LoadHcloudProvid
   if (tokenFile === undefined) {
     throw usageError("Missing required --token-file flag.");
   }
+  if (projectAnchorSshKeyFingerprint === undefined) {
+    throw usageError("Missing required --project-anchor-ssh-key-fingerprint flag.");
+  }
   if (tokenFile === "-" || !isAbsolute(tokenFile)) {
     throw usageError("The provider token must be supplied through an absolute file path.");
   }
-  return { workspace, tokenFile };
+  if (!/^SHA256:[A-Za-z0-9+/]{43}=?$/.test(projectAnchorSshKeyFingerprint)) {
+    throw usageError("The project anchor SSH fingerprint is malformed.");
+  }
+  return { workspace, tokenFile, projectAnchorSshKeyFingerprint };
 }
 
 function readFlagValue(
