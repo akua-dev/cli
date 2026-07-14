@@ -17,7 +17,7 @@
 - The reader must require absolute, own-UID regular `0600` files, use `O_NOFOLLOW | O_CLOEXEC`, compare `lstat` and `fstat` dev/inode/uid/mode, read one bounded descriptor once, and close before networking.
 - Clear every mutable token/request byte buffer in `finally`; no JavaScript runtime can prove physical heap zeroisation.
 - Output may contain only the allowlisted server result or a fixed failure code, status, request ID, and opaque resource IDs.
-- The cnap route issue/release is a hard merge and Phase-A dependency. Do not publish, tag, deploy, merge, or create a duplicate release/PR. Coordinate the first CLI-owned release as `0.9.0`, separate from PR #21's distribution scope.
+- [cnap #540](https://github.com/akua-dev/cnap/issues/540) is a hard merge and Phase-A dependency. Do not open a CLI PR, publish, tag, deploy, merge, or create a release until its HCloud project-identity security gate resolves and its released route contract exactly matches this client. Coordinate the first CLI-owned release as `0.9.0`, separate from PR #21's distribution scope.
 
 ## File Structure
 
@@ -82,6 +82,6 @@
 ## Self-Review
 
 - [x] Coverage: Tasks 1–3 cover every local CLI requirement: exact flags, protected config authentication, one bounded secure read, fixed single HTTPS submission, buffer clear, output projection, ordering, idempotency, no retry, revocation, and synthetic-only security regression tests. Task 4 covers architecture/release boundaries and whole-repo validation.
-- [x] Dependency: the required cnap source task URL was not discoverable from the cnap issue list on 2026-07-14. The fixed route above is taken from the approved design and remains a merge/release dependency; no CLI PR or release is created here.
+- [x] Dependency: [cnap #540](https://github.com/akua-dev/cnap/issues/540) is the canonical server task. Its HCloud project-identity security gate and exact released route contract are mandatory before any CLI PR, merge, release, or Phase-A invocation.
 - [x] Placeholder scan: no `TODO`, `TBD`, “implement later,” or undefined interface names remain.
 - [x] Consistency: `readSecureTokenFile` produces the mutable bytes consumed by `submitHcloudProviderLoad`; `agentOsView` is the only caller and clears/handles failure before rendering.

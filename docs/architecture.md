@@ -55,10 +55,12 @@ deliberate secret persistence or exposure through CLI interfaces, logs, reports,
 or configuration. A stronger heap guarantee requires a reviewed native module,
 not a weaker file or API contract.
 
-The endpoint is a release dependency: cnap must merge and release the exact
-route contract before this companion can merge/release or Phase A can invoke it.
-The companion's eventual CLI-owned release is coordinated as `0.9.0`; it does
-not duplicate the multi-platform distribution scope in PR #21.
+The endpoint is a release dependency owned by
+[cnap #540](https://github.com/akua-dev/cnap/issues/540): its HCloud
+project-identity security gate must resolve and its released route contract must
+exactly match this companion before any CLI PR, merge, release, or Phase A
+invocation. The companion's eventual CLI-owned release is coordinated as
+`0.9.0`; it does not duplicate the multi-platform distribution scope in PR #21.
 
 ## Current Repo Boundary
 
