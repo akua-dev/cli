@@ -16,6 +16,64 @@ Status: greenfield scaffold with local auth/config MVP.
   spec fetch task performs only a read-only OpenAPI GET and rejects non-HTTPS
   source URLs.
 
+## Agent OS HCloud Provider Loader Companion
+
+The one exception to the generated-public-command boundary is the compiled,
+non-generated command:
+
+```sh
+akua agent-os load-hcloud-provider \
+  --workspace <exact-name-or-ws_id> \
+  --token-file <absolute-path> \
+  [--expected-ssh-key-fingerprint <provider-returned-fingerprint> \
+   [--expected-ssh-key-name <name>]]
+```
+
+It is a deliberately thin local companion to the server-owned cnap Agent OS
+provider-loader transaction (`POST /v1/agent_os/hcloud_provider_loads`). The
+cnap transaction is the canonical source of truth for workspace authorization,
+provider identity and inventory validation, storage, idempotency, compensation,
+revocation, and all provider policy. This CLI never implements an inventory,
+uses generic `/secrets` or `/compute_configs` calls, opens a browser, runs a
+shell child, or falls back to another endpoint.
+
+The command requires workspace and token-file flags and rejects positional
+input, `--token`, stdin, provider-token environment/profile input, API URL
+overrides, debug body output, and retry transports. A provider-returned SSH key
+fingerprint is optional and may be sent only when predeclared; its optional name
+requires the fingerprint. With no expected key, cnap requires a fully empty
+inventory. The CLI never derives identity from the provider token. It reads
+normal Akua caller authentication only from the protected local Akua config;
+`AKUA_API_TOKEN` is rejected for this command.
+It sends that authentication in `Authorization`, the explicit selection in
+`Akua-Context`, a newly generated `Idempotency-Key`, and a body containing the
+provider token plus optional `expected_ssh_key_fingerprint` and
+`expected_ssh_key_name`. The production base URL and route are fixed; tests may
+inject a fake HTTPS transport only through an internal dependency seam. The
+client allowlists only `loader_id`, `attestation_id`, `secret_id`,
+`secret_version_id`, `compute_config_id`, and `expected_ssh_key_fingerprint`,
+preserving the secret-version continuity field before spend.
+
+The provider file is opened exactly once in the compiled process by a dedicated
+Unix reader. The reader accepts only an absolute, caller-owned, regular `0600`
+file. It obtains pre-open `lstat` metadata, opens with `O_NOFOLLOW | O_CLOEXEC`,
+compares device/inode/UID/mode with `fstat`, performs one bounded descriptor
+read, and closes before HTTP submission. It rejects symlinks, substitutions,
+directories, devices, FIFOs, sockets, wrong owners, empty input, and oversized
+input. The token is held only in a mutable byte buffer for request assembly;
+the buffer is overwritten immediately after the single request attempt. Bun
+cannot promise physical heap zeroisation, so the security contract is no
+deliberate secret persistence or exposure through CLI interfaces, logs, reports,
+or configuration. A stronger heap guarantee requires a reviewed native module,
+not a weaker file or API contract.
+
+The endpoint is a release dependency delivered by
+[cnap #545](https://github.com/akua-dev/cnap/pull/545), implementing
+`agentOs.hcloudProviderLoads.create`: its production delivery must complete and
+its released route contract must exactly match this companion before CLI
+publication or Phase A invocation. The companion's eventual CLI-owned release is coordinated as
+`0.9.0`; it does not duplicate the multi-platform distribution scope in PR #21.
+
 ## Current Repo Boundary
 
 The old Go/CNAP implementation is removed from the active build surface. The

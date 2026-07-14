@@ -41,6 +41,28 @@ export async function authView(argv: readonly string[], env: Record<string, stri
   throw usageError("Unknown auth subcommand.");
 }
 
+export async function readProtectedCallerToken(env: Record<string, string | undefined>): Promise<string> {
+  if (hasEnvToken(env)) {
+    throw new AkuaCliError({
+      type: "usage_error",
+      code: "AKUA_LOADER_ENV_AUTH_FORBIDDEN",
+      message: "Environment authentication is not accepted for this provider loader.",
+      exitCode: 2,
+    });
+  }
+
+  const token = (await readConfig(resolveConfigPath(env))).token;
+  if (typeof token !== "string" || token === "") {
+    throw new AkuaCliError({
+      type: "authentication_error",
+      code: "AKUA_LOADER_AUTH_REQUIRED",
+      message: "A protected local Akua credential is required for this provider loader.",
+      exitCode: 3,
+    });
+  }
+  return token;
+}
+
 async function loginView(argv: readonly string[], env: Record<string, string | undefined>): Promise<RenderEnvelope> {
   const token = parseLoginFlags(argv);
   const configPath = resolveConfigPath(env);
