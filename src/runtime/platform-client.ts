@@ -3,33 +3,12 @@ import { clearBytes } from "./secure-token-file";
 
 const HCloudProviderLoadUrl = "https://api.akua.dev/v1/agent_os/hcloud_provider_loads";
 const responseFields = new Set([
-  "workspace_id",
+  "loader_id",
+  "attestation_id",
   "secret_id",
   "secret_version_id",
   "compute_config_id",
-  "provider_project_id",
-  "provider_project_name",
-  "inventory",
-  "catalog_checked_at",
-  "price_eur",
-  "availability_timestamp",
-  "request_id",
-  "provider_fingerprint",
-  "transaction_id",
-]);
-const inventoryFields = new Set([
-  "servers",
-  "volumes",
-  "networks",
-  "primary_ips",
-  "floating_ips",
-  "load_balancers",
-  "firewalls",
-  "placement_groups",
-  "ssh_keys",
-  "images",
-  "certificates",
-  "actions",
+  "expected_ssh_key_fingerprint",
 ]);
 
 export interface HCloudProviderLoadRequest {
@@ -52,8 +31,8 @@ export interface HCloudProviderLoadInput {
   workspace: string;
   callerToken: string;
   providerToken: Uint8Array;
-  projectIdentityAttestation: string;
-  projectAnchorSshKeyFingerprint?: string;
+  expectedSshKeyFingerprint?: string;
+  expectedSshKeyName?: string;
   idempotencyKey: string;
 }
 
@@ -69,7 +48,7 @@ export async function submitHcloudProviderLoad(
 ): Promise<HCloudProviderLoadResult> {
   let body: Uint8Array | undefined;
   try {
-    body = encodeProviderTokenBody(input.providerToken, input.projectIdentityAttestation, input.projectAnchorSshKeyFingerprint);
+    body = encodeProviderTokenBody(input.providerToken, input.expectedSshKeyFingerprint, input.expectedSshKeyName);
     const response = await dependencies.send({
       url: HCloudProviderLoadUrl,
       method: "POST",
@@ -81,7 +60,7 @@ export async function submitHcloudProviderLoad(
       },
       body,
     });
-    if (response.status < 200 || response.status >= 300) {
+    if (response.status !== 201) {
       throw serverRejectedError(response.status, response.body);
     }
     return allowlistedResult(response.body);
@@ -122,16 +101,18 @@ async function sendHttpsRequest(request: HCloudProviderLoadRequest): Promise<HCl
 
 function encodeProviderTokenBody(
   providerToken: Uint8Array,
-  projectIdentityAttestation: string,
-  projectAnchorSshKeyFingerprint: string | undefined,
+  expectedSshKeyFingerprint: string | undefined,
+  expectedSshKeyName: string | undefined,
 ): Uint8Array {
   const encoder = new TextEncoder();
   const fields: Array<readonly [Uint8Array, Uint8Array]> = [
-    [encoder.encode("project_identity_attestation"), encoder.encode(projectIdentityAttestation)],
-    ...(projectAnchorSshKeyFingerprint === undefined
-      ? []
-      : [[encoder.encode("project_anchor_ssh_key_fingerprint"), encoder.encode(projectAnchorSshKeyFingerprint)] as const]),
     [encoder.encode("provider_token"), providerToken],
+    ...(expectedSshKeyFingerprint === undefined
+      ? []
+      : [[encoder.encode("expected_ssh_key_fingerprint"), encoder.encode(expectedSshKeyFingerprint)] as const]),
+    ...(expectedSshKeyName === undefined
+      ? []
+      : [[encoder.encode("expected_ssh_key_name"), encoder.encode(expectedSshKeyName)] as const]),
   ];
   let encodedLength = 2 + Math.max(0, fields.length - 1);
   for (const [name, value] of fields) {
@@ -210,34 +191,21 @@ function allowlistedResult(body: unknown): HCloudProviderLoadResult {
     if (!responseFields.has(field)) {
       continue;
     }
-    if (field === "inventory") {
-      const inventory = allowlistedInventory(value);
-      if (inventory) {
-        result[field] = inventory;
-      }
-      continue;
-    }
-    if (typeof value === "string" || typeof value === "number") {
+    if (typeof value === "string" || (field === "expected_ssh_key_fingerprint" && value === null)) {
       result[field] = value;
     }
   }
-  if (typeof result.workspace_id !== "string" || typeof result.request_id !== "string") {
+  if (
+    typeof result.loader_id !== "string" ||
+    typeof result.attestation_id !== "string" ||
+    typeof result.secret_id !== "string" ||
+    typeof result.secret_version_id !== "string" ||
+    typeof result.compute_config_id !== "string" ||
+    (typeof result.expected_ssh_key_fingerprint !== "string" && result.expected_ssh_key_fingerprint !== null)
+  ) {
     throw invalidServerResponseError();
   }
   return result;
-}
-
-function allowlistedInventory(value: unknown): Record<string, number> | undefined {
-  if (!isRecord(value)) {
-    return undefined;
-  }
-  const inventory: Record<string, number> = {};
-  for (const [field, count] of Object.entries(value)) {
-    if (inventoryFields.has(field) && Number.isSafeInteger(count) && typeof count === "number" && count >= 0) {
-      inventory[field] = count;
-    }
-  }
-  return inventory;
 }
 
 function serverRejectedError(status: number, body: unknown): HCloudProviderLoadError {

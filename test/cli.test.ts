@@ -24,6 +24,10 @@ describe("akua entrypoint", () => {
     expect(exitCode).toBe(0);
     expect(stdout).toContain("akua agent-os load-hcloud-provider");
     expect(stdout).toContain("--token-file");
+    expect(stdout).toContain("--expected-ssh-key-fingerprint");
+    expect(stdout).toContain("--expected-ssh-key-name");
+    expect(stdout).not.toContain("--project-identity-attestation");
+    expect(stdout).not.toContain("--project-anchor-ssh-key-fingerprint");
     expect(stdout).not.toContain("--token <");
   });
 

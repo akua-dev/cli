@@ -25,8 +25,8 @@ non-generated command:
 akua agent-os load-hcloud-provider \
   --workspace <exact-name-or-ws_id> \
   --token-file <absolute-path> \
-  --project-identity-attestation <issuer-attestation> \
-  [--project-anchor-ssh-key-fingerprint <provider-returned-SHA256-fingerprint>]
+  [--expected-ssh-key-fingerprint <provider-returned-fingerprint> \
+   [--expected-ssh-key-name <name>]]
 ```
 
 It is a deliberately thin local companion to the server-owned cnap Agent OS
@@ -37,24 +37,22 @@ revocation, and all provider policy. This CLI never implements an inventory,
 uses generic `/secrets` or `/compute_configs` calls, opens a browser, runs a
 shell child, or falls back to another endpoint.
 
-The command requires workspace, token-file, and issuer-attestation flags and
-rejects positional input, `--token`, stdin, provider-token environment/profile
-input, API URL overrides, debug body output, and retry transports. The opaque,
-non-secret issuer attestation is relayed verbatim; cnap must validate that it is
-bound to the exact `agent-os-production` workspace and this one-shot request.
-The provider-returned `SHA256:` SSH key fingerprint is optional and may be sent
-only when predeclared; with no anchor, cnap must require fully empty inventory.
-The CLI never derives either identity input from the provider token and accepts
-no anchor name because the held server contract has not required one. It reads
+The command requires workspace and token-file flags and rejects positional
+input, `--token`, stdin, provider-token environment/profile input, API URL
+overrides, debug body output, and retry transports. A provider-returned SSH key
+fingerprint is optional and may be sent only when predeclared; its optional name
+requires the fingerprint. With no expected key, cnap requires a fully empty
+inventory. The CLI never derives identity from the provider token. It reads
 normal Akua caller authentication only from the protected local Akua config;
 `AKUA_API_TOKEN` is rejected for this command.
 It sends that authentication in `Authorization`, the explicit selection in
 `Akua-Context`, a newly generated `Idempotency-Key`, and a body containing the
-provider token, issuer attestation, and optional anchor fingerprint. The
-production base URL and route are fixed; tests may inject a fake HTTPS transport
-only through an internal dependency seam. The client allowlists server-provided
-`secret_version_id` and `transaction_id` alongside opaque resource IDs so token
-replacement/transaction continuity is detectable before spend.
+provider token plus optional `expected_ssh_key_fingerprint` and
+`expected_ssh_key_name`. The production base URL and route are fixed; tests may
+inject a fake HTTPS transport only through an internal dependency seam. The
+client allowlists only `loader_id`, `attestation_id`, `secret_id`,
+`secret_version_id`, `compute_config_id`, and `expected_ssh_key_fingerprint`,
+preserving the secret-version continuity field before spend.
 
 The provider file is opened exactly once in the compiled process by a dedicated
 Unix reader. The reader accepts only an absolute, caller-owned, regular `0600`
@@ -69,11 +67,11 @@ deliberate secret persistence or exposure through CLI interfaces, logs, reports,
 or configuration. A stronger heap guarantee requires a reviewed native module,
 not a weaker file or API contract.
 
-The endpoint is a release dependency owned by
-[cnap #540](https://github.com/akua-dev/cnap/issues/540): its HCloud
-project-identity security gate must resolve and its released route contract must
-exactly match this companion before any CLI PR, merge, release, or Phase A
-invocation. The companion's eventual CLI-owned release is coordinated as
+The endpoint is a release dependency delivered by
+[cnap #545](https://github.com/akua-dev/cnap/pull/545), implementing
+`agentOs.hcloudProviderLoads.create`: its production delivery must complete and
+its released route contract must exactly match this companion before CLI
+publication or Phase A invocation. The companion's eventual CLI-owned release is coordinated as
 `0.9.0`; it does not duplicate the multi-platform distribution scope in PR #21.
 
 ## Current Repo Boundary

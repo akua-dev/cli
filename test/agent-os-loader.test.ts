@@ -13,10 +13,10 @@ import { renderError, renderSuccess } from "../src/runtime/render";
 const SYNTHETIC_TOKEN = new Uint8Array([115, 121, 110, 116, 104, 101, 116, 105, 99]);
 const SYNTHETIC_ECHO = "synthetic-response-field";
 const PROJECT_ANCHOR_FINGERPRINT = `SHA256:${"A".repeat(43)}`;
-const PROJECT_IDENTITY_ATTESTATION = "issuer.agent-os-production/v1:attestation_0123456789abcdef";
+const PROJECT_ANCHOR_NAME = "agent-os-production-anchor";
 
 describe("submitHcloudProviderLoad", () => {
-  test("submits one fixed-route request with opaque issuer attestation, explicit context, and relayed idempotency", async () => {
+  test("submits one fixed-route request without an optional anchor, explicit context, and relayed idempotency", async () => {
     const requests: HCloudProviderLoadRequest[] = [];
     let bodyHasProviderField = false;
 
@@ -25,7 +25,6 @@ describe("submitHcloudProviderLoad", () => {
         workspace: "ws_synthetic",
         callerToken: "caller-auth-fixture",
         providerToken: SYNTHETIC_TOKEN.slice(),
-        projectIdentityAttestation: PROJECT_IDENTITY_ATTESTATION,
         idempotencyKey: "00000000-0000-4000-8000-000000000001",
       },
       {
@@ -34,8 +33,8 @@ describe("submitHcloudProviderLoad", () => {
           const body = new TextDecoder().decode(request.body);
           bodyHasProviderField =
             body.includes('"provider_token":"synthetic"') &&
-            body.includes(`"project_identity_attestation":"${PROJECT_IDENTITY_ATTESTATION}"`) &&
-            !body.includes("project_anchor_ssh_key_fingerprint");
+            !body.includes("expected_ssh_key_fingerprint") &&
+            !body.includes("expected_ssh_key_name");
           return successResponse();
         },
       },
@@ -52,13 +51,12 @@ describe("submitHcloudProviderLoad", () => {
     });
     expect(bodyHasProviderField).toBe(true);
     expect(result).toEqual({
-      workspace_id: "ws_synthetic",
+      loader_id: "pvl_synthetic",
+      attestation_id: "att_synthetic",
       secret_id: "sec_synthetic",
       secret_version_id: "secver_synthetic",
       compute_config_id: "cfg_synthetic",
-      transaction_id: "txn_synthetic",
-      inventory: { servers: 0, volumes: 0 },
-      request_id: "req_synthetic",
+      expected_ssh_key_fingerprint: null,
     });
   });
 
@@ -70,15 +68,16 @@ describe("submitHcloudProviderLoad", () => {
         workspace: "ws_synthetic",
         callerToken: "caller-auth-fixture",
         providerToken: SYNTHETIC_TOKEN.slice(),
-        projectIdentityAttestation: PROJECT_IDENTITY_ATTESTATION,
-        projectAnchorSshKeyFingerprint: PROJECT_ANCHOR_FINGERPRINT,
+        expectedSshKeyFingerprint: PROJECT_ANCHOR_FINGERPRINT,
+        expectedSshKeyName: PROJECT_ANCHOR_NAME,
         idempotencyKey: "00000000-0000-4000-8000-000000000002",
       },
       {
         send: async (request) => {
-          bodyHasOptionalAnchor = new TextDecoder().decode(request.body).includes(
-            `"project_anchor_ssh_key_fingerprint":"${PROJECT_ANCHOR_FINGERPRINT}"`,
-          );
+          const body = new TextDecoder().decode(request.body);
+          bodyHasOptionalAnchor =
+            body.includes(`"expected_ssh_key_fingerprint":"${PROJECT_ANCHOR_FINGERPRINT}"`) &&
+            body.includes(`"expected_ssh_key_name":"${PROJECT_ANCHOR_NAME}"`);
           return successResponse();
         },
       },
@@ -93,17 +92,16 @@ describe("submitHcloudProviderLoad", () => {
         workspace: "ws_synthetic",
         callerToken: "caller-auth-fixture",
         providerToken: SYNTHETIC_TOKEN.slice(),
-        projectIdentityAttestation: PROJECT_IDENTITY_ATTESTATION,
         idempotencyKey: "00000000-0000-4000-8000-000000000002",
       },
       {
         send: async () => ({
-          status: 200,
+          status: 201,
           body: {
             ...successResponse().body,
             echoed_provider_token: SYNTHETIC_ECHO,
-            project_anchor_ssh_key_fingerprint: PROJECT_ANCHOR_FINGERPRINT,
-            project_identity_attestation: PROJECT_IDENTITY_ATTESTATION,
+            project_identity_attestation: "synthetic-attestation-echo",
+            transaction_id: "txn_synthetic",
             nested: { secret: SYNTHETIC_ECHO },
           },
         }),
@@ -112,8 +110,8 @@ describe("submitHcloudProviderLoad", () => {
 
     expect(JSON.stringify(result)).not.toContain(SYNTHETIC_ECHO);
     expect(result).not.toHaveProperty("echoed_provider_token");
-    expect(result).not.toHaveProperty("project_anchor_ssh_key_fingerprint");
     expect(result).not.toHaveProperty("project_identity_attestation");
+    expect(result).not.toHaveProperty("transaction_id");
     expect(result).not.toHaveProperty("nested");
   });
 
@@ -126,7 +124,6 @@ describe("submitHcloudProviderLoad", () => {
         workspace: "ws_synthetic",
         callerToken: "caller-auth-fixture",
         providerToken,
-        projectIdentityAttestation: PROJECT_IDENTITY_ATTESTATION,
         idempotencyKey: "00000000-0000-4000-8000-000000000003",
       },
       {
@@ -151,7 +148,6 @@ describe("submitHcloudProviderLoad", () => {
           workspace: "ws_synthetic",
           callerToken: "caller-auth-fixture",
           providerToken,
-          projectIdentityAttestation: PROJECT_IDENTITY_ATTESTATION,
           idempotencyKey: "00000000-0000-4000-8000-000000000004",
         },
         {
@@ -174,7 +170,6 @@ describe("submitHcloudProviderLoad", () => {
           workspace: "ws_synthetic",
           callerToken: "caller-auth-fixture",
           providerToken: SYNTHETIC_TOKEN.slice(),
-          projectIdentityAttestation: PROJECT_IDENTITY_ATTESTATION,
           idempotencyKey: "00000000-0000-4000-8000-000000000005",
         },
         {
@@ -200,12 +195,27 @@ describe("submitHcloudProviderLoad", () => {
 });
 
 describe("agent-os load-hcloud-provider", () => {
-  test("requires a well-formed explicit issuer attestation before auth, file, or network access while allowing no anchor", async () => {
+  test("accepts no anchor and rejects malformed anchor inputs before auth, file, or network access", async () => {
     const dependencies = fakeCommandDependencies();
     const rejectedValue = "synthetic-argv-value";
 
+    await expect(agentOsView(commandArgs(), {}, dependencies.dependencies)).resolves.toMatchObject({
+      data: successResponse().body,
+    });
     await expect(
-      agentOsView(["load-hcloud-provider", "--workspace", "ws_synthetic", "--token-file", "/synthetic/provider"], {}, dependencies.dependencies),
+      agentOsView(
+        [
+          "load-hcloud-provider",
+          "--workspace",
+          "ws_synthetic",
+          "--token-file",
+          "/synthetic/provider",
+          "--expected-ssh-key-fingerprint",
+          "bad\u0000fingerprint",
+        ],
+        {},
+        dependencies.dependencies,
+      ),
     ).rejects.toMatchObject({ code: "AKUA_USAGE_ERROR" });
     await expect(
       agentOsView(
@@ -215,8 +225,8 @@ describe("agent-os load-hcloud-provider", () => {
           "ws_synthetic",
           "--token-file",
           "/synthetic/provider",
-          "--project-identity-attestation",
-          "malformed attestation",
+          "--expected-ssh-key-name",
+          PROJECT_ANCHOR_NAME,
         ],
         {},
         dependencies.dependencies,
@@ -225,8 +235,8 @@ describe("agent-os load-hcloud-provider", () => {
 
     const error = await captureError(() => agentOsView(["load-hcloud-provider", "--workspace", "ws_synthetic", "--token", rejectedValue], {}, dependencies.dependencies));
     expect(renderError(error, "json")).not.toContain(rejectedValue);
-    expect(dependencies.fileReads).toBe(0);
-    expect(dependencies.submissions).toBe(0);
+    expect(dependencies.fileReads).toBe(1);
+    expect(dependencies.submissions).toBe(1);
   });
 
   test("rejects environment caller authentication before config, file, or network access", async () => {
@@ -246,8 +256,8 @@ describe("agent-os load-hcloud-provider", () => {
     expect(dependencies.events).toEqual(["auth", "file", "network"]);
     expect(dependencies.submissions).toBe(1);
     expect(dependencies.input?.workspace).toBe("ws_synthetic");
-    expect(dependencies.input?.projectIdentityAttestation).toBe(PROJECT_IDENTITY_ATTESTATION);
-    expect(dependencies.input?.projectAnchorSshKeyFingerprint).toBeUndefined();
+    expect(dependencies.input?.expectedSshKeyFingerprint).toBeUndefined();
+    expect(dependencies.input?.expectedSshKeyName).toBeUndefined();
     expect(dependencies.input?.idempotencyKey).toMatch(/^[0-9a-f]{8}-/);
     expect(view.data).toEqual(successResponse().body);
     expect(renderSuccess(view, "json")).not.toContain(SYNTHETIC_ECHO);
@@ -310,15 +320,14 @@ describe("agent-os load-hcloud-provider", () => {
 
 function successResponse() {
   return {
-    status: 200,
+    status: 201,
     body: {
-      workspace_id: "ws_synthetic",
+      loader_id: "pvl_synthetic",
+      attestation_id: "att_synthetic",
       secret_id: "sec_synthetic",
       secret_version_id: "secver_synthetic",
       compute_config_id: "cfg_synthetic",
-      transaction_id: "txn_synthetic",
-      inventory: { servers: 0, volumes: 0 },
-      request_id: "req_synthetic",
+      expected_ssh_key_fingerprint: null,
     },
   };
 }
@@ -330,8 +339,6 @@ function commandArgs(): string[] {
     "ws_synthetic",
     "--token-file",
     "/synthetic/provider",
-    "--project-identity-attestation",
-    PROJECT_IDENTITY_ATTESTATION,
   ];
 }
 

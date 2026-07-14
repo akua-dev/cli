@@ -50,8 +50,8 @@ export async function agentOsView(
       workspace: options.workspace,
       callerToken,
       providerToken,
-      projectIdentityAttestation: options.projectIdentityAttestation,
-      projectAnchorSshKeyFingerprint: options.projectAnchorSshKeyFingerprint,
+      expectedSshKeyFingerprint: options.expectedSshKeyFingerprint,
+      expectedSshKeyName: options.expectedSshKeyName,
       idempotencyKey: dependencies.createIdempotencyKey(),
     });
     return {
@@ -66,15 +66,15 @@ export async function agentOsView(
 interface LoadHcloudProviderOptions {
   workspace: string;
   tokenFile: string;
-  projectIdentityAttestation: string;
-  projectAnchorSshKeyFingerprint?: string;
+  expectedSshKeyFingerprint?: string;
+  expectedSshKeyName?: string;
 }
 
 function parseLoadHcloudProviderFlags(argv: readonly string[]): LoadHcloudProviderOptions {
   let workspace: string | undefined;
   let tokenFile: string | undefined;
-  let projectIdentityAttestation: string | undefined;
-  let projectAnchorSshKeyFingerprint: string | undefined;
+  let expectedSshKeyFingerprint: string | undefined;
+  let expectedSshKeyName: string | undefined;
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index];
     if (!value.startsWith("-")) {
@@ -84,8 +84,8 @@ function parseLoadHcloudProviderFlags(argv: readonly string[]): LoadHcloudProvid
     if (
       name !== "--workspace" &&
       name !== "--token-file" &&
-      name !== "--project-identity-attestation" &&
-      name !== "--project-anchor-ssh-key-fingerprint"
+      name !== "--expected-ssh-key-fingerprint" &&
+      name !== "--expected-ssh-key-name"
     ) {
       throw usageError("Unsupported agent-os provider loader option.");
     }
@@ -106,16 +106,16 @@ function parseLoadHcloudProviderFlags(argv: readonly string[]): LoadHcloudProvid
         throw usageError("The token file may be specified only once.");
       }
       tokenFile = parsed.value;
-    } else if (name === "--project-identity-attestation") {
-      if (projectIdentityAttestation !== undefined) {
-        throw usageError("The project identity attestation may be specified only once.");
+    } else if (name === "--expected-ssh-key-fingerprint") {
+      if (expectedSshKeyFingerprint !== undefined) {
+        throw usageError("The expected SSH key fingerprint may be specified only once.");
       }
-      projectIdentityAttestation = parsed.value;
+      expectedSshKeyFingerprint = parsed.value;
     } else {
-      if (projectAnchorSshKeyFingerprint !== undefined) {
-        throw usageError("The project anchor SSH fingerprint may be specified only once.");
+      if (expectedSshKeyName !== undefined) {
+        throw usageError("The expected SSH key name may be specified only once.");
       }
-      projectAnchorSshKeyFingerprint = parsed.value;
+      expectedSshKeyName = parsed.value;
     }
   }
   if (workspace === undefined) {
@@ -124,19 +124,23 @@ function parseLoadHcloudProviderFlags(argv: readonly string[]): LoadHcloudProvid
   if (tokenFile === undefined) {
     throw usageError("Missing required --token-file flag.");
   }
-  if (projectIdentityAttestation === undefined) {
-    throw usageError("Missing required --project-identity-attestation flag.");
-  }
   if (tokenFile === "-" || !isAbsolute(tokenFile)) {
     throw usageError("The provider token must be supplied through an absolute file path.");
   }
-  if (!/^[A-Za-z0-9._~:/+=-]{16,512}$/.test(projectIdentityAttestation)) {
-    throw usageError("The project identity attestation is malformed.");
+  if (expectedSshKeyFingerprint !== undefined && !isSafeExpectedSshField(expectedSshKeyFingerprint)) {
+    throw usageError("The expected SSH key fingerprint is malformed.");
   }
-  if (projectAnchorSshKeyFingerprint !== undefined && !/^SHA256:[A-Za-z0-9+/]{43}=?$/.test(projectAnchorSshKeyFingerprint)) {
-    throw usageError("The project anchor SSH fingerprint is malformed.");
+  if (expectedSshKeyName !== undefined && !isSafeExpectedSshField(expectedSshKeyName)) {
+    throw usageError("The expected SSH key name is malformed.");
   }
-  return { workspace, tokenFile, projectIdentityAttestation, projectAnchorSshKeyFingerprint };
+  if (expectedSshKeyName !== undefined && expectedSshKeyFingerprint === undefined) {
+    throw usageError("--expected-ssh-key-name requires --expected-ssh-key-fingerprint.");
+  }
+  return { workspace, tokenFile, expectedSshKeyFingerprint, expectedSshKeyName };
+}
+
+function isSafeExpectedSshField(value: string): boolean {
+  return /^[\x21-\x7e]{1,200}$/.test(value);
 }
 
 function readFlagValue(
