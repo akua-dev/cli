@@ -251,6 +251,43 @@ describe("release target contract", () => {
     }
   });
 
+  test("packages byte-identical release assets across repeated builds", async () => {
+    const release = await import("../scripts/release") as Record<string, unknown>;
+    const targets = release.RELEASE_TARGETS as Array<{ id: string }>;
+    const releaseAssetNames = release.releaseAssetNames as (version: string) => string[];
+    const packageExistingExecutables = release.packageExistingExecutables as (input: {
+      version: string;
+      outputDir: string;
+      binaries: Record<string, string>;
+    }) => Promise<void>;
+    const root = await makeReleaseTempDir();
+
+    try {
+      const source = join(root, "akua-fixture");
+      const firstOutputDir = join(root, "first");
+      const secondOutputDir = join(root, "second");
+      const binaries = Object.fromEntries(targets.map((target) => [target.id, source]));
+      await writeFile(source, "#!/bin/sh\necho akua fixture\n");
+      await chmod(source, 0o755);
+
+      await packageExistingExecutables({ version: "1.2.3", outputDir: firstOutputDir, binaries });
+      await Bun.sleep(2100);
+      await packageExistingExecutables({ version: "1.2.3", outputDir: secondOutputDir, binaries });
+
+      for (const name of releaseAssetNames("1.2.3")) {
+        const [first, second] = await Promise.all([
+          readFile(join(firstOutputDir, name)),
+          readFile(join(secondOutputDir, name)),
+        ]);
+        if (!second.equals(first)) {
+          throw new Error(`Repeated release packaging changed ${name}`);
+        }
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("verification rejects an archive changed after checksumming", async () => {
     const release = await import("../scripts/release") as Record<string, unknown>;
     const targets = release.RELEASE_TARGETS as Array<{ id: string }>;

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { chmod, copyFile, lstat, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, copyFile, lstat, mkdir, mkdtemp, readFile, readdir, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 
@@ -124,6 +124,8 @@ interface PackageReleaseInput {
 }
 
 const RELEASE_REPOSITORY = "akua-dev/cli";
+const ARCHIVE_TIMESTAMP_SECONDS = 315532800;
+const ARCHIVE_TIMESTAMP = new Date(ARCHIVE_TIMESTAMP_SECONDS * 1000);
 
 export function validateVersion(version: string): void {
   if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(version)) {
@@ -236,14 +238,39 @@ export async function packageExistingExecutables(input: PackageExistingExecutabl
       const archivePath = join(outputDir, archive);
       await mkdir(stagingDir, { recursive: true });
       await copyFile(source, stagedExecutable);
-      if (target.os !== "windows") {
-        await chmod(stagedExecutable, 0o755);
-      }
+      await chmod(stagedExecutable, target.os === "windows" ? 0o644 : 0o755);
+      await utimes(stagedExecutable, ARCHIVE_TIMESTAMP, ARCHIVE_TIMESTAMP);
 
       if (target.archive === "tar.gz") {
-        await run(["tar", "-czf", archivePath, "-C", stagingDir, target.executable]);
+        const metadataArguments = process.platform === "linux"
+          ? ["--owner=0", "--group=0", `--mtime=@${ARCHIVE_TIMESTAMP_SECONDS}`]
+          : [
+              "--uid",
+              "0",
+              "--gid",
+              "0",
+              "--uname",
+              "root",
+              "--gname",
+              "root",
+              "--options",
+              "gzip:!timestamp",
+            ];
+        await run([
+          "tar",
+          "--format=ustar",
+          ...metadataArguments,
+          "-czf",
+          archivePath,
+          "-C",
+          stagingDir,
+          target.executable,
+        ], { COPYFILE_DISABLE: "1" });
       } else {
-        await run(["zip", "-q", "-j", archivePath, stagedExecutable]);
+        await run(["zip", "-X", "-q", "-j", archivePath, stagedExecutable], {
+          COPYFILE_DISABLE: "1",
+          TZ: "UTC",
+        });
       }
 
       const bytes = new Uint8Array(await readFile(archivePath));
