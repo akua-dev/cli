@@ -225,32 +225,22 @@ describe("agent-os load-hcloud-provider", () => {
     expect(error).toMatchObject({ code: "AKUA_LOADER_SERVER_REJECTED", status: 403 });
   });
 
-  test("fails post-revocation without a retry or a leaked prior result", async () => {
-    let revoked = false;
-    let submissions = 0;
+  test("fails post-revocation against the fake HTTPS server without a retry or leaked prior result", async () => {
+    const server = new FakeHttpsServer();
     const dependencies = fakeCommandDependencies({
-      submit: async () => {
-        submissions += 1;
-        if (revoked) {
-          throw new HCloudProviderLoadError({
-            type: "api_error",
-            code: "AKUA_LOADER_SERVER_REJECTED",
-            status: 403,
-            requestId: "req_synthetic_revoked",
-            message: "The provider-load server rejected the request.",
-          });
-        }
-        return successResponse().body;
-      },
+      submit: async (input) => server.submit(input),
     });
 
     const first = await agentOsView(commandArgs(), {}, dependencies.dependencies);
-    revoked = true;
+    server.revoke();
     const error = await captureError(() => agentOsView(commandArgs(), {}, dependencies.dependencies));
 
     expect(first.data).toEqual(successResponse().body);
     expect(error).toMatchObject({ code: "AKUA_LOADER_SERVER_REJECTED", status: 403 });
-    expect(submissions).toBe(2);
+    expect(server.requests).toEqual([
+      { workspace: "ws_synthetic", tokenLength: SYNTHETIC_TOKEN.byteLength },
+      { workspace: "ws_synthetic", tokenLength: SYNTHETIC_TOKEN.byteLength },
+    ]);
   });
 
   test("contains no child-process or shell fallback implementation", async () => {
@@ -330,4 +320,27 @@ async function captureError(action: () => Promise<unknown>): Promise<HCloudProvi
     return error as HCloudProviderLoadError;
   }
   throw new Error("Expected the loader action to fail.");
+}
+
+class FakeHttpsServer {
+  readonly requests: Array<{ workspace: string; tokenLength: number }> = [];
+  #revoked = false;
+
+  revoke(): void {
+    this.#revoked = true;
+  }
+
+  async submit(input: HCloudProviderLoadInput) {
+    this.requests.push({ workspace: input.workspace, tokenLength: input.providerToken.byteLength });
+    if (this.#revoked) {
+      throw new HCloudProviderLoadError({
+        type: "api_error",
+        code: "AKUA_LOADER_SERVER_REJECTED",
+        status: 403,
+        requestId: "req_synthetic_revoked",
+        message: "The provider-load server rejected the request.",
+      });
+    }
+    return successResponse().body;
+  }
 }
