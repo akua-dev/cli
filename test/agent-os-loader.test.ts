@@ -1,10 +1,14 @@
 import { describe, expect, test } from "bun:test";
+import { readFile } from "node:fs/promises";
 
+import { agentOsView, type AgentOsDependencies } from "../src/commands/agent-os";
 import {
   HCloudProviderLoadError,
+  type HCloudProviderLoadInput,
   submitHcloudProviderLoad,
   type HCloudProviderLoadRequest,
 } from "../src/runtime/platform-client";
+import { renderError, renderSuccess } from "../src/runtime/render";
 
 const SYNTHETIC_TOKEN = new Uint8Array([115, 121, 110, 116, 104, 101, 116, 105, 99]);
 const SYNTHETIC_ECHO = "synthetic-response-field";
@@ -153,6 +157,116 @@ describe("submitHcloudProviderLoad", () => {
   });
 });
 
+describe("agent-os load-hcloud-provider", () => {
+  test("accepts only explicit workspace and absolute token-file flags without exposing rejected values", async () => {
+    const dependencies = fakeCommandDependencies();
+    const rejectedValue = "synthetic-argv-value";
+
+    await expect(
+      agentOsView(["load-hcloud-provider", "--workspace", "ws_synthetic", "--token", rejectedValue], {}, dependencies.dependencies),
+    ).rejects.toMatchObject({ code: "AKUA_USAGE_ERROR" });
+    await expect(
+      agentOsView(["load-hcloud-provider", "--workspace", "ws_synthetic", "--token-file", "-"], {}, dependencies.dependencies),
+    ).rejects.toMatchObject({ code: "AKUA_USAGE_ERROR" });
+    await expect(agentOsView(["load-hcloud-provider", "--token-file", "/synthetic/provider"], {}, dependencies.dependencies)).rejects.toMatchObject({
+      code: "AKUA_USAGE_ERROR",
+    });
+
+    const error = await captureError(() =>
+      agentOsView(["load-hcloud-provider", "--workspace", "ws_synthetic", "--token", rejectedValue], {}, dependencies.dependencies),
+    );
+    expect(renderError(error, "json")).not.toContain(rejectedValue);
+    expect(dependencies.fileReads).toBe(0);
+    expect(dependencies.submissions).toBe(0);
+  });
+
+  test("rejects environment caller authentication before config, file, or network access", async () => {
+    const dependencies = fakeCommandDependencies();
+
+    await expect(
+      agentOsView(commandArgs(), { AKUA_API_TOKEN: "synthetic-environment-auth" }, dependencies.dependencies),
+    ).rejects.toMatchObject({ code: "AKUA_LOADER_ENV_AUTH_FORBIDDEN" });
+    expect(dependencies.events).toEqual([]);
+  });
+
+  test("authenticates from protected config before reading the provider file and relays idempotency once", async () => {
+    const dependencies = fakeCommandDependencies();
+
+    const view = await agentOsView(commandArgs(), {}, dependencies.dependencies);
+
+    expect(dependencies.events).toEqual(["auth", "file", "network"]);
+    expect(dependencies.submissions).toBe(1);
+    expect(dependencies.input?.workspace).toBe("ws_synthetic");
+    expect(dependencies.input?.idempotencyKey).toMatch(/^[0-9a-f]{8}-/);
+    expect(view.data).toEqual(successResponse().body);
+    expect(renderSuccess(view, "json")).not.toContain(SYNTHETIC_ECHO);
+  });
+
+  test("clears the reader bytes and renders only fixed safe failures", async () => {
+    const providerToken = new Uint8Array([112, 114, 111, 118, 105, 100, 101, 114, 45, 115, 101, 99, 114, 101, 116]);
+    const providerMarker = "provider-secret";
+    const dependencies = fakeCommandDependencies({
+      readSecureTokenFile: async () => providerToken,
+      submit: async () => {
+        throw new HCloudProviderLoadError({
+          type: "api_error",
+          code: "AKUA_LOADER_SERVER_REJECTED",
+          status: 403,
+          requestId: "req_synthetic_denied",
+          message: "The provider-load server rejected the request.",
+        });
+      },
+    });
+
+    const error = await captureError(() => agentOsView(commandArgs(), {}, dependencies.dependencies));
+
+    expect([...providerToken].every((byte) => byte === 0)).toBe(true);
+    expect(renderError(error, "json")).not.toContain(providerMarker);
+    expect(error).toMatchObject({ code: "AKUA_LOADER_SERVER_REJECTED", status: 403 });
+  });
+
+  test("fails post-revocation without a retry or a leaked prior result", async () => {
+    let revoked = false;
+    let submissions = 0;
+    const dependencies = fakeCommandDependencies({
+      submit: async () => {
+        submissions += 1;
+        if (revoked) {
+          throw new HCloudProviderLoadError({
+            type: "api_error",
+            code: "AKUA_LOADER_SERVER_REJECTED",
+            status: 403,
+            requestId: "req_synthetic_revoked",
+            message: "The provider-load server rejected the request.",
+          });
+        }
+        return successResponse().body;
+      },
+    });
+
+    const first = await agentOsView(commandArgs(), {}, dependencies.dependencies);
+    revoked = true;
+    const error = await captureError(() => agentOsView(commandArgs(), {}, dependencies.dependencies));
+
+    expect(first.data).toEqual(successResponse().body);
+    expect(error).toMatchObject({ code: "AKUA_LOADER_SERVER_REJECTED", status: 403 });
+    expect(submissions).toBe(2);
+  });
+
+  test("contains no child-process or shell fallback implementation", async () => {
+    const [commandSource, transportSource] = await Promise.all([
+      readFile("src/commands/agent-os.ts", "utf8"),
+      readFile("src/runtime/platform-client.ts", "utf8"),
+    ]);
+
+    for (const source of [commandSource, transportSource]) {
+      expect(source).not.toContain("Bun.spawn");
+      expect(source).not.toContain("node:child_process");
+      expect(source).not.toContain("curl");
+    }
+  });
+});
+
 function successResponse() {
   return {
     status: 200,
@@ -164,4 +278,56 @@ function successResponse() {
       request_id: "req_synthetic",
     },
   };
+}
+
+function commandArgs(): string[] {
+  return ["load-hcloud-provider", "--workspace", "ws_synthetic", "--token-file", "/synthetic/provider"];
+}
+
+function fakeCommandDependencies(overrides: Partial<AgentOsDependencies> = {}) {
+  const events: string[] = [];
+  let fileReads = 0;
+  let submissions = 0;
+  let input: HCloudProviderLoadInput | undefined;
+  const dependencies: AgentOsDependencies = {
+    readProtectedCallerToken: async () => {
+      events.push("auth");
+      return "caller-auth-fixture";
+    },
+    readSecureTokenFile: async () => {
+      events.push("file");
+      fileReads += 1;
+      return SYNTHETIC_TOKEN.slice();
+    },
+    submit: async (submitted) => {
+      events.push("network");
+      submissions += 1;
+      input = submitted;
+      return successResponse().body;
+    },
+    createIdempotencyKey: () => "00000000-0000-4000-8000-000000000006",
+    ...overrides,
+  };
+  return {
+    dependencies,
+    events,
+    get fileReads() {
+      return fileReads;
+    },
+    get submissions() {
+      return submissions;
+    },
+    get input() {
+      return input;
+    },
+  };
+}
+
+async function captureError(action: () => Promise<unknown>): Promise<HCloudProviderLoadError> {
+  try {
+    await action();
+  } catch (error) {
+    return error as HCloudProviderLoadError;
+  }
+  throw new Error("Expected the loader action to fail.");
 }

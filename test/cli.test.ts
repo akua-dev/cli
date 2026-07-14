@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import { authView } from "../src/commands/auth";
+import { authView, readProtectedCallerToken } from "../src/commands/auth";
 import { renderSuccess } from "../src/runtime/render";
 
 describe("akua entrypoint", () => {
@@ -16,6 +16,15 @@ describe("akua entrypoint", () => {
         message: "Unknown flag: --bogus",
       },
     });
+  });
+
+  test("documents the compiled Agent OS provider loader without exposing a credential input", async () => {
+    const { stdout, exitCode } = await runAkua(["--help", "--json"]);
+
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("akua agent-os load-hcloud-provider");
+    expect(stdout).toContain("--token-file");
+    expect(stdout).not.toContain("--token <");
   });
 
   test("fails invalid explicit output modes before routing", async () => {
@@ -410,6 +419,25 @@ describe("akua entrypoint", () => {
         },
       });
       expect(logoutExtra.stdout).not.toContain(tokenLikeValue);
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
+  test("loader caller authentication reads only the protected local config", async () => {
+    const home = await makeTempHome();
+    try {
+      const configDir = join(home, ".config", "akua");
+      const configPath = join(configDir, "config.json");
+      await mkdir(configDir, { recursive: true, mode: 0o700 });
+      await writeFile(configPath, JSON.stringify({ token: "caller-auth-fixture" }), { mode: 0o600 });
+      await chmod(configDir, 0o700);
+      await chmod(configPath, 0o600);
+
+      await expect(readProtectedCallerToken({ HOME: home })).resolves.toBe("caller-auth-fixture");
+      await expect(readProtectedCallerToken({ HOME: home, AKUA_API_TOKEN: "environment-auth-fixture" })).rejects.toMatchObject({
+        code: "AKUA_LOADER_ENV_AUTH_FORBIDDEN",
+      });
     } finally {
       await rm(home, { recursive: true, force: true });
     }

@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { authView } from "../commands/auth";
+import { agentOsView } from "../commands/agent-os";
 import { buildHomeView } from "../commands/home";
 import { commandRegistry } from "../generated/commands.gen";
 import { AkuaCliError, commandNotImplemented, usageError } from "../runtime/errors";
@@ -45,6 +46,10 @@ async function route(argv: readonly string[], env: Record<string, string | undef
 
   if (argv[0] === "auth") {
     return authView(argv.slice(1), env);
+  }
+
+  if (argv[0] === "agent-os") {
+    return agentOsView(argv.slice(1), env);
   }
 
   const unknownFlag = argv.find((arg) => arg.startsWith("-"));
@@ -95,6 +100,7 @@ function helpView(): RenderEnvelope {
       "  akua auth login       Save a local API token",
       "  akua auth status      Show local authentication status",
       "  akua auth logout      Remove the saved local API token",
+      "  akua agent-os load-hcloud-provider --workspace <exact-name-or-ws_id> --token-file <absolute-path>",
       "  akua commands         List generated public OpenAPI command registry",
       "  akua --help           Show help",
       "  akua --version        Show version",
