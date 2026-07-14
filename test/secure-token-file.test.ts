@@ -33,7 +33,7 @@ describe("readSecureTokenFile", () => {
     const fixture = makeFakeFixture();
 
     await expect(readSecureTokenFile("relative/provider", fixture.dependencies)).rejects.toMatchObject({
-      code: "AKUA_LOADER_TOKEN_PATH_INVALID",
+      code: "AKUA_HCLOUD_TOKEN_PATH_INVALID",
     });
     expect(fixture.opens).toBe(0);
   });
@@ -42,7 +42,7 @@ describe("readSecureTokenFile", () => {
     const fixture = makeFakeFixture({ pre: fakeStat({ symbolicLink: true }) });
 
     await expect(readSecureTokenFile("/synthetic/provider", fixture.dependencies)).rejects.toMatchObject({
-      code: "AKUA_LOADER_TOKEN_FILE_UNSAFE",
+      code: "AKUA_HCLOUD_TOKEN_FILE_UNSAFE",
     });
     expect(fixture.opens).toBe(0);
   });
@@ -56,7 +56,7 @@ describe("readSecureTokenFile", () => {
     ]) {
       const fixture = makeFakeFixture({ pre });
       await expect(readSecureTokenFile("/synthetic/provider", fixture.dependencies)).rejects.toMatchObject({
-        code: "AKUA_LOADER_TOKEN_FILE_UNSAFE",
+        code: "AKUA_HCLOUD_TOKEN_FILE_UNSAFE",
       });
       expect(fixture.opens).toBe(0);
     }
@@ -66,7 +66,7 @@ describe("readSecureTokenFile", () => {
     for (const size of [0, MAX_PROVIDER_TOKEN_BYTES + 1]) {
       const fixture = makeFakeFixture({ pre: fakeStat({ size }), opened: fakeStat({ size }) });
       await expect(readSecureTokenFile("/synthetic/provider", fixture.dependencies)).rejects.toMatchObject({
-        code: "AKUA_LOADER_TOKEN_FILE_SIZE_INVALID",
+        code: "AKUA_HCLOUD_TOKEN_FILE_SIZE_INVALID",
       });
       expect(fixture.reads).toBe(0);
       expect(fixture.closed).toBe(0);
@@ -77,7 +77,7 @@ describe("readSecureTokenFile", () => {
     const fixture = makeFakeFixture({ opened: fakeStat({ ino: 99 }) });
 
     await expect(readSecureTokenFile("/synthetic/provider", fixture.dependencies)).rejects.toMatchObject({
-      code: "AKUA_LOADER_TOKEN_FILE_CHANGED",
+      code: "AKUA_HCLOUD_TOKEN_FILE_CHANGED",
     });
     expect(fixture.reads).toBe(0);
     expect(fixture.closed).toBe(1);
@@ -92,7 +92,7 @@ describe("readSecureTokenFile", () => {
       await chmod(target, 0o600);
       await symlink(target, link);
 
-      await expect(readSecureTokenFile(link)).rejects.toMatchObject({ code: "AKUA_LOADER_TOKEN_FILE_UNSAFE" });
+      await expect(readSecureTokenFile(link)).rejects.toMatchObject({ code: "AKUA_HCLOUD_TOKEN_FILE_UNSAFE" });
     } finally {
       await rm(directory, { recursive: true, force: true });
     }

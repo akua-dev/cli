@@ -18,16 +18,13 @@ describe("akua entrypoint", () => {
     });
   });
 
-  test("documents the compiled Agent OS provider loader without exposing a credential input", async () => {
+  test("documents generic HCloud setup without exposing a credential input", async () => {
     const { stdout, exitCode } = await runAkua(["--help", "--json"]);
 
     expect(exitCode).toBe(0);
-    expect(stdout).toContain("akua agent-os load-hcloud-provider");
+    expect(stdout).toContain("akua hcloud setup");
     expect(stdout).toContain("--token-file");
-    expect(stdout).toContain("--expected-ssh-key-fingerprint");
-    expect(stdout).toContain("--expected-ssh-key-name");
-    expect(stdout).not.toContain("--project-identity-attestation");
-    expect(stdout).not.toContain("--project-anchor-ssh-key-fingerprint");
+    expect(stdout).not.toContain("load-hcloud-provider");
     expect(stdout).not.toContain("--token <");
   });
 
@@ -428,7 +425,7 @@ describe("akua entrypoint", () => {
     }
   });
 
-  test("loader caller authentication reads only the protected local config", async () => {
+  test("HCloud setup caller authentication reads only the protected local config", async () => {
     const home = await makeTempHome();
     try {
       const configDir = join(home, ".config", "akua");
@@ -440,7 +437,7 @@ describe("akua entrypoint", () => {
 
       await expect(readProtectedCallerToken({ HOME: home })).resolves.toBe("caller-auth-fixture");
       await expect(readProtectedCallerToken({ HOME: home, AKUA_API_TOKEN: "environment-auth-fixture" })).rejects.toMatchObject({
-        code: "AKUA_LOADER_ENV_AUTH_FORBIDDEN",
+        code: "AKUA_HCLOUD_ENV_AUTH_FORBIDDEN",
       });
     } finally {
       await rm(home, { recursive: true, force: true });

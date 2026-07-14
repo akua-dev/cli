@@ -52,7 +52,7 @@ export async function readSecureTokenFile(
   if (!isAbsolute(path)) {
     throw new AkuaCliError({
       type: "validation_error",
-      code: "AKUA_LOADER_TOKEN_PATH_INVALID",
+      code: "AKUA_HCLOUD_TOKEN_PATH_INVALID",
       message: "The provider token file must use an absolute path.",
       exitCode: 2,
     });
@@ -124,7 +124,7 @@ function validateSize(size: number): void {
   if (!Number.isSafeInteger(size) || size < 1 || size > MAX_PROVIDER_TOKEN_BYTES) {
     throw new AkuaCliError({
       type: "validation_error",
-      code: "AKUA_LOADER_TOKEN_FILE_SIZE_INVALID",
+      code: "AKUA_HCLOUD_TOKEN_FILE_SIZE_INVALID",
       message: "The provider token file size is invalid.",
       exitCode: 2,
     });
@@ -144,7 +144,7 @@ function sameFile(before: SecureTokenFileStat, opened: SecureTokenFileStat): boo
 function unsafeFileError(): AkuaCliError {
   return new AkuaCliError({
     type: "validation_error",
-    code: "AKUA_LOADER_TOKEN_FILE_UNSAFE",
+    code: "AKUA_HCLOUD_TOKEN_FILE_UNSAFE",
     message: "The provider token file does not meet the required security checks.",
     exitCode: 2,
   });
@@ -153,7 +153,7 @@ function unsafeFileError(): AkuaCliError {
 function changedFileError(): AkuaCliError {
   return new AkuaCliError({
     type: "validation_error",
-    code: "AKUA_LOADER_TOKEN_FILE_CHANGED",
+      code: "AKUA_HCLOUD_TOKEN_FILE_CHANGED",
     message: "The provider token file changed while it was being opened.",
     exitCode: 2,
   });
