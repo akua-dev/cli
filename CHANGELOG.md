@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.1](https://github.com/akua-dev/cli/compare/v0.8.0...v0.8.1) (2026-07-14)
+
+
+### Bug Fixes
+
+* **loader:** match cnap HCloud provider-load contract ([#23](https://github.com/akua-dev/cli/issues/23)) ([f235639](https://github.com/akua-dev/cli/commit/f23563969bbc533155cf545cbf7cdf2165613408))
+
 ## [0.8.0](https://github.com/akua-dev/cli/compare/v0.7.0...v0.8.0) (2026-07-14)
 
 

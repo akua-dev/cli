@@ -7,7 +7,7 @@ import { AkuaCliError, commandNotImplemented, usageError } from "../runtime/erro
 import { detectOutputMode, type OutputMode } from "../runtime/mode";
 import { renderError, renderSuccess, type RenderEnvelope } from "../runtime/render";
 
-const VERSION = "0.8.0"; // x-release-please-version
+const VERSION = "0.8.1"; // x-release-please-version
 
 export async function main(argv = process.argv.slice(2), env = process.env): Promise<number> {
   let mode: OutputMode = fallbackErrorMode(argv);
