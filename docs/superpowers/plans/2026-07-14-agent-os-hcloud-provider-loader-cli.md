@@ -77,7 +77,7 @@
 - [x] **Step 2: Run the focused assertions** and observe the expected red condition before any production behavior they cover.
 - [x] **Step 3: Update architecture documentation** with the exact non-secret route, thin-client/server ownership, safe file contract, no-retention constraints, cnap-first release ordering, PR #21 boundary, and `0.9.0` coordination.
 - [x] **Step 4: Run `mise run check` and `mise run build:binary`**; inspect the compiled help and the full test output for failures or sentinel leakage.
-- [ ] **Step 5: Commit remaining documentation and run `git diff --check`, `git status --short`, and the full validation commands** before reporting completion.
+- [x] **Step 5: Commit remaining documentation and run `git diff --check`, `git status --short`, and the full validation commands** before reporting completion.
 
 ## Self-Review
 
