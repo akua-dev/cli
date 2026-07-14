@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "name": "akua",
+  "version": "0.7.0",
+  "provenance": {
+    "repository": "https://github.com/akua-dev/cli",
+    "path": "skills/akua/SKILL.md",
+    "revision_source": "git"
+  },
+  "files": [
+    {
+      "path": "SKILL.md",
+      "sha256": "abec4823b7e9ea42d9e261ce598442101524e8309a01377f494cf54cdac6c5c3"
+    }
+  ]
+}

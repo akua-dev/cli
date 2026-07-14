@@ -10,6 +10,7 @@ interface ReleasePleaseConfig {
     "extra-files"?: Array<{
       type?: string;
       path?: string;
+      jsonpath?: string;
     }>;
   }>;
 }
@@ -26,6 +27,11 @@ describe("release-please configuration", () => {
         {
           type: "generic",
           path: "src/bin/akua.ts",
+        },
+        {
+          type: "json",
+          path: "skills/akua/skill-package.json",
+          jsonpath: "$.version",
         },
       ],
     });
