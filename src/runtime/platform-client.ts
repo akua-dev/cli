@@ -15,6 +15,7 @@ const responseFields = new Set([
   "availability_timestamp",
   "request_id",
   "provider_fingerprint",
+  "transaction_id",
 ]);
 const inventoryFields = new Set([
   "servers",
@@ -51,7 +52,8 @@ export interface HCloudProviderLoadInput {
   workspace: string;
   callerToken: string;
   providerToken: Uint8Array;
-  projectAnchorSshKeyFingerprint: string;
+  projectIdentityAttestation: string;
+  projectAnchorSshKeyFingerprint?: string;
   idempotencyKey: string;
 }
 
@@ -67,7 +69,7 @@ export async function submitHcloudProviderLoad(
 ): Promise<HCloudProviderLoadResult> {
   let body: Uint8Array | undefined;
   try {
-    body = encodeProviderTokenBody(input.providerToken, input.projectAnchorSshKeyFingerprint);
+    body = encodeProviderTokenBody(input.providerToken, input.projectIdentityAttestation, input.projectAnchorSshKeyFingerprint);
     const response = await dependencies.send({
       url: HCloudProviderLoadUrl,
       method: "POST",
@@ -118,30 +120,42 @@ async function sendHttpsRequest(request: HCloudProviderLoadRequest): Promise<HCl
   }
 }
 
-function encodeProviderTokenBody(providerToken: Uint8Array, projectAnchorSshKeyFingerprint: string): Uint8Array {
-  const prefix = new Uint8Array([
-    123, 34, 112, 114, 111, 106, 101, 99, 116, 95, 97, 110, 99, 104, 111, 114, 95, 115, 115, 104, 95, 107, 101, 121,
-    95, 102, 105, 110, 103, 101, 114, 112, 114, 105, 110, 116, 34, 58, 34,
-  ]);
-  const separator = new Uint8Array([34, 44, 34, 112, 114, 111, 118, 105, 100, 101, 114, 95, 116, 111, 107, 101, 110, 34, 58, 34]);
-  const suffix = new Uint8Array([34, 125]);
-  const fingerprintBytes = new TextEncoder().encode(projectAnchorSshKeyFingerprint);
-  let encodedLength = prefix.byteLength + separator.byteLength + suffix.byteLength;
-  for (const byte of fingerprintBytes) {
-    encodedLength += escapedLength(byte);
-  }
-  for (const byte of providerToken) {
-    encodedLength += escapedLength(byte);
+function encodeProviderTokenBody(
+  providerToken: Uint8Array,
+  projectIdentityAttestation: string,
+  projectAnchorSshKeyFingerprint: string | undefined,
+): Uint8Array {
+  const encoder = new TextEncoder();
+  const fields: Array<readonly [Uint8Array, Uint8Array]> = [
+    [encoder.encode("project_identity_attestation"), encoder.encode(projectIdentityAttestation)],
+    ...(projectAnchorSshKeyFingerprint === undefined
+      ? []
+      : [[encoder.encode("project_anchor_ssh_key_fingerprint"), encoder.encode(projectAnchorSshKeyFingerprint)] as const]),
+    [encoder.encode("provider_token"), providerToken],
+  ];
+  let encodedLength = 2 + Math.max(0, fields.length - 1);
+  for (const [name, value] of fields) {
+    encodedLength += name.byteLength + 5;
+    for (const byte of value) {
+      encodedLength += escapedLength(byte);
+    }
   }
   const body = new Uint8Array(encodedLength);
   let cursor = 0;
-  body.set(prefix, cursor);
-  cursor += prefix.byteLength;
-  cursor = writeEscapedBytes(body, cursor, fingerprintBytes);
-  body.set(separator, cursor);
-  cursor += separator.byteLength;
-  cursor = writeEscapedBytes(body, cursor, providerToken);
-  body.set(suffix, cursor);
+  body[cursor++] = 123;
+  for (const [index, [name, value]] of fields.entries()) {
+    if (index > 0) {
+      body[cursor++] = 44;
+    }
+    body[cursor++] = 34;
+    body.set(name, cursor);
+    cursor += name.byteLength;
+    body.set([34, 58, 34], cursor);
+    cursor += 3;
+    cursor = writeEscapedBytes(body, cursor, value);
+    body[cursor++] = 34;
+  }
+  body[cursor] = 125;
   return body;
 }
 

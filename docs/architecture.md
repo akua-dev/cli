@@ -25,7 +25,8 @@ non-generated command:
 akua agent-os load-hcloud-provider \
   --workspace <exact-name-or-ws_id> \
   --token-file <absolute-path> \
-  --project-anchor-ssh-key-fingerprint <provider-returned-SHA256-fingerprint>
+  --project-identity-attestation <issuer-attestation> \
+  [--project-anchor-ssh-key-fingerprint <provider-returned-SHA256-fingerprint>]
 ```
 
 It is a deliberately thin local companion to the server-owned cnap Agent OS
@@ -36,19 +37,24 @@ revocation, and all provider policy. This CLI never implements an inventory,
 uses generic `/secrets` or `/compute_configs` calls, opens a browser, runs a
 shell child, or falls back to another endpoint.
 
-The command requires all three flags and rejects positional input, `--token`,
-stdin, provider-token environment/profile input, API URL overrides, debug body
-output, and retry transports. The project-anchor SSH key fingerprint must be a
-provider-returned `SHA256:` SSH fingerprint; the CLI relays it verbatim and
-never derives it from the provider token. No anchor name is accepted because
-the held server contract has not required one. It reads normal Akua caller
-authentication only from the protected local Akua config; `AKUA_API_TOKEN` is
-rejected for this command.
+The command requires workspace, token-file, and issuer-attestation flags and
+rejects positional input, `--token`, stdin, provider-token environment/profile
+input, API URL overrides, debug body output, and retry transports. The opaque,
+non-secret issuer attestation is relayed verbatim; cnap must validate that it is
+bound to the exact `agent-os-production` workspace and this one-shot request.
+The provider-returned `SHA256:` SSH key fingerprint is optional and may be sent
+only when predeclared; with no anchor, cnap must require fully empty inventory.
+The CLI never derives either identity input from the provider token and accepts
+no anchor name because the held server contract has not required one. It reads
+normal Akua caller authentication only from the protected local Akua config;
+`AKUA_API_TOKEN` is rejected for this command.
 It sends that authentication in `Authorization`, the explicit selection in
 `Akua-Context`, a newly generated `Idempotency-Key`, and a body containing the
-provider-token plus the non-secret project-anchor fingerprint fields. The
+provider token, issuer attestation, and optional anchor fingerprint. The
 production base URL and route are fixed; tests may inject a fake HTTPS transport
-only through an internal dependency seam.
+only through an internal dependency seam. The client allowlists server-provided
+`secret_version_id` and `transaction_id` alongside opaque resource IDs so token
+replacement/transaction continuity is detectable before spend.
 
 The provider file is opened exactly once in the compiled process by a dedicated
 Unix reader. The reader accepts only an absolute, caller-owned, regular `0600`

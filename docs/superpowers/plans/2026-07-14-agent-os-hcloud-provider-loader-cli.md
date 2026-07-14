@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add the one compiled `akua agent-os load-hcloud-provider` command that reads one protected local provider file once and relays it with the provider-returned project-anchor SSH fingerprint to the dedicated cnap transaction without exposing or retaining token contents.
+**Goal:** Add the one compiled `akua agent-os load-hcloud-provider` command that reads one protected local provider file once and relays it with a workspace-bound issuer attestation and optional predeclared anchor fingerprint to the dedicated cnap transaction without exposing or retaining token contents.
 
 **Architecture:** A command parser validates only the two required flags and obtains normal caller authentication from protected local config. A Unix descriptor reader performs the file security checks and returns a single mutable byte buffer. A fixed-route HTTPS client builds the request in-process, sends precisely once with an idempotency key, clears the buffer, and projects the response through a fixed non-secret allowlist. The cnap server remains the owner of validation, persistence, inventory, rollback, and revocation.
 
@@ -10,8 +10,8 @@
 
 ## Global Constraints
 
-- The only added non-generated command is `akua agent-os load-hcloud-provider --workspace <exact-name-or-ws_id> --token-file <absolute-path> --project-anchor-ssh-key-fingerprint <provider-returned-SHA256-fingerprint>`.
-- Held production request contract: `POST https://api.akua.dev/v1/agent_os/hcloud_provider_loads`, `Authorization` from protected config only, `Akua-Context: <workspace>`, generated `Idempotency-Key`, and JSON body with `provider_token` plus verbatim non-secret `project_anchor_ssh_key_fingerprint`. Never derive the fingerprint from the token; do not add a project-anchor name unless cnap #540's released contract requires it.
+- The only added non-generated command is `akua agent-os load-hcloud-provider --workspace <exact-name-or-ws_id> --token-file <absolute-path> --project-identity-attestation <issuer-attestation> [--project-anchor-ssh-key-fingerprint <provider-returned-SHA256-fingerprint>]`.
+- Held production request contract: `POST https://api.akua.dev/v1/agent_os/hcloud_provider_loads`, `Authorization` from protected config only, `Akua-Context: <workspace>`, generated `Idempotency-Key`, and JSON body with `provider_token`, verbatim non-secret `project_identity_attestation`, and optional predeclared `project_anchor_ssh_key_fingerprint`. cnap must verify the attestation binds the exact workspace and one-shot request; no-anchor requires fully empty inventory. Never derive either identity input from the token; do not add a project-anchor name unless cnap #540's released contract requires it. Preserve allowlisted `secret_version_id` and `transaction_id` for pre-spend continuity checks.
 - No provider secret may enter argv, stdin, environment, profile, browser, shell child, curl, config, cache, log, stdout, stderr, error message, crash report, or test report.
 - Reject `AKUA_API_TOKEN` and all provider-token/environment/API-base override inputs for this command; do not retry a request after a transport outcome is uncertain.
 - The reader must require absolute, own-UID regular `0600` files, use `O_NOFOLLOW | O_CLOEXEC`, compare `lstat` and `fstat` dev/inode/uid/mode, read one bounded descriptor once, and close before networking.
