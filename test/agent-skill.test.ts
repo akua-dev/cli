@@ -7,6 +7,14 @@ const SKILL_PATH = "skills/akua/SKILL.md";
 const PACKAGE_PATH = "skills/akua/skill-package.json";
 const SKILL_NAME = "akua";
 const SOURCE_REPOSITORY = "https://github.com/akua-dev/cli";
+const FRONTMATTER_FIELDS = new Set([
+  "name",
+  "description",
+  "license",
+  "compatibility",
+  "metadata",
+  "allowed-tools",
+]);
 
 interface SkillPackage {
   schema_version: number;
@@ -33,10 +41,65 @@ describe("canonical Akua agent skill", () => {
     expect(() => validateSkillPackage(skillPackage, skill, rootPackage.version)).not.toThrow();
   });
 
-  test("rejects malformed or non-standard frontmatter", () => {
-    const malformed = `---\nname: ${SKILL_NAME}\ndescription:\nversion: 1.0.0\n---\n# Akua\n`;
+  test("directs authentication setup through the human without exposing tokens", () => {
+    const skill = readFileSync(SKILL_PATH, "utf8");
 
-    expect(() => validateFrontmatter(SKILL_PATH, malformed)).toThrow("frontmatter keys");
+    expect(skill).toContain(
+      "Agents must never place authentication tokens in tool arguments, process argv, transcripts, or logs.",
+    );
+    expect(skill).toContain(
+      "instruct the human to run `akua auth login --token <token>` privately and locally themselves",
+    );
+    expect(skill).toContain("agents may run `akua auth status --output agent`");
+  });
+
+  test("accepts standard optional frontmatter fields in any key order", () => {
+    const reordered = skillWithFrontmatter(`allowed-tools: Bash(git:*) Read
+metadata:
+  author: akua-dev
+  version: "1.0"
+description: Use when working with Akua.
+license: Apache-2.0
+name: ${SKILL_NAME}
+compatibility: Requires Bun 1.3.7 or newer`);
+
+    expect(() => validateFrontmatter(SKILL_PATH, reordered)).not.toThrow();
+  });
+
+  test("rejects unknown frontmatter fields", () => {
+    const unknown = skillWithFrontmatter(`name: ${SKILL_NAME}
+description: Use when working with Akua.
+version: 1.0.0`);
+
+    expect(() => validateFrontmatter(SKILL_PATH, unknown)).toThrow("unknown frontmatter field: version");
+  });
+
+  test("rejects invalid optional frontmatter field values", () => {
+    const invalidFields = [
+      "license: []",
+      "compatibility: 1",
+      `compatibility: ${"x".repeat(501)}`,
+      "metadata: []",
+      "metadata:\n  version: 1",
+      "allowed-tools: []",
+    ];
+
+    for (const field of invalidFields) {
+      const invalid = skillWithFrontmatter(`name: ${SKILL_NAME}
+description: Use when working with Akua.
+${field}`);
+
+      expect(() => validateFrontmatter(SKILL_PATH, invalid)).toThrow();
+    }
+  });
+
+  test("rejects invalid descriptions", () => {
+    const missing = skillWithFrontmatter(`name: ${SKILL_NAME}`);
+    const blank = skillWithFrontmatter(`name: ${SKILL_NAME}
+description: "   "`);
+
+    expect(() => validateFrontmatter(SKILL_PATH, missing)).toThrow("description must be a non-empty string");
+    expect(() => validateFrontmatter(SKILL_PATH, blank)).toThrow("description must be a non-empty string");
   });
 
   test("rejects invalid YAML frontmatter syntax", () => {
@@ -103,20 +166,22 @@ function validateFrontmatter(path: string, source: string): void {
 
   const parsed: unknown = Bun.YAML.parse(match[1]);
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    throw new Error("frontmatter keys must be exactly name and description");
+    throw new Error("frontmatter must be a YAML mapping");
   }
 
   const fields = parsed as Record<string, unknown>;
+  const unknownFields = Object.keys(fields).filter((field) => !FRONTMATTER_FIELDS.has(field));
+  if (unknownFields.length > 0) {
+    throw new Error(`unknown frontmatter field: ${unknownFields.join(", ")}`);
+  }
+
   const name = fields.name;
   const description = fields.description;
-  if (
-    Object.keys(fields).join(",") !== "name,description" ||
-    typeof name !== "string" ||
-    !name ||
-    typeof description !== "string" ||
-    !description
-  ) {
-    throw new Error("frontmatter keys must be exactly name and description");
+  if (typeof name !== "string" || !name) {
+    throw new Error("skill name must be a non-empty string");
+  }
+  if (typeof description !== "string" || !description.trim()) {
+    throw new Error("skill description must be a non-empty string");
   }
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name) || name.length > 64) {
     throw new Error("skill name must follow the Agent Skills naming rules");
@@ -130,6 +195,32 @@ function validateFrontmatter(path: string, source: string): void {
   if (description.length > 1024) {
     throw new Error("skill description must not exceed 1024 characters");
   }
+
+  validateOptionalString(fields, "license");
+  validateOptionalString(fields, "allowed-tools");
+
+  const compatibility = validateOptionalString(fields, "compatibility");
+  if (compatibility !== undefined && (compatibility.length === 0 || compatibility.length > 500)) {
+    throw new Error("skill compatibility must contain 1-500 characters");
+  }
+
+  const metadata = fields.metadata;
+  if (metadata !== undefined) {
+    if (typeof metadata !== "object" || metadata === null || Array.isArray(metadata)) {
+      throw new Error("skill metadata must be a string-to-string mapping");
+    }
+    if (Object.values(metadata).some((value) => typeof value !== "string")) {
+      throw new Error("skill metadata must be a string-to-string mapping");
+    }
+  }
+}
+
+function validateOptionalString(fields: Record<string, unknown>, field: string): string | undefined {
+  const value = fields[field];
+  if (value !== undefined && typeof value !== "string") {
+    throw new Error(`skill ${field} must be a string`);
+  }
+  return value;
 }
 
 function validateSkillPackage(skillPackage: SkillPackage, skill: string, rootVersion: string): void {
@@ -164,7 +255,11 @@ function sha256(value: string): string {
 }
 
 function validSkill(): string {
-  return `---\nname: ${SKILL_NAME}\ndescription: Use when working with Akua.\n---\n# Akua\n`;
+  return skillWithFrontmatter(`name: ${SKILL_NAME}\ndescription: Use when working with Akua.`);
+}
+
+function skillWithFrontmatter(frontmatter: string): string {
+  return `---\n${frontmatter}\n---\n# Akua\n`;
 }
 
 function validSkillPackage(skill: string): SkillPackage {
