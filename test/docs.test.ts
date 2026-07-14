@@ -11,8 +11,8 @@ describe("distribution documentation", () => {
 
     expect(readme).toContain("brew install akua-dev/tap/akua");
     expect(readme).toContain("https://github.com/akua-dev/cli/releases/download/");
-    expect(readme).toContain("akua-v0.8.0-darwin-arm64.tar.gz");
-    expect(readme).toContain("akua-v0.8.0-windows-x64.zip");
+    expect(readme).toContain("akua-v0.9.0-darwin-arm64.tar.gz");
+    expect(readme).toContain("akua-v0.9.0-windows-x64.zip");
     expect(readme).toContain("checksums.txt");
     expect(readme).toContain("sha256sum");
     expect(readme).toContain("Get-FileHash");

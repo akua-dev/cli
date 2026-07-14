@@ -37,12 +37,12 @@ native install smoke tests and post-upload checksum verification.
 
 ### GitHub Release: macOS or Linux
 
-This copy-paste example installs v0.8.0 into `~/.local/bin`. Change `VERSION`
+This copy-paste example installs v0.9.0 into `~/.local/bin`. Change `VERSION`
 when selecting a newer release.
 
 ```sh
 set -eu
-VERSION=0.8.0
+VERSION=0.9.0
 case "$(uname -s)-$(uname -m)" in
   Darwin-arm64)  TARGET=darwin-arm64 ;;
   Darwin-x86_64) TARGET=darwin-x64 ;;
@@ -72,12 +72,12 @@ newer `VERSION`, replacing `~/.local/bin/akua`. The CLI does not self-update.
 
 ### GitHub Release: Windows x64
 
-Run in PowerShell. This installs v0.8.0 into `%USERPROFILE%\bin`; add that
+Run in PowerShell. This installs v0.9.0 into `%USERPROFILE%\bin`; add that
 directory to the user `PATH` if it is not already present.
 
 ```powershell
 $ErrorActionPreference = "Stop"
-$Version = "0.8.0"
+$Version = "0.9.0"
 $Asset = "akua-v$Version-windows-x64.zip"
 $Base = "https://github.com/akua-dev/cli/releases/download/v$Version"
 Invoke-WebRequest "$Base/$Asset" -OutFile $Asset
@@ -97,11 +97,11 @@ Copy-Item .\akua-release\akua.exe "$HOME\bin\akua.exe" -Force
 
 | Platform | Architecture | Asset | Runtime baseline |
 | --- | --- | --- | --- |
-| macOS | Apple Silicon arm64 | `akua-v0.8.0-darwin-arm64.tar.gz` | Bun darwin arm64 |
-| macOS | Intel x64 | `akua-v0.8.0-darwin-x64.tar.gz` | Bun darwin x64 |
-| Linux | glibc arm64 | `akua-v0.8.0-linux-arm64.tar.gz` | Bun linux arm64 |
-| Linux | glibc x64 | `akua-v0.8.0-linux-x64.tar.gz` | Bun linux x64 baseline |
-| Windows | x64 | `akua-v0.8.0-windows-x64.zip` | Bun windows x64 baseline |
+| macOS | Apple Silicon arm64 | `akua-v0.9.0-darwin-arm64.tar.gz` | Bun darwin arm64 |
+| macOS | Intel x64 | `akua-v0.9.0-darwin-x64.tar.gz` | Bun darwin x64 |
+| Linux | glibc arm64 | `akua-v0.9.0-linux-arm64.tar.gz` | Bun linux arm64 |
+| Linux | glibc x64 | `akua-v0.9.0-linux-x64.tar.gz` | Bun linux x64 baseline |
+| Windows | x64 | `akua-v0.9.0-windows-x64.zip` | Bun windows x64 baseline |
 
 Linux musl, Windows arm64, and other systems are not in the tested release
 contract. x64 Linux and Windows use Bun's baseline target for older CPUs. Unix
@@ -197,9 +197,9 @@ so OpenAPI updates remain idempotent and scope-limited.
 ## CLI-owned agent skill
 
 This repository owns the canonical source location at
-`skills/akua/SKILL.md` with skill name `akua`. The source is versioned
-independently of the CLI release automation, so use it only from a branch or tag
-that contains the file.
+`skills/akua/SKILL.md` with skill name `akua`. Use the source from a branch or
+tag that contains the file; its package metadata is kept in sync by the CLI's
+release configuration.
 
 The separate `akua-dev/skills` repository owns importing and syncing this source.
 It is private today and is not claimed here as a publicly installable channel.
