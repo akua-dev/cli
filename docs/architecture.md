@@ -25,6 +25,7 @@ new repository shape is:
 openapi/public.json              fetched public OpenAPI snapshot
 scripts/fetch-openapi.ts         guarded production spec fetcher
 scripts/generate-commands.ts     operationId-driven command registry generator
+scripts/release.ts               release target, packaging, and manifest contract
 src/bin/akua.ts                  executable entrypoint
 src/commands/auth.ts             local auth/config command implementation
 src/runtime/                     output, errors, exit codes, command contracts
@@ -37,7 +38,7 @@ src/generated/commands.gen.ts    generated public command registry
 release-please-config.json       Release Please manifest-mode config
 .release-please-manifest.json    Release Please root package version manifest
 docs/architecture.md             this spec
-test/                            Bun tests for scaffold and auth/config contracts
+test/                            Bun tests for CLI, generation, and release contracts
 ```
 
 ## OpenAPI And Command Generation

@@ -9,7 +9,7 @@
   `akua --help`, and `akua commands --limit 1`.
 - Keep the tested matrix aligned across the script and workflows: macOS
   arm64/x64, glibc Linux arm64/x64, and Windows x64. Use baseline Bun targets
-  for Linux and Windows x64.
+  for Linux x64 and Windows x64.
 - Release assets are immutable. Never add clobber/force upload behavior; the tap
   handoff runs only after published assets are downloaded and re-verified.
 

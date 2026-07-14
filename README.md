@@ -24,7 +24,7 @@ akua --help
 akua commands --limit 1
 ```
 
-Upgrade or reinstall with:
+Upgrade with:
 
 ```sh
 brew update
@@ -32,8 +32,8 @@ brew upgrade akua
 ```
 
 The formula is maintained in `akua-dev/homebrew-tap`. A CLI release requests a
-reviewed formula PR only after all immutable GitHub Release assets have passed
-native install smoke tests and post-upload checksum verification.
+reviewed formula PR only after every archive has passed a native install smoke
+test and all published assets have passed post-upload verification.
 
 ### GitHub Release: macOS or Linux
 
@@ -109,9 +109,10 @@ archives preserve executable mode `0755`; the Windows ZIP contains `akua.exe`.
 The binaries are self-contained and do not require Bun to be installed.
 
 To audit a whole release, download `checksums.txt` plus the archives and run
-`sha256sum --check checksums.txt`. The adjacent `<asset>.sha256` files support
-single-asset verification. Release assets are never replaced in place; a
-changed binary requires a new version.
+`sha256sum --check checksums.txt` on Linux or `shasum -a 256 --check
+checksums.txt` on macOS. The adjacent `<asset>.sha256` files support single-asset
+verification. Release assets are never replaced in place; a changed binary
+requires a new version.
 
 ## First use and authentication
 
