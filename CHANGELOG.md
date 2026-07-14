@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.0](https://github.com/akua-dev/cli/compare/v0.7.0...v0.8.0) (2026-07-14)
+
+
+### Features
+
+* **release:** publish installable multi-platform CLI artifacts ([#21](https://github.com/akua-dev/cli/issues/21)) ([8a7568f](https://github.com/akua-dev/cli/commit/8a7568f01fb7f99b0b5885de4c6e1c4d914e6531))
+* **skills:** add canonical Akua agent skill ([#20](https://github.com/akua-dev/cli/issues/20)) ([3ec5ae4](https://github.com/akua-dev/cli/commit/3ec5ae4e0d67e7f2dbb1e43e57676a97ecd1f7f9))
+
 ## [0.7.0](https://github.com/akua-dev/cli/compare/v0.6.1...v0.7.0) (2026-07-11)
 
 
