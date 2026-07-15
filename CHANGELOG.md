@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0](https://github.com/akua-dev/cli/compare/v0.9.0...v0.10.0) (2026-07-15)
+
+
+### Features
+
+* **hcloud:** add generic provider setup flow ([#26](https://github.com/akua-dev/cli/issues/26)) ([3d44871](https://github.com/akua-dev/cli/commit/3d448719949369d6d328c00e8fe8e19ade83ae3d))
+
 ## [0.9.0](https://github.com/akua-dev/cli/compare/v0.8.0...v0.9.0) (2026-07-14)
 
 
