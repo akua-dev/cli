@@ -28,9 +28,9 @@ Run `mise run check` and `mise run generate:check` for every change. Release
 changes also require the focused release/workflow tests and a current-host
 compiled archive smoke through `mise run release:smoke`.
 
-The hand-written HCloud setup flow and its security suites are specified in
-`docs/architecture.md`, `test/secure-token-file.test.ts`, and
-`test/hcloud-setup.test.ts`.
+The hand-written Agent OS provider-ingress command and its security suites are
+specified in `docs/architecture.md`, `test/secure-token-file.test.ts`, and
+`test/agent-os-loader.test.ts`.
 
 ## Maintaining this file
 
