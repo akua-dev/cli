@@ -45,8 +45,8 @@ export async function readProtectedCallerToken(env: Record<string, string | unde
   if (hasEnvToken(env)) {
     throw new AkuaCliError({
       type: "usage_error",
-      code: "AKUA_LOADER_ENV_AUTH_FORBIDDEN",
-      message: "Environment authentication is not accepted for this provider loader.",
+      code: "AKUA_HCLOUD_ENV_AUTH_FORBIDDEN",
+      message: "Environment authentication is not accepted for HCloud setup.",
       exitCode: 2,
     });
   }
@@ -55,8 +55,8 @@ export async function readProtectedCallerToken(env: Record<string, string | unde
   if (typeof token !== "string" || token === "") {
     throw new AkuaCliError({
       type: "authentication_error",
-      code: "AKUA_LOADER_AUTH_REQUIRED",
-      message: "A protected local Akua credential is required for this provider loader.",
+      code: "AKUA_HCLOUD_AUTH_REQUIRED",
+      message: "A protected local Akua credential is required for HCloud setup.",
       exitCode: 3,
     });
   }
