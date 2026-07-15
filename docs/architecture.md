@@ -16,36 +16,63 @@ Status: greenfield scaffold with local auth/config MVP.
   spec fetch task performs only a read-only OpenAPI GET and rejects non-HTTPS
   source URLs.
 
-## Generic HCloud Setup
+## Agent OS HCloud Provider Loader Companion
 
-`akua hcloud setup --workspace <ws_id> --token-file <absolute-path>` is the
-compiled local setup flow for an HCloud bring-your-own credential. It reads
-caller auth from protected local Akua configuration and rejects environment
-authentication. The provider token is accepted only from the hardened absolute
-file descriptor reader; it never enters command arguments, stdin, environment,
-children, logs, errors, configuration, cache, or rendered output.
+The one exception to the generated-public-command boundary is the compiled,
+non-generated command:
 
-Before cnap persistence, the command makes one bounded attempt for each HCloud
-validation request: account authentication, complete paginated user inventory,
-server quota, and the live `fsn1` / `CPX32` catalog and price checks. Incomplete,
-unexpected, or ambiguous responses fail closed. The preflight never provisions
-or spends.
+```sh
+akua agent-os load-hcloud-provider \
+  --workspace <exact-name-or-ws_id> \
+  --token-file <absolute-path> \
+  [--expected-ssh-key-fingerprint <provider-returned-fingerprint> \
+   [--expected-ssh-key-name <name>]]
+```
 
-After a successful preflight, the command uses only public generic cnap
-`/v1/secrets` and `/v1/compute_configs` resources. Stable workspace-derived
-idempotency keys create `cloud_provider/hcloud` only when an exact reusable
-secret is absent, then retain its exact enabled version 1 ID. The compute config
-uses `credential_scope.byom` with both that secret ID and version ID. Existing
-resources are never changed. On a definite downstream rejection, compensation
-deletes only a resource created and confirmed by this invocation; uncertain
-outcomes are neither retried nor compensated.
+It is a deliberately thin local companion to the server-owned cnap Agent OS
+provider-loader transaction (`POST /v1/agent_os/hcloud_provider_loads`). The
+cnap transaction is the canonical source of truth for workspace authorization,
+provider identity and inventory validation, storage, idempotency, compensation,
+revocation, and all provider policy. This CLI never implements an inventory,
+uses generic `/secrets` or `/compute_configs` calls, opens a browser, runs a
+shell child, or falls back to another endpoint.
 
-The descriptor reader accepts only an absolute, caller-owned, regular `0600`
+The command requires workspace and token-file flags and rejects positional
+input, `--token`, stdin, provider-token environment/profile input, API URL
+overrides, debug body output, and retry transports. A provider-returned SSH key
+fingerprint is optional and may be sent only when predeclared; its optional name
+requires the fingerprint. With no expected key, cnap requires a fully empty
+inventory. The CLI never derives identity from the provider token. It reads
+normal Akua caller authentication only from the protected local Akua config;
+`AKUA_API_TOKEN` is rejected for this command.
+It sends that authentication in `Authorization`, the explicit selection in
+`Akua-Context`, a newly generated `Idempotency-Key`, and a body containing the
+provider token plus optional `expected_ssh_key_fingerprint` and
+`expected_ssh_key_name`. The production base URL and route are fixed; tests may
+inject a fake HTTPS transport only through an internal dependency seam. The
+client allowlists only `loader_id`, `attestation_id`, `secret_id`,
+`secret_version_id`, `compute_config_id`, and `expected_ssh_key_fingerprint`,
+preserving the secret-version continuity field before spend.
+
+The provider file is opened exactly once in the compiled process by a dedicated
+Unix reader. The reader accepts only an absolute, caller-owned, regular `0600`
 file. It obtains pre-open `lstat` metadata, opens with `O_NOFOLLOW | O_CLOEXEC`,
 compares device/inode/UID/mode with `fstat`, performs one bounded descriptor
-read, and closes before HTTP submission. The mutable source buffer is cleared
-after the flow. Bun cannot promise physical heap zeroisation; the contract is no
-deliberate secret persistence or exposure through CLI interfaces.
+read, and closes before HTTP submission. It rejects symlinks, substitutions,
+directories, devices, FIFOs, sockets, wrong owners, empty input, and oversized
+input. The token is held only in a mutable byte buffer for request assembly;
+the buffer is overwritten immediately after the single request attempt. Bun
+cannot promise physical heap zeroisation, so the security contract is no
+deliberate secret persistence or exposure through CLI interfaces, logs, reports,
+or configuration. A stronger heap guarantee requires a reviewed native module,
+not a weaker file or API contract.
+
+The endpoint is a release dependency delivered by
+[cnap #545](https://github.com/akua-dev/cnap/pull/545), implementing
+`agentOs.hcloudProviderLoads.create`: its production delivery must complete and
+its released route contract must exactly match this companion before CLI
+publication or Phase A invocation. The companion's eventual CLI-owned release is coordinated as
+`0.9.0`; it does not duplicate the multi-platform distribution scope in PR #21.
 
 ## Current Repo Boundary
 
