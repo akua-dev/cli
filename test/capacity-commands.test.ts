@@ -7,9 +7,9 @@ import { capacityView, type CapacityDependencies } from "../src/commands/capacit
 import { PublicApiClient, type ApiFetch } from "../src/runtime/public-api-client";
 
 const TOKEN = "sentinel-public-api-token";
-const CLUSTER = "clu_j572abc123def456";
-const WORKSPACE = "ws_j572abc123def456";
-const CONFIG = "cfg_j572abc123def456";
+const CLUSTER = "clu_j572abc123def456j572abc123def456";
+const WORKSPACE = "ws_j572abc123def456j572abc123def456";
+const CONFIG = "j572abc123def456j572abc123def456";
 
 describe("capacity command overlays", () => {
   test("clusters get binds the canonical path and exact workspace header", async () => {
@@ -52,11 +52,67 @@ describe("capacity command overlays", () => {
     expect(machines.requests[0].url).toBe(`https://api.akua.dev/v1/machines?cluster_id=${CLUSTER}&view=full`);
   });
 
-  test("instance types require an explicit config and return full comparison fields", async () => {
+  test("instance types bind the explicit config name and return full comparison fields", async () => {
     const fixture = apiFixture([{ name: "cpx31", arch: "amd64", cpu: 4, memory_mib: 8192, storage_mib: 163840, price_per_hour: 0.0208, available: true, zone: "fsn1", capacity_type: "on-demand" }]);
-    const result = await capacityView(["compute", "list-instance-types", "--config", CONFIG], {}, deps(fixture.fetch));
+    const configName = "hcloud fsn1/prod";
+    const result = await capacityView(["compute", "list-instance-types", "--config", configName], {}, deps(fixture.fetch));
     expect(result.data).toEqual([{ name: "cpx31", arch: "amd64", cpu: 4, memory_mib: 8192, storage_mib: 163840, price_per_hour: 0.0208, available: true, zone: "fsn1", capacity_type: "on-demand" }]);
-    expect(fixture.requests[0].url).toBe(`https://api.akua.dev/v1/compute/instance_types?config=${CONFIG}`);
+    expect(fixture.requests[0].url).toBe("https://api.akua.dev/v1/compute/instance_types?config=hcloud%20fsn1%2Fprod");
+  });
+
+  test("machine create submits the canonical closed request exactly once", async () => {
+    const fixture = apiFixture({ operation_id: "op_create_123" }, 202);
+    const result = await capacityView([
+      "machines", "create",
+      "--cluster-id", CLUSTER,
+      "--compute-config-id", CONFIG,
+      "--instance-type", "cpx31",
+      "--idempotency-key", "captain-stable-key",
+      "--workspace", WORKSPACE,
+      "--yes",
+    ], {}, deps(fixture.fetch));
+
+    expect(result.data).toEqual({ operation_id: "op_create_123", idempotency_key: "captain-stable-key" });
+    expect(fixture.requests).toHaveLength(1);
+    expect(fixture.requests[0]).toEqual({
+      url: "https://api.akua.dev/v1/machines",
+      method: "POST",
+      headers: {
+        "akua-context": WORKSPACE,
+        authorization: `Bearer ${TOKEN}`,
+        "content-type": "application/json",
+        "idempotency-key": "captain-stable-key",
+      },
+      body: JSON.stringify({ cluster_id: CLUSTER, compute_config_id: CONFIG, instance_type: "cpx31" }),
+    });
+    expect(JSON.stringify(result)).not.toContain(TOKEN);
+  });
+
+  test("ambiguous machine-create transport outcome is not retried and preserves same-key guidance", async () => {
+    let attempts = 0;
+    const fetch: ApiFetch = async () => {
+      attempts += 1;
+      throw new Error(`socket closed with ${TOKEN}`);
+    };
+    const error = await capacityView([
+      "machines", "create",
+      "--cluster-id", CLUSTER,
+      "--compute-config-id", CONFIG,
+      "--instance-type", "cpx31",
+      "--idempotency-key", "captain-stable-key",
+      "--yes",
+    ], {}, deps(fetch)).catch((value) => value);
+
+    expect(attempts).toBe(1);
+    expect(error).toMatchObject({
+      code: "AKUA_MACHINE_CREATE_OUTCOME_UNKNOWN",
+      message: expect.stringContaining("unknown"),
+      nextSteps: [{
+        command: expect.stringContaining("<same-key>"),
+        description: expect.stringContaining("exact caller-supplied idempotency key"),
+      }],
+    });
+    expect(JSON.stringify(error.toPayload())).not.toContain(TOKEN);
   });
 
   test("invalid IDs, unknown flags, and create without yes fail before auth or fetch", async () => {
@@ -67,7 +123,7 @@ describe("capacity command overlays", () => {
       fetch: async () => { fetchCalls += 1; throw new Error("must not fetch"); },
     };
     for (const argv of [
-      ["clusters", "get", "--id", "not-a-cluster"],
+      ["clusters", "get", "--id", "clu_j572abc123def456"],
       ["machines", "list", "--cluster-id", CLUSTER, "--bogus"],
       ["machines", "create", "--cluster-id", CLUSTER, "--compute-config-id", CONFIG, "--instance-type", "cpx31", "--idempotency-key", "captain-key"],
     ]) {

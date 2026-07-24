@@ -1,4 +1,4 @@
-import { usageError } from "../runtime/errors";
+import { AkuaCliError, usageError } from "../runtime/errors";
 import { PublicApiClient, type ApiFetch } from "../runtime/public-api-client";
 import type { RenderEnvelope } from "../runtime/render";
 import { readPublicApiToken } from "./auth";
@@ -15,8 +15,14 @@ const productionDependencies: CapacityDependencies = {
 
 interface ParsedCommand {
   command: string;
-  path: string;
+  path?: string;
   workspace?: string;
+  create?: {
+    cluster_id: string;
+    compute_config_id: string;
+    instance_type: string;
+    idempotency_key: string;
+  };
 }
 
 export async function capacityView(
@@ -26,7 +32,17 @@ export async function capacityView(
 ): Promise<RenderEnvelope> {
   const parsed = parseCommand(argv);
   const token = await dependencies.readToken(env);
-  const data = await new PublicApiClient(token, dependencies.fetch).get(parsed.path, parsed.workspace);
+  const client = new PublicApiClient(token, dependencies.fetch);
+  if (parsed.create !== undefined) {
+    const { idempotency_key, ...body } = parsed.create;
+    const operation = validateOperationEnvelope(await client.createMachine(body, idempotency_key, parsed.workspace));
+    return {
+      command: parsed.command,
+      observations: ["Machine creation accepted. No automatic retry was attempted."],
+      data: { ...operation, idempotency_key },
+    };
+  }
+  const data = await client.get(parsed.path as string, parsed.workspace);
   return { command: parsed.command, data };
 }
 
@@ -50,10 +66,10 @@ function parseCommand(argv: readonly string[]): ParsedCommand {
 
   if (operation === "compute list-instance-types") {
     allowOnly(flags, ["--config"]);
-    const config = requiredCanonicalId(flags, "--config", "cfg");
+    const config = requiredBoundedValue(flags, "--config", 54);
     return {
       command: "akua compute list-instance-types",
-      path: `/v1/compute/instance_types?config=${config}`,
+      path: `/v1/compute/instance_types?config=${encodeURIComponent(config)}`,
     };
   }
 
@@ -70,15 +86,20 @@ function parseCommand(argv: readonly string[]): ParsedCommand {
   }
 
   if (operation === "machines create") {
-    allowOnly(flags, ["--cluster-id", "--compute-config-id", "--instance-type", "--idempotency-key", "--yes"]);
-    requiredCanonicalId(flags, "--cluster-id", "clu");
-    requiredCanonicalId(flags, "--compute-config-id", "cfg");
-    requiredValue(flags, "--instance-type");
-    requiredValue(flags, "--idempotency-key");
+    allowOnly(flags, ["--cluster-id", "--compute-config-id", "--instance-type", "--idempotency-key", "--workspace", "--yes"]);
+    const cluster_id = requiredCanonicalId(flags, "--cluster-id", "clu");
+    const compute_config_id = requiredBoundedValue(flags, "--compute-config-id", 54);
+    const instance_type = requiredBoundedValue(flags, "--instance-type", 120);
+    const idempotency_key = requiredBoundedValue(flags, "--idempotency-key", 64);
+    const workspace = optionalCanonicalId(flags, "--workspace", "ws");
     if (flags.get("--yes") !== true) {
       throw usageError("machines create requires explicit --yes confirmation.");
     }
-    throw usageError("machines create execution is not available in this capacity overlay.");
+    return {
+      command: "akua machines create",
+      workspace,
+      create: { cluster_id, compute_config_id, instance_type, idempotency_key },
+    };
   }
 
   throw usageError("Unknown capacity command.");
@@ -125,7 +146,7 @@ function allowOnly(flags: ReadonlyMap<string, string | true>, allowed: readonly 
 
 function requiredCanonicalId(flags: ReadonlyMap<string, string | true>, name: string, prefix: string): string {
   const value = requiredValue(flags, name);
-  if (!new RegExp(`^${prefix}_[a-z0-9]{16}$`).test(value)) {
+  if (!new RegExp(`^${prefix}_[a-z0-9]{32}$`).test(value)) {
     throw usageError(`${name} must be a canonical ${prefix}_ ID.`);
   }
   return value;
@@ -148,6 +169,38 @@ function requiredValue(flags: ReadonlyMap<string, string | true>, name: string):
     throw usageError(`Missing required ${name} flag.`);
   }
   return value;
+}
+
+function requiredBoundedValue(
+  flags: ReadonlyMap<string, string | true>,
+  name: string,
+  maxLength: number,
+): string {
+  const value = requiredValue(flags, name);
+  if (value.length > maxLength || /[\u0000-\u001f\u007f]/.test(value)) {
+    throw usageError(`${name} must be at most ${maxLength} characters and contain no control characters.`);
+  }
+  return value;
+}
+
+function validateOperationEnvelope(value: unknown): { operation_id: string } {
+  if (
+    value === null ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    Object.keys(value).length !== 1 ||
+    typeof (value as Record<string, unknown>).operation_id !== "string" ||
+    (value as Record<string, string>).operation_id.length < 1 ||
+    (value as Record<string, string>).operation_id.length > 53
+  ) {
+    throw new AkuaCliError({
+      type: "invalid_response",
+      code: "AKUA_PUBLIC_API_INVALID_RESPONSE",
+      message: "The Akua API machine-create response did not match the reviewed contract.",
+      exitCode: 1,
+    });
+  }
+  return value as { operation_id: string };
 }
 
 function requireExactValue(flags: ReadonlyMap<string, string | true>, name: string, expected: string): void {
