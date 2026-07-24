@@ -66,7 +66,7 @@ jobs:
       - run: mise run check
       - name: Build and verify all release artifacts
         run: bun scripts/release.ts package --version "$VERSION" --output dist/release
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: akua-release-${{ inputs.version }}
           path: dist/release/
