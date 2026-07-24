@@ -4,7 +4,7 @@
 Bun/TypeScript executable for humans, automation, and coding agents. The current
 MVP implements local token authentication, adaptive structured output, and
 discovery of the public operationId-driven command registry. Generated API
-commands are discoverable but not yet executable unless `akua --help` says so.
+commands are discovery-only unless listed as executable by `akua --help`.
 
 The canonical executable is `akua`; there is no `cnap` compatibility binary.
 
@@ -138,6 +138,23 @@ akua auth login --token 'sk_akua_...'
 akua auth status
 akua auth logout
 ```
+
+## Executable capacity overlays
+
+Four reviewed public API reads are executable in addition to the discovery-only
+generated registry:
+
+```sh
+akua clusters get --id <clu_id> [--workspace <ws_id>]
+akua compute-configs list --view full [--workspace <ws_id>]
+akua compute list-instance-types --config <cfg_id>
+akua machines list --cluster-id <clu_id> --view full [--workspace <ws_id>]
+```
+
+They use the fixed production API, accept only canonical IDs, and authenticate
+with `AKUA_API_TOKEN` before the protected local config. `machines create` and
+all other generated mutations remain unavailable; registry discovery does not
+imply execution support.
 
 `AKUA_API_TOKEN` takes precedence over a stored token. Login writes
 `~/.config/akua/config.json`; the directory is forced to `0700` and the file to
