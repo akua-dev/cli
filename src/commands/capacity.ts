@@ -1,11 +1,17 @@
 import { usageError } from "../runtime/errors";
 import { PublicApiClient, type ApiFetch } from "../runtime/public-api-client";
 import type { RenderEnvelope } from "../runtime/render";
+import { readPublicApiToken } from "./auth";
 
 export interface CapacityDependencies {
   readToken(env: Record<string, string | undefined>): Promise<string>;
   fetch: ApiFetch;
 }
+
+const productionDependencies: CapacityDependencies = {
+  readToken: readPublicApiToken,
+  fetch,
+};
 
 interface ParsedCommand {
   command: string;
@@ -16,7 +22,7 @@ interface ParsedCommand {
 export async function capacityView(
   argv: readonly string[],
   env: Record<string, string | undefined>,
-  dependencies: CapacityDependencies,
+  dependencies: CapacityDependencies = productionDependencies,
 ): Promise<RenderEnvelope> {
   const parsed = parseCommand(argv);
   const token = await dependencies.readToken(env);

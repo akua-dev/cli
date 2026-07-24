@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { authView } from "../commands/auth";
 import { agentOsView } from "../commands/agent-os";
+import { capacityView } from "../commands/capacity";
 import { buildHomeView } from "../commands/home";
 import { commandRegistry } from "../generated/commands.gen";
 import { AkuaCliError, commandNotImplemented, usageError } from "../runtime/errors";
@@ -52,6 +53,10 @@ async function route(argv: readonly string[], env: Record<string, string | undef
     return agentOsView(argv.slice(1), env);
   }
 
+  if (isCapacityOverlay(argv)) {
+    return capacityView(argv, env);
+  }
+
   const unknownFlag = argv.find((arg) => arg.startsWith("-"));
   if (unknownFlag) {
     throw usageError(`Unknown flag: ${flagName(unknownFlag)}`);
@@ -101,6 +106,11 @@ function helpView(): RenderEnvelope {
       "  akua auth status      Show local authentication status",
       "  akua auth logout      Remove the saved local API token",
       "  akua agent-os load-hcloud-provider --workspace <exact-name-or-ws_id> --token-file <absolute-path> [--expected-ssh-key-fingerprint <fingerprint> [--expected-ssh-key-name <name>]]",
+      "  akua clusters get --id <clu_id> [--workspace <ws_id>]",
+      "  akua compute-configs list --view full [--workspace <ws_id>]",
+      "  akua compute list-instance-types --config <cfg_id>",
+      "  akua machines list --cluster-id <clu_id> --view full [--workspace <ws_id>]",
+      "  akua machines create ... --yes  Validate the bounded create command (submission unavailable)",
       "  akua commands         List generated public OpenAPI command registry",
       "  akua --help           Show help",
       "  akua --version        Show version",
@@ -110,6 +120,17 @@ function helpView(): RenderEnvelope {
       { command: "akua commands --json" },
     ],
   };
+}
+
+function isCapacityOverlay(argv: readonly string[]): boolean {
+  const command = `${argv[0] ?? ""} ${argv[1] ?? ""}`;
+  return (
+    command === "clusters get" ||
+    command === "compute-configs list" ||
+    command === "compute list-instance-types" ||
+    command === "machines list" ||
+    command === "machines create"
+  );
 }
 
 function stripGlobalFlags(argv: readonly string[]): string[] {
