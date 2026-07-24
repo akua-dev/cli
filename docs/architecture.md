@@ -1,6 +1,6 @@
 # Akua Cloud CLI Architecture
 
-Status: greenfield scaffold with local auth/config MVP.
+Status: local auth/config MVP with bounded executable capacity overlays.
 
 ## Decisions And Non-Goals
 
@@ -128,12 +128,16 @@ segment becomes the action, and single-segment operationIds fall back to the
 HTTP method as the action. The generator assumes OpenAPI operationIds are
 unique; it does not currently enforce uniqueness itself.
 
-The generator deliberately produces a registry, not hand-written API coverage.
-Execution is stubbed until the API client and request/body binding layer lands.
-The next implementation step should add a small CLI overlay file for exceptions
-that cannot be inferred safely from OpenAPI alone, such as preferred aliases,
-default list fields, destructive-command confirmation labels, and resource-
-specific next steps.
+The generator deliberately produces a discovery registry, not generic API
+execution. A small hand-written capacity overlay executes only reviewed
+contracts: `clusters get`, `compute-configs list --view full`,
+`compute list-instance-types --config <config-name>`,
+`machines list --cluster-id <clu_id> --view full`, and canonical
+`machines create --cluster-id <clu_id> --compute-config-id <config_id>
+--instance-type <exact-type> --idempotency-key <stable-key> [--workspace
+<ws_id>] --yes`. All other generated rows are discovery-only. The create
+overlay binds a closed three-field body to `POST /v1/machines`; it does not
+enable the legacy untyped `compute.createMachine` `node_claim` contract.
 
 Generation tasks:
 
@@ -239,6 +243,11 @@ akua                                      # registry status home view
 akua auth login --token <token>           # save a local API token
 akua auth status                          # show effective auth source
 akua auth logout                          # remove the saved local API token
+akua clusters get --id <clu_id>           # executable reviewed API overlay
+akua compute-configs list --view full      # executable reviewed API overlay
+akua compute list-instance-types --config <config-name>
+akua machines list --cluster-id <clu_id> --view full
+akua machines create --cluster-id <clu_id> --compute-config-id <config_id> --instance-type <exact-type> --idempotency-key <stable-key> [--workspace <ws_id>] --yes
 akua commands                            # first 20 generated public commands
 akua commands --resource workspaces      # resource filter
 akua commands --operation-id workspaces.list

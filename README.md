@@ -4,7 +4,7 @@
 Bun/TypeScript executable for humans, automation, and coding agents. The current
 MVP implements local token authentication, adaptive structured output, and
 discovery of the public operationId-driven command registry. Generated API
-commands are discoverable but not yet executable unless `akua --help` says so.
+commands are discovery-only unless listed as executable by `akua --help`.
 
 The canonical executable is `akua`; there is no `cnap` compatibility binary.
 
@@ -138,6 +138,26 @@ akua auth login --token 'sk_akua_...'
 akua auth status
 akua auth logout
 ```
+
+## Executable capacity overlays
+
+Five reviewed public API overlays are executable in addition to the
+discovery-only generated registry:
+
+```sh
+akua clusters get --id <clu_id> [--workspace <ws_id>]
+akua compute-configs list --view full [--workspace <ws_id>]
+akua compute list-instance-types --config <config-name>
+akua machines list --cluster-id <clu_id> --view full [--workspace <ws_id>]
+akua machines create --cluster-id <clu_id> --compute-config-id <config_id> --instance-type <exact-type> --idempotency-key <stable-key> [--workspace <ws_id>] --yes
+```
+
+They use the fixed production API, validate canonical resource IDs and bounded
+names locally, and authenticate with `AKUA_API_TOKEN` before the protected local
+config. Machine creation targets only canonical `POST /v1/machines`, submits
+once, and requires explicit `--yes` plus a caller-visible idempotency key. All
+other generated mutations remain unavailable; registry discovery does not imply
+execution support.
 
 `AKUA_API_TOKEN` takes precedence over a stored token. Login writes
 `~/.config/akua/config.json`; the directory is forced to `0700` and the file to

@@ -63,6 +63,23 @@ export async function readProtectedCallerToken(env: Record<string, string | unde
   return token;
 }
 
+export async function readPublicApiToken(env: Record<string, string | undefined>): Promise<string> {
+  if (hasEnvToken(env)) {
+    return env.AKUA_API_TOKEN as string;
+  }
+
+  const token = (await readConfig(resolveConfigPath(env))).token;
+  if (typeof token !== "string" || token === "") {
+    throw new AkuaCliError({
+      type: "authentication_error",
+      code: "AKUA_PUBLIC_API_AUTH_REQUIRED",
+      message: "An Akua API token is required.",
+      exitCode: 3,
+    });
+  }
+  return token;
+}
+
 async function loginView(argv: readonly string[], env: Record<string, string | undefined>): Promise<RenderEnvelope> {
   const token = parseLoginFlags(argv);
   const configPath = resolveConfigPath(env);
