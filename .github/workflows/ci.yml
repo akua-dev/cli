@@ -34,7 +34,7 @@ jobs:
         run: |
           version="$(bun -p "require('./package.json').version")"
           bun scripts/release.ts package --version "$version" --output dist/release
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: akua-release-candidate
           path: dist/release/
