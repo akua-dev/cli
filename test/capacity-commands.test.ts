@@ -53,11 +53,12 @@ describe("capacity command overlays", () => {
     expect(machines.requests[0].url).toBe(`https://api.akua.dev/v1/machines?cluster_id=${CLUSTER}&view=full`);
   });
 
-  test("instance types bind the explicit prefixed config ID and return full comparison fields", async () => {
+  test("instance types bind the explicit config name and return full comparison fields", async () => {
     const fixture = apiFixture([{ name: "cpx31", arch: "amd64", cpu: 4, memory_mib: 8192, storage_mib: 163840, price_per_hour: 0.0208, available: true, zone: "fsn1", capacity_type: "on-demand" }]);
-    const result = await capacityView(["compute", "list-instance-types", "--config", CONFIG], {}, deps(fixture.fetch));
+    const configName = "hcloud fsn1/prod";
+    const result = await capacityView(["compute", "list-instance-types", "--config", configName], {}, deps(fixture.fetch));
     expect(result.data).toEqual([{ name: "cpx31", arch: "amd64", cpu: 4, memory_mib: 8192, storage_mib: 163840, price_per_hour: 0.0208, available: true, zone: "fsn1", capacity_type: "on-demand" }]);
-    expect(fixture.requests[0].url).toBe(`https://api.akua.dev/v1/compute/instance_types?config=${CONFIG}`);
+    expect(fixture.requests[0].url).toBe("https://api.akua.dev/v1/compute/instance_types?config=hcloud%20fsn1%2Fprod");
   });
 
   test("machine create submits the canonical closed request exactly once", async () => {
@@ -134,14 +135,14 @@ describe("capacity command overlays", () => {
   test("valid provider errors project the first stable entry and redact tokens", async () => {
     const fixture = apiFixture({
       success: false,
-      errors: [{ code: 7002, message: `Resource ${TOKEN} not found`, path: ["body", "compute_config_id"], metadata: { ignored: "value" } }],
+      errors: [{ code: 7002, message: `Resource ${TOKEN} not found`, path: ["body", `compute_config_id.${TOKEN}`], metadata: { ignored: "value" } }],
       result: {},
     }, 404, { "x-request-id": "req_safe", "retry-after": "9" });
     const error = await capacityView(["compute", "list-instance-types", "--config", CONFIG], {}, deps(fixture.fetch)).catch((value) => value);
     expect(error).toMatchObject({
       code: "AKUA_PUBLIC_API_7002",
       status: 404,
-      path: ["body", "compute_config_id"],
+      path: ["body", "compute_config_id.[REDACTED]"],
       requestId: "req_safe",
       retryAfter: "9",
     });
@@ -179,7 +180,8 @@ describe("capacity command overlays", () => {
     };
     for (const argv of [
       ["clusters", "get", "--id", "clu_j572abc123def456"],
-      ["compute", "list-instance-types", "--config", RAW_UUID],
+      ["compute", "list-instance-types", "--config", "bad\nconfig"],
+      ["compute", "list-instance-types", "--config", "x".repeat(55)],
       ["machines", "create", "--cluster-id", CLUSTER, "--compute-config-id", RAW_UUID, "--instance-type", "cpx31", "--idempotency-key", "captain-key", "--yes"],
       ["machines", "list", "--cluster-id", CLUSTER, "--bogus"],
       ["machines", "create", "--cluster-id", CLUSTER, "--compute-config-id", CONFIG, "--instance-type", "cpx31", "--idempotency-key", "captain-key"],
@@ -227,6 +229,8 @@ describe("capacity command overlays", () => {
     expect(cli.stdout).toContain("akua compute-configs list --view full");
     expect(cli.stdout).toContain("akua compute list-instance-types");
     expect(cli.stdout).toContain("akua machines list");
+    expect(cli.stdout).toContain("akua machines create --cluster-id <clu_id> --compute-config-id <config_id> --instance-type <exact-type> --idempotency-key <stable-key> [--workspace <ws_id>] --yes");
+    expect(cli.stdout).not.toContain("submission unavailable");
   });
 });
 

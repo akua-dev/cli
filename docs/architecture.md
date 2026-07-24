@@ -131,10 +131,13 @@ unique; it does not currently enforce uniqueness itself.
 The generator deliberately produces a discovery registry, not generic API
 execution. A small hand-written capacity overlay executes only reviewed
 contracts: `clusters get`, `compute-configs list --view full`,
-`compute list-instance-types --config <cfg_id>`, and
-`machines list --cluster-id <clu_id> --view full`. All other generated rows are
-discovery-only. In particular, `machines create` remains unavailable rather
-than enabling the legacy untyped `node_claim` contract.
+`compute list-instance-types --config <config-name>`,
+`machines list --cluster-id <clu_id> --view full`, and canonical
+`machines create --cluster-id <clu_id> --compute-config-id <config_id>
+--instance-type <exact-type> --idempotency-key <stable-key> [--workspace
+<ws_id>] --yes`. All other generated rows are discovery-only. The create
+overlay binds a closed three-field body to `POST /v1/machines`; it does not
+enable the legacy untyped `compute.createMachine` `node_claim` contract.
 
 Generation tasks:
 
@@ -242,8 +245,9 @@ akua auth status                          # show effective auth source
 akua auth logout                          # remove the saved local API token
 akua clusters get --id <clu_id>           # executable reviewed API overlay
 akua compute-configs list --view full      # executable reviewed API overlay
-akua compute list-instance-types --config <cfg_id>
+akua compute list-instance-types --config <config-name>
 akua machines list --cluster-id <clu_id> --view full
+akua machines create --cluster-id <clu_id> --compute-config-id <config_id> --instance-type <exact-type> --idempotency-key <stable-key> [--workspace <ws_id>] --yes
 akua commands                            # first 20 generated public commands
 akua commands --resource workspaces      # resource filter
 akua commands --operation-id workspaces.list

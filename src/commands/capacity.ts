@@ -66,7 +66,7 @@ function parseCommand(argv: readonly string[]): ParsedCommand {
 
   if (operation === "compute list-instance-types") {
     allowOnly(flags, ["--config"]);
-    const config = requiredOpaquePublicId(flags, "--config");
+    const config = requiredBoundedValue(flags, "--config", 54);
     return {
       command: "akua compute list-instance-types",
       path: `/v1/compute/instance_types?config=${encodeURIComponent(config)}`,

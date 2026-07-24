@@ -167,7 +167,7 @@ function apiError(response: Response, body?: unknown, token?: string): AkuaCliEr
     message: entry === undefined
       ? "The Akua API rejected the request."
       : redactToken(entry.message, token),
-    path: entry?.path,
+    path: entry?.path?.map((part) => redactToken(part, token)),
     status: response.status,
     requestId: response.headers.get("x-request-id") ?? undefined,
     retryAfter: response.headers.get("retry-after"),
