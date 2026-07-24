@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 import { readPublicApiToken } from "../src/commands/auth";
 import { capacityView, type CapacityDependencies } from "../src/commands/capacity";
+import { AkuaCliError } from "../src/runtime/errors";
 import { PublicApiClient, type ApiFetch } from "../src/runtime/public-api-client";
 
 const TOKEN = "sentinel-public-api-token";
@@ -168,6 +169,7 @@ describe("capacity command overlays", () => {
     const client = new PublicApiClient(TOKEN, fetch, { maxResponseBytes: 32 });
     const error = await client.get("/v1/clusters/test").catch((value) => value);
     expect(error).toMatchObject({ code: "AKUA_PUBLIC_API_INVALID_RESPONSE" });
+    if (!(error instanceof AkuaCliError)) throw new Error("Expected a structured CLI error.");
     expect(JSON.stringify(error.toPayload())).not.toContain(TOKEN);
   });
 
