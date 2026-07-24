@@ -1,4 +1,4 @@
-import { AkuaCliError, usageError } from "../runtime/errors";
+import { usageError } from "../runtime/errors";
 import { PublicApiClient, type ApiFetch } from "../runtime/public-api-client";
 import type { RenderEnvelope } from "../runtime/render";
 import { readPublicApiToken } from "./auth";
@@ -35,7 +35,7 @@ export async function capacityView(
   const client = new PublicApiClient(token, dependencies.fetch);
   if (parsed.create !== undefined) {
     const { idempotency_key, ...body } = parsed.create;
-    const operation = validateOperationEnvelope(await client.createMachine(body, idempotency_key, parsed.workspace));
+    const operation = await client.createMachine(body, idempotency_key, parsed.workspace);
     return {
       command: parsed.command,
       observations: ["Machine creation accepted. No automatic retry was attempted."],
@@ -66,7 +66,7 @@ function parseCommand(argv: readonly string[]): ParsedCommand {
 
   if (operation === "compute list-instance-types") {
     allowOnly(flags, ["--config"]);
-    const config = requiredBoundedValue(flags, "--config", 54);
+    const config = requiredOpaquePublicId(flags, "--config");
     return {
       command: "akua compute list-instance-types",
       path: `/v1/compute/instance_types?config=${encodeURIComponent(config)}`,
@@ -88,7 +88,7 @@ function parseCommand(argv: readonly string[]): ParsedCommand {
   if (operation === "machines create") {
     allowOnly(flags, ["--cluster-id", "--compute-config-id", "--instance-type", "--idempotency-key", "--workspace", "--yes"]);
     const cluster_id = requiredCanonicalId(flags, "--cluster-id", "clu");
-    const compute_config_id = requiredBoundedValue(flags, "--compute-config-id", 54);
+    const compute_config_id = requiredOpaquePublicId(flags, "--compute-config-id");
     const instance_type = requiredBoundedValue(flags, "--instance-type", 120);
     const idempotency_key = requiredBoundedValue(flags, "--idempotency-key", 64);
     const workspace = optionalCanonicalId(flags, "--workspace", "ws");
@@ -183,24 +183,14 @@ function requiredBoundedValue(
   return value;
 }
 
-function validateOperationEnvelope(value: unknown): { operation_id: string } {
-  if (
-    value === null ||
-    typeof value !== "object" ||
-    Array.isArray(value) ||
-    Object.keys(value).length !== 1 ||
-    typeof (value as Record<string, unknown>).operation_id !== "string" ||
-    (value as Record<string, string>).operation_id.length < 1 ||
-    (value as Record<string, string>).operation_id.length > 53
-  ) {
-    throw new AkuaCliError({
-      type: "invalid_response",
-      code: "AKUA_PUBLIC_API_INVALID_RESPONSE",
-      message: "The Akua API machine-create response did not match the reviewed contract.",
-      exitCode: 1,
-    });
+function requiredOpaquePublicId(flags: ReadonlyMap<string, string | true>, name: string): string {
+  const value = requiredValue(flags, name);
+  // Public IDs have an opaque 32-character payload and a resource prefix. The
+  // OpenAPI contract does not assign a literal prefix to compute configs.
+  if (value.length > 54 || !/^[a-z][a-z0-9]{0,20}_[a-z0-9]{32}$/.test(value)) {
+    throw usageError(`${name} must be a prefixed opaque public ID.`);
   }
-  return value as { operation_id: string };
+  return value;
 }
 
 function requireExactValue(flags: ReadonlyMap<string, string | true>, name: string, expected: string): void {
