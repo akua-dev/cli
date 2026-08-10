@@ -57,7 +57,7 @@ export const RELEASE_TARGETS: readonly ReleaseTarget[] = [
     arch: "x64",
     archive: "tar.gz",
     executable: "akua",
-    runner: "ubuntu-24.04",
+    runner: "akua-x64-ci-v2",
     homebrew: { os: "linux", arch: "intel" },
   },
   {
@@ -321,7 +321,13 @@ export async function packageExistingExecutables(input: PackageExistingExecutabl
 
 export async function packageRelease(input: PackageReleaseInput): Promise<void> {
   validateVersion(input.version);
-  const binaryRoot = await mkdtemp(join(tmpdir(), "akua-release-build-"));
+  // Bun's compiled output is memory-mapped. Under Kata, output created on the
+  // guest-local /tmp filesystem was observed as correctly sized but entirely
+  // sparse/zero-filled. Keep compilation on the Actions workspace's virtiofs
+  // volume, then validate the native executable header before packaging it.
+  const binaryBuildParent = join(process.cwd(), "dist");
+  await mkdir(binaryBuildParent, { recursive: true });
+  const binaryRoot = await mkdtemp(join(binaryBuildParent, ".tmp-akua-release-build-"));
   const binaries: Record<string, string> = {};
   try {
     for (const target of RELEASE_TARGETS) {
@@ -337,11 +343,23 @@ export async function packageRelease(input: PackageReleaseInput): Promise<void> 
         "--no-compile-autoload-bunfig",
         `--outfile=${binaryPath}`,
       ]);
+      assertCompiledExecutable(target, await readFile(binaryPath));
       binaries[target.id] = binaryPath;
     }
     await packageExistingExecutables({ version: input.version, outputDir: input.outputDir, binaries });
   } finally {
     await rm(binaryRoot, { recursive: true, force: true });
+  }
+}
+
+export function assertCompiledExecutable(target: Pick<ReleaseTarget, "id" | "os">, bytes: Uint8Array): void {
+  const expectedMagic = target.os === "darwin"
+    ? [0xcf, 0xfa, 0xed, 0xfe]
+    : target.os === "linux"
+      ? [0x7f, 0x45, 0x4c, 0x46]
+      : [0x4d, 0x5a];
+  if (bytes.length < expectedMagic.length || expectedMagic.some((byte, index) => bytes[index] !== byte)) {
+    throw new Error(`Compiled executable has an invalid ${target.os} header for ${target.id}`);
   }
 }
 

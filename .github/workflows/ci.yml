@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    runs-on: akua-x64-ci-v2
     steps:
       - uses: actions/checkout@v7
       - uses: jdx/mise-action@v2
@@ -19,7 +19,7 @@ jobs:
       - run: mise run check
 
   package-release:
-    runs-on: ubuntu-24.04
+    runs-on: akua-heavy-ci-v2
     outputs:
       matrix: ${{ steps.release-matrix.outputs.matrix }}
     steps:
