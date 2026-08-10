@@ -2,6 +2,19 @@ import { describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 
 describe("distribution workflows", () => {
+  test("Linux x64 jobs use the audited AgentOS ARC pools", async () => {
+    const workflows = await Promise.all([
+      readFile(".github/workflows/ci.yml", "utf8"),
+      readFile(".github/workflows/release-please.yml", "utf8"),
+      readFile(".github/workflows/release.yml", "utf8"),
+      readFile(".github/workflows/update-openapi.yml", "utf8"),
+    ]);
+
+    for (const workflow of workflows) {
+      expect(workflow).not.toMatch(/^\s+runs-on: (?:ubuntu-latest|ubuntu-24\.04|ubuntu-22\.04)$/m);
+    }
+  });
+
   test("the release workflow consumes the complete release target matrix", async () => {
     const workflow = await readFile(".github/workflows/release.yml", "utf8");
 

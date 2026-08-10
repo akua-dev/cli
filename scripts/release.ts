@@ -57,7 +57,7 @@ export const RELEASE_TARGETS: readonly ReleaseTarget[] = [
     arch: "x64",
     archive: "tar.gz",
     executable: "akua",
-    runner: "ubuntu-24.04",
+    runner: "akua-x64-ci-v2",
     homebrew: { os: "linux", arch: "intel" },
   },
   {
