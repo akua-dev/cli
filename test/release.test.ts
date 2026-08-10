@@ -124,6 +124,23 @@ describe("release target contract", () => {
     );
   });
 
+  test("rejects zero-filled compiled outputs before release packaging", async () => {
+    const release = await import("../scripts/release") as Record<string, unknown>;
+    const assertCompiledExecutable = release.assertCompiledExecutable as (
+      target: { id: string; os: "darwin" | "linux" | "windows" },
+      bytes: Uint8Array,
+    ) => void;
+
+    expect(() => assertCompiledExecutable(
+      { id: "linux-x64", os: "linux" },
+      new Uint8Array(64),
+    )).toThrow("invalid linux header");
+    expect(() => assertCompiledExecutable(
+      { id: "linux-x64", os: "linux" },
+      new Uint8Array([0x7f, 0x45, 0x4c, 0x46]),
+    )).not.toThrow();
+  });
+
   test("plans uploads for only release assets missing from an identical existing subset", async () => {
     const release = await import("../scripts/release") as Record<string, unknown>;
     expect(typeof release.planReleaseUploads).toBe("function");
