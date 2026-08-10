@@ -246,6 +246,7 @@ describe("release target contract", () => {
       const [exitCode] = await Promise.all([proc.exited, new Response(proc.stderr).text()]);
       expect(exitCode).toBe(0);
       expect((await stat(join(extractDir, "akua"))).mode & 0o777).toBe(0o755);
+      expect(await readFile(join(extractDir, "akua"))).toEqual(await readFile(source));
     } finally {
       await rm(root, { recursive: true, force: true });
     }

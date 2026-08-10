@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { chmod, copyFile, lstat, mkdir, mkdtemp, readFile, readdir, rm, stat, utimes, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 
@@ -237,7 +237,17 @@ export async function packageExistingExecutables(input: PackageExistingExecutabl
       const archive = artifactName(input.version, target);
       const archivePath = join(outputDir, archive);
       await mkdir(stagingDir, { recursive: true });
-      await copyFile(source, stagedExecutable);
+      // copyFile can use an in-kernel copy optimization across filesystems. In
+      // a Kata guest, copying from its root filesystem into the virtiofs-backed
+      // Actions work volume produced correctly sized but zero-filled binaries.
+      // Materialize and verify the bytes so release archives cannot silently
+      // contain corrupted executables.
+      const sourceBytes = await readFile(source);
+      await writeFile(stagedExecutable, sourceBytes);
+      const stagedBytes = await readFile(stagedExecutable);
+      if (!stagedBytes.equals(sourceBytes)) {
+        throw new Error(`Staged executable does not match source for ${target.id}`);
+      }
       await chmod(stagedExecutable, target.os === "windows" ? 0o644 : 0o755);
       await utimes(stagedExecutable, ARCHIVE_TIMESTAMP, ARCHIVE_TIMESTAMP);
 
