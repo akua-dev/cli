@@ -13,7 +13,32 @@ export const commandRegistry = [
     "summary": "Explain an access decision",
     "visibility": "PUBLIC",
     "requires_auth": true,
-    "parameters": []
+    "parameters": [
+      {
+        "name": "akua-context",
+        "in": "header",
+        "required": false
+      }
+    ]
+  },
+  {
+    "operation_id": "accessDecisions.explainBatch",
+    "command": "access-decisions explain-batch",
+    "resource": "access-decisions",
+    "action": "explain-batch",
+    "method": "POST",
+    "path": "/v1/access_decisions:explainBatch",
+    "tag": "Access Decisions",
+    "summary": "Explain multiple access decisions",
+    "visibility": "PUBLIC",
+    "requires_auth": true,
+    "parameters": [
+      {
+        "name": "akua-context",
+        "in": "header",
+        "required": false
+      }
+    ]
   },
   {
     "operation_id": "agentEvents.list",
@@ -1121,6 +1146,30 @@ export const commandRegistry = [
     ]
   },
   {
+    "operation_id": "clusters.getComputeSettings",
+    "command": "clusters get-compute-settings",
+    "resource": "clusters",
+    "action": "get-compute-settings",
+    "method": "GET",
+    "path": "/v1/clusters/{id}/compute_settings",
+    "tag": "Clusters",
+    "summary": "Get cluster compute settings",
+    "visibility": "PUBLIC",
+    "requires_auth": true,
+    "parameters": [
+      {
+        "name": "id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "akua-context",
+        "in": "header",
+        "required": false
+      }
+    ]
+  },
+  {
     "operation_id": "clusters.getKubeconfig",
     "command": "clusters get-kubeconfig",
     "resource": "clusters",
@@ -1460,297 +1509,30 @@ export const commandRegistry = [
     ]
   },
   {
-    "operation_id": "compute.checkMachineDrift",
-    "command": "compute check-machine-drift",
-    "resource": "compute",
-    "action": "check-machine-drift",
-    "method": "GET",
-    "path": "/v1/compute/machines/{providerId}/drift",
-    "tag": "Compute",
-    "summary": "Check if machine has drifted",
-    "visibility": "PUBLIC",
-    "requires_auth": true,
-    "parameters": [
-      {
-        "name": "providerId",
-        "in": "path",
-        "required": true
-      }
-    ]
-  },
-  {
-    "operation_id": "compute.createConfig",
-    "command": "compute create-config",
-    "resource": "compute",
-    "action": "create-config",
-    "method": "POST",
-    "path": "/v1/compute/configs",
-    "tag": "Compute",
-    "summary": "Create a compute config",
-    "visibility": "PUBLIC",
-    "requires_auth": true,
-    "parameters": []
-  },
-  {
-    "operation_id": "compute.createMachine",
-    "command": "compute create-machine",
-    "resource": "compute",
-    "action": "create-machine",
-    "method": "POST",
-    "path": "/v1/compute/machines",
-    "tag": "Compute",
-    "summary": "Create a machine",
-    "visibility": "PUBLIC",
-    "requires_auth": true,
-    "parameters": []
-  },
-  {
-    "operation_id": "compute.deleteConfig",
-    "command": "compute delete-config",
-    "resource": "compute",
-    "action": "delete-config",
-    "method": "DELETE",
-    "path": "/v1/compute/configs/{id}",
-    "tag": "Compute",
-    "summary": "Delete a compute config",
-    "visibility": "PUBLIC",
-    "requires_auth": true,
-    "parameters": [
-      {
-        "name": "id",
-        "in": "path",
-        "required": true
-      },
-      {
-        "name": "if-match",
-        "in": "header",
-        "required": true
-      }
-    ]
-  },
-  {
-    "operation_id": "compute.deleteMachine",
-    "command": "compute delete-machine",
-    "resource": "compute",
-    "action": "delete-machine",
-    "method": "DELETE",
-    "path": "/v1/compute/machines/{providerId}",
-    "tag": "Compute",
-    "summary": "Delete a machine",
-    "visibility": "PUBLIC",
-    "requires_auth": true,
-    "parameters": [
-      {
-        "name": "providerId",
-        "in": "path",
-        "required": true
-      }
-    ]
-  },
-  {
-    "operation_id": "compute.deleteSuspension",
-    "command": "compute delete-suspension",
-    "resource": "compute",
-    "action": "delete-suspension",
-    "method": "DELETE",
-    "path": "/v1/compute/suspensions/{id}",
-    "tag": "Compute",
-    "summary": "Delete a suspension",
-    "visibility": "PUBLIC",
-    "requires_auth": true,
-    "parameters": [
-      {
-        "name": "id",
-        "in": "path",
-        "required": true
-      }
-    ]
-  },
-  {
-    "operation_id": "compute.getClusterStatus",
-    "command": "compute get-cluster-status",
-    "resource": "compute",
-    "action": "get-cluster-status",
-    "method": "GET",
-    "path": "/v1/clusters/{clusterId}/compute_status",
-    "tag": "Compute",
-    "summary": "Get cluster compute status",
-    "visibility": "PUBLIC",
-    "requires_auth": true,
-    "parameters": [
-      {
-        "name": "clusterId",
-        "in": "path",
-        "required": true
-      }
-    ]
-  },
-  {
-    "operation_id": "compute.getConfig",
-    "command": "compute get-config",
-    "resource": "compute",
-    "action": "get-config",
-    "method": "GET",
-    "path": "/v1/compute/configs/{id}",
-    "tag": "Compute",
-    "summary": "Get a compute config",
-    "visibility": "PUBLIC",
-    "requires_auth": true,
-    "parameters": [
-      {
-        "name": "id",
-        "in": "path",
-        "required": true
-      }
-    ]
-  },
-  {
-    "operation_id": "compute.getMachine",
-    "command": "compute get-machine",
-    "resource": "compute",
-    "action": "get-machine",
-    "method": "GET",
-    "path": "/v1/compute/machines/{providerId}",
-    "tag": "Compute",
-    "summary": "Get machine status",
-    "visibility": "PUBLIC",
-    "requires_auth": true,
-    "parameters": [
-      {
-        "name": "providerId",
-        "in": "path",
-        "required": true
-      }
-    ]
-  },
-  {
-    "operation_id": "compute.listConfigs",
-    "command": "compute list-configs",
-    "resource": "compute",
-    "action": "list-configs",
-    "method": "GET",
-    "path": "/v1/compute/configs",
-    "tag": "Compute",
-    "summary": "List compute configs",
-    "visibility": "PUBLIC",
-    "requires_auth": true,
-    "parameters": [
-      {
-        "name": "cursor",
-        "in": "query",
-        "required": false
-      },
-      {
-        "name": "limit",
-        "in": "query",
-        "required": false
-      }
-    ]
-  },
-  {
-    "operation_id": "compute.listInstanceTypes",
-    "command": "compute list-instance-types",
-    "resource": "compute",
-    "action": "list-instance-types",
-    "method": "GET",
-    "path": "/v1/compute/instance_types",
-    "tag": "Compute",
-    "summary": "List available instance types",
-    "visibility": "PUBLIC",
-    "requires_auth": true,
-    "parameters": [
-      {
-        "name": "config",
-        "in": "query",
-        "required": false
-      }
-    ]
-  },
-  {
-    "operation_id": "compute.listMachines",
-    "command": "compute list-machines",
-    "resource": "compute",
-    "action": "list-machines",
-    "method": "GET",
-    "path": "/v1/compute/machines",
-    "tag": "Compute",
-    "summary": "List machines in cluster",
-    "visibility": "PUBLIC",
-    "requires_auth": true,
-    "parameters": [
-      {
-        "name": "cluster",
-        "in": "query",
-        "required": true
-      }
-    ]
-  },
-  {
-    "operation_id": "compute.listSuspensions",
-    "command": "compute list-suspensions",
-    "resource": "compute",
-    "action": "list-suspensions",
-    "method": "GET",
-    "path": "/v1/compute/suspensions",
-    "tag": "Compute",
-    "summary": "List suspended machines",
-    "visibility": "PUBLIC",
-    "requires_auth": true,
-    "parameters": []
-  },
-  {
-    "operation_id": "compute.resumeSuspension",
-    "command": "compute resume-suspension",
-    "resource": "compute",
-    "action": "resume-suspension",
-    "method": "POST",
-    "path": "/v1/compute/suspensions/{id}/resume",
-    "tag": "Compute",
-    "summary": "Resume a suspended machine",
-    "visibility": "PUBLIC",
-    "requires_auth": true,
-    "parameters": [
-      {
-        "name": "id",
-        "in": "path",
-        "required": true
-      }
-    ]
-  },
-  {
-    "operation_id": "compute.suspendMachine",
-    "command": "compute suspend-machine",
-    "resource": "compute",
-    "action": "suspend-machine",
-    "method": "POST",
-    "path": "/v1/compute/machines/{providerId}/suspend",
-    "tag": "Compute",
-    "summary": "Suspend a machine",
-    "visibility": "PUBLIC",
-    "requires_auth": true,
-    "parameters": [
-      {
-        "name": "providerId",
-        "in": "path",
-        "required": true
-      }
-    ]
-  },
-  {
-    "operation_id": "compute.updateClusterSettings",
-    "command": "compute update-cluster-settings",
-    "resource": "compute",
-    "action": "update-cluster-settings",
+    "operation_id": "clusters.updateComputeSettings",
+    "command": "clusters update-compute-settings",
+    "resource": "clusters",
+    "action": "update-compute-settings",
     "method": "PATCH",
-    "path": "/v1/clusters/{clusterId}/compute_settings",
-    "tag": "Compute",
+    "path": "/v1/clusters/{id}/compute_settings",
+    "tag": "Clusters",
     "summary": "Update cluster compute settings",
     "visibility": "PUBLIC",
     "requires_auth": true,
     "parameters": [
       {
-        "name": "clusterId",
+        "name": "id",
         "in": "path",
+        "required": true
+      },
+      {
+        "name": "akua-context",
+        "in": "header",
+        "required": false
+      },
+      {
+        "name": "if-match",
+        "in": "header",
         "required": true
       }
     ]
@@ -2071,7 +1853,42 @@ export const commandRegistry = [
     "summary": "Create dashboard",
     "visibility": "PUBLIC",
     "requires_auth": true,
-    "parameters": []
+    "parameters": [
+      {
+        "name": "akua-context",
+        "in": "header",
+        "required": false
+      }
+    ]
+  },
+  {
+    "operation_id": "dashboards.createRevision",
+    "command": "dashboards create-revision",
+    "resource": "dashboards",
+    "action": "create-revision",
+    "method": "POST",
+    "path": "/v1/dashboards/{id}/revisions",
+    "tag": "Dashboards",
+    "summary": "Create dashboard revision",
+    "visibility": "PUBLIC",
+    "requires_auth": true,
+    "parameters": [
+      {
+        "name": "id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "if-match",
+        "in": "header",
+        "required": true
+      },
+      {
+        "name": "idempotency-key",
+        "in": "header",
+        "required": true
+      }
+    ]
   },
   {
     "operation_id": "dashboards.createWidget",
@@ -2180,6 +1997,30 @@ export const commandRegistry = [
     ]
   },
   {
+    "operation_id": "dashboards.getRevision",
+    "command": "dashboards get-revision",
+    "resource": "dashboards",
+    "action": "get-revision",
+    "method": "GET",
+    "path": "/v1/dashboards/{id}/revisions/{revision_id}",
+    "tag": "Dashboards",
+    "summary": "Get dashboard revision",
+    "visibility": "PUBLIC",
+    "requires_auth": true,
+    "parameters": [
+      {
+        "name": "id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "revision_id",
+        "in": "path",
+        "required": true
+      }
+    ]
+  },
+  {
     "operation_id": "dashboards.getWidget",
     "command": "dashboards get-widget",
     "resource": "dashboards",
@@ -2200,6 +2041,25 @@ export const commandRegistry = [
         "name": "wgt_id",
         "in": "path",
         "required": true
+      }
+    ]
+  },
+  {
+    "operation_id": "dashboards.getWorkspaceOverview",
+    "command": "dashboards get-workspace-overview",
+    "resource": "dashboards",
+    "action": "get-workspace-overview",
+    "method": "GET",
+    "path": "/v1/dashboards/workspace_overview",
+    "tag": "Dashboards",
+    "summary": "Get the workspace overview dashboard",
+    "visibility": "PUBLIC",
+    "requires_auth": true,
+    "parameters": [
+      {
+        "name": "akua-context",
+        "in": "header",
+        "required": false
       }
     ]
   },
@@ -2233,6 +2093,35 @@ export const commandRegistry = [
     ]
   },
   {
+    "operation_id": "dashboards.listRevisions",
+    "command": "dashboards list-revisions",
+    "resource": "dashboards",
+    "action": "list-revisions",
+    "method": "GET",
+    "path": "/v1/dashboards/{id}/revisions",
+    "tag": "Dashboards",
+    "summary": "List dashboard revisions",
+    "visibility": "PUBLIC",
+    "requires_auth": true,
+    "parameters": [
+      {
+        "name": "id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "cursor",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "limit",
+        "in": "query",
+        "required": false
+      }
+    ]
+  },
+  {
     "operation_id": "dashboards.listWidgets",
     "command": "dashboards list-widgets",
     "resource": "dashboards",
@@ -2258,6 +2147,69 @@ export const commandRegistry = [
         "name": "limit",
         "in": "query",
         "required": false
+      }
+    ]
+  },
+  {
+    "operation_id": "dashboards.resetToRecommended",
+    "command": "dashboards reset-to-recommended",
+    "resource": "dashboards",
+    "action": "reset-to-recommended",
+    "method": "POST",
+    "path": "/v1/dashboards/{id}:resetToRecommended",
+    "tag": "Dashboards",
+    "summary": "Reset the Workspace overview to the recommended configuration",
+    "visibility": "PUBLIC",
+    "requires_auth": true,
+    "parameters": [
+      {
+        "name": "id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "if-match",
+        "in": "header",
+        "required": true
+      },
+      {
+        "name": "idempotency-key",
+        "in": "header",
+        "required": true
+      }
+    ]
+  },
+  {
+    "operation_id": "dashboards.restoreRevision",
+    "command": "dashboards restore-revision",
+    "resource": "dashboards",
+    "action": "restore-revision",
+    "method": "POST",
+    "path": "/v1/dashboards/{id}/revisions/{revision_id}:restore",
+    "tag": "Dashboards",
+    "summary": "Restore dashboard revision",
+    "visibility": "PUBLIC",
+    "requires_auth": true,
+    "parameters": [
+      {
+        "name": "id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "revision_id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "if-match",
+        "in": "header",
+        "required": true
+      },
+      {
+        "name": "idempotency-key",
+        "in": "header",
+        "required": true
       }
     ]
   },
@@ -2669,6 +2621,108 @@ export const commandRegistry = [
     ]
   },
   {
+    "operation_id": "installs.restore",
+    "command": "installs restore",
+    "resource": "installs",
+    "action": "restore",
+    "method": "POST",
+    "path": "/v1/installs/{id}:restore",
+    "tag": "Installs",
+    "summary": "Restore install render",
+    "visibility": "PUBLIC",
+    "requires_auth": true,
+    "parameters": [
+      {
+        "name": "id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "akua-context",
+        "in": "header",
+        "required": false
+      },
+      {
+        "name": "if-match",
+        "in": "header",
+        "required": true
+      },
+      {
+        "name": "idempotency-key",
+        "in": "header",
+        "required": true
+      }
+    ]
+  },
+  {
+    "operation_id": "installs.setAutomaticUpdates",
+    "command": "installs set-automatic-updates",
+    "resource": "installs",
+    "action": "set-automatic-updates",
+    "method": "PATCH",
+    "path": "/v1/installs/{id}/automatic_updates",
+    "tag": "Installs",
+    "summary": "Set automatic install updates",
+    "visibility": "PUBLIC",
+    "requires_auth": true,
+    "parameters": [
+      {
+        "name": "id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "akua-context",
+        "in": "header",
+        "required": false
+      },
+      {
+        "name": "if-match",
+        "in": "header",
+        "required": true
+      },
+      {
+        "name": "idempotency-key",
+        "in": "header",
+        "required": true
+      }
+    ]
+  },
+  {
+    "operation_id": "installs.updateVersion",
+    "command": "installs update-version",
+    "resource": "installs",
+    "action": "update-version",
+    "method": "POST",
+    "path": "/v1/installs/{id}:update",
+    "tag": "Installs",
+    "summary": "Update install version",
+    "visibility": "PUBLIC",
+    "requires_auth": true,
+    "parameters": [
+      {
+        "name": "id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "akua-context",
+        "in": "header",
+        "required": false
+      },
+      {
+        "name": "if-match",
+        "in": "header",
+        "required": true
+      },
+      {
+        "name": "idempotency-key",
+        "in": "header",
+        "required": true
+      }
+    ]
+  },
+  {
     "operation_id": "machines.create",
     "command": "machines create",
     "resource": "machines",
@@ -2746,7 +2800,7 @@ export const commandRegistry = [
       {
         "name": "idempotency-key",
         "in": "header",
-        "required": false
+        "required": true
       },
       {
         "name": "if-match",
@@ -2984,7 +3038,7 @@ export const commandRegistry = [
       {
         "name": "idempotency-key",
         "in": "header",
-        "required": false
+        "required": true
       },
       {
         "name": "if-match",
@@ -3018,7 +3072,7 @@ export const commandRegistry = [
       {
         "name": "idempotency-key",
         "in": "header",
-        "required": false
+        "required": true
       },
       {
         "name": "if-match",
@@ -3173,6 +3227,11 @@ export const commandRegistry = [
     "parameters": [
       {
         "name": "akua-context",
+        "in": "header",
+        "required": false
+      },
+      {
+        "name": "idempotency-key",
         "in": "header",
         "required": false
       }
@@ -3675,6 +3734,19 @@ export const commandRegistry = [
     ]
   },
   {
+    "operation_id": "organizations.acceptInvitation",
+    "command": "organizations accept-invitation",
+    "resource": "organizations",
+    "action": "accept-invitation",
+    "method": "POST",
+    "path": "/v1/organization_invitations/accept",
+    "tag": "Organizations",
+    "summary": "Accept an organization invitation",
+    "visibility": "PUBLIC",
+    "requires_auth": true,
+    "parameters": []
+  },
+  {
     "operation_id": "organizations.addMember",
     "command": "organizations add-member",
     "resource": "organizations",
@@ -3704,6 +3776,30 @@ export const commandRegistry = [
     ]
   },
   {
+    "operation_id": "organizations.cancelInvitation",
+    "command": "organizations cancel-invitation",
+    "resource": "organizations",
+    "action": "cancel-invitation",
+    "method": "DELETE",
+    "path": "/v1/organizations/{id}/invitations/{invitationId}",
+    "tag": "Organizations",
+    "summary": "Cancel an organization invitation",
+    "visibility": "PUBLIC",
+    "requires_auth": true,
+    "parameters": [
+      {
+        "name": "id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "invitationId",
+        "in": "path",
+        "required": true
+      }
+    ]
+  },
+  {
     "operation_id": "organizations.create",
     "command": "organizations create",
     "resource": "organizations",
@@ -3719,6 +3815,25 @@ export const commandRegistry = [
         "name": "idempotency-key",
         "in": "header",
         "required": false
+      }
+    ]
+  },
+  {
+    "operation_id": "organizations.createInvitation",
+    "command": "organizations create-invitation",
+    "resource": "organizations",
+    "action": "create-invitation",
+    "method": "POST",
+    "path": "/v1/organizations/{id}/invitations",
+    "tag": "Organizations",
+    "summary": "Invite an organization member by email",
+    "visibility": "PUBLIC",
+    "requires_auth": true,
+    "parameters": [
+      {
+        "name": "id",
+        "in": "path",
+        "required": true
       }
     ]
   },
@@ -3795,6 +3910,35 @@ export const commandRegistry = [
     ]
   },
   {
+    "operation_id": "organizations.listInvitations",
+    "command": "organizations list-invitations",
+    "resource": "organizations",
+    "action": "list-invitations",
+    "method": "GET",
+    "path": "/v1/organizations/{id}/invitations",
+    "tag": "Organizations",
+    "summary": "List pending organization invitations",
+    "visibility": "PUBLIC",
+    "requires_auth": true,
+    "parameters": [
+      {
+        "name": "id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "cursor",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "limit",
+        "in": "query",
+        "required": false
+      }
+    ]
+  },
+  {
     "operation_id": "organizations.listManagedWorkspaces",
     "command": "organizations list-managed-workspaces",
     "resource": "organizations",
@@ -3810,6 +3954,16 @@ export const commandRegistry = [
         "name": "id",
         "in": "path",
         "required": true
+      },
+      {
+        "name": "cursor",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "limit",
+        "in": "query",
+        "required": false
       }
     ]
   },
@@ -3829,6 +3983,16 @@ export const commandRegistry = [
         "name": "id",
         "in": "path",
         "required": true
+      },
+      {
+        "name": "cursor",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "limit",
+        "in": "query",
+        "required": false
       }
     ]
   },
@@ -3862,6 +4026,30 @@ export const commandRegistry = [
       {
         "name": "if-match",
         "in": "header",
+        "required": true
+      }
+    ]
+  },
+  {
+    "operation_id": "organizations.resendInvitation",
+    "command": "organizations resend-invitation",
+    "resource": "organizations",
+    "action": "resend-invitation",
+    "method": "POST",
+    "path": "/v1/organizations/{id}/invitations/{invitationId}/resend",
+    "tag": "Organizations",
+    "summary": "Resend an organization invitation",
+    "visibility": "PUBLIC",
+    "requires_auth": true,
+    "parameters": [
+      {
+        "name": "id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "invitationId",
+        "in": "path",
         "required": true
       }
     ]
@@ -4607,6 +4795,11 @@ export const commandRegistry = [
       {
         "name": "cluster_id",
         "in": "query",
+        "required": false
+      },
+      {
+        "name": "akua-context",
+        "in": "header",
         "required": false
       }
     ]
@@ -5458,6 +5651,84 @@ export const commandRegistry = [
     "parameters": []
   },
   {
+    "operation_id": "snippetRuns.get",
+    "command": "snippet-runs get",
+    "resource": "snippet-runs",
+    "action": "get",
+    "method": "GET",
+    "path": "/v1/snippet_runs/{id}",
+    "tag": "Snippet Runs",
+    "summary": "Get workspace snippet run",
+    "visibility": "PUBLIC",
+    "requires_auth": true,
+    "parameters": [
+      {
+        "name": "id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "akua-context",
+        "in": "header",
+        "required": false
+      }
+    ]
+  },
+  {
+    "operation_id": "snippetRuns.list",
+    "command": "snippet-runs list",
+    "resource": "snippet-runs",
+    "action": "list",
+    "method": "GET",
+    "path": "/v1/snippet_runs",
+    "tag": "Snippet Runs",
+    "summary": "List workspace snippet runs",
+    "visibility": "PUBLIC",
+    "requires_auth": true,
+    "parameters": [
+      {
+        "name": "cursor",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "limit",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "state",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "source",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "snippet",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "dashboard",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "view",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "akua-context",
+        "in": "header",
+        "required": false
+      }
+    ]
+  },
+  {
     "operation_id": "snippets.create",
     "command": "snippets create",
     "resource": "snippets",
@@ -5507,7 +5778,7 @@ export const commandRegistry = [
     "method": "DELETE",
     "path": "/v1/snippets/{id}",
     "tag": "Snippets",
-    "summary": "Delete snippet",
+    "summary": "Archive snippet",
     "visibility": "PUBLIC",
     "requires_auth": true,
     "parameters": [
@@ -5917,6 +6188,30 @@ export const commandRegistry = [
     ]
   },
   {
+    "operation_id": "workspaces.getManagement",
+    "command": "workspaces get-management",
+    "resource": "workspaces",
+    "action": "get-management",
+    "method": "GET",
+    "path": "/v1/workspaces/{id}/management",
+    "tag": "Workspaces",
+    "summary": "Get workspace management access",
+    "visibility": "PUBLIC",
+    "requires_auth": true,
+    "parameters": [
+      {
+        "name": "id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "akua-context",
+        "in": "header",
+        "required": false
+      }
+    ]
+  },
+  {
     "operation_id": "workspaces.getSubscription",
     "command": "workspaces get-subscription",
     "resource": "workspaces",
@@ -6111,6 +6406,40 @@ export const commandRegistry = [
         "name": "idempotency-key",
         "in": "header",
         "required": false
+      }
+    ]
+  },
+  {
+    "operation_id": "workspaces.revokeManagement",
+    "command": "workspaces revoke-management",
+    "resource": "workspaces",
+    "action": "revoke-management",
+    "method": "POST",
+    "path": "/v1/workspaces/{id}:revokeManagement",
+    "tag": "Workspaces",
+    "summary": "Revoke workspace management access",
+    "visibility": "PUBLIC",
+    "requires_auth": true,
+    "parameters": [
+      {
+        "name": "id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "akua-context",
+        "in": "header",
+        "required": false
+      },
+      {
+        "name": "idempotency-key",
+        "in": "header",
+        "required": false
+      },
+      {
+        "name": "if-match",
+        "in": "header",
+        "required": true
       }
     ]
   },
