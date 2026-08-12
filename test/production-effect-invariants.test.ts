@@ -31,6 +31,14 @@ test("production TypeScript is Effect-only and assertion-free", () => {
   expect(violations).toEqual([]);
 });
 
+test("production host I/O is isolated to live services and executable terminals", () => {
+  const program = ts.createProgram(productionFiles(), {});
+  const checker = program.getTypeChecker();
+  const violations = productionFiles().flatMap((file) => inspectHostIo(file, program, checker));
+
+  expect(violations).toEqual([]);
+});
+
 function productionFiles(): string[] {
   return productionRoots.flatMap(collectTypeScriptFiles);
 }
@@ -55,6 +63,56 @@ function inspectProductionFile(file: string): Violation[] {
   });
 
   return violations;
+}
+
+function inspectHostIo(
+  file: string,
+  program: ts.Program,
+  checker: ts.TypeChecker,
+): Violation[] {
+  const sourceFile = program.getSourceFile(file);
+  if (sourceFile === undefined) return [{ file, rule: "missing TypeScript source" }];
+  const violations: Violation[] = [];
+
+  visit(sourceFile, (node) => {
+    if (!isHostIo(node, checker)) return;
+    if (isLiveServiceFile(file)) return;
+    if (isExecutableTerminal(file, node)) return;
+    violations.push({ file, rule: "host I/O outside a typed live service" });
+  });
+
+  return violations;
+}
+
+function isHostIo(node: ts.Node, checker: ts.TypeChecker): boolean {
+  if (ts.isImportDeclaration(node)) {
+    const module = node.moduleSpecifier;
+    return ts.isStringLiteral(module) && (module.text === "node:fs" || module.text === "node:fs/promises" || module.text === "node:os");
+  }
+  if (!ts.isIdentifier(node) || !["fetch", "process", "console", "Bun"].includes(node.text)) return false;
+  const symbol = checker.getSymbolAtLocation(node);
+  return symbol === undefined || !symbol.declarations?.some((declaration) => declaration.getSourceFile() === node.getSourceFile());
+}
+
+function isLiveServiceFile(file: string): boolean {
+  return /^src\/runtime\/[^/]*services\.ts$/.test(file) || /^scripts\/runtime\/[^/]*services\.ts$/.test(file);
+}
+
+function isExecutableTerminal(file: string, node: ts.Node): boolean {
+  if (file !== "src/bin/akua.ts" && !/^scripts\/(?:fetch-openapi|generate-commands|release)\.ts$/.test(file)) return false;
+  let current: ts.Node | undefined = node;
+  while (current !== undefined) {
+    if (ts.isIfStatement(current) && isImportMetaMainGuard(current.expression)) return true;
+    current = current.parent;
+  }
+  return false;
+}
+
+function isImportMetaMainGuard(expression: ts.Expression): boolean {
+  return ts.isPropertyAccessExpression(expression) &&
+    expression.name.text === "main" &&
+    ts.isMetaProperty(expression.expression) &&
+    expression.expression.keywordToken === ts.SyntaxKind.ImportKeyword;
 }
 
 function lexicalViolations(file: string, source: string): Violation[] {

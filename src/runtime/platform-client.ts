@@ -2,6 +2,7 @@ import { Effect } from "effect";
 
 import { AkuaCliError } from "./errors";
 import { clearBytes } from "./secure-token-file";
+import { Http } from "./services";
 
 const HCloudProviderLoadUrl = "https://api.akua.dev/v1/agent_os/hcloud_provider_loads";
 const responseFields = new Set([
@@ -26,9 +27,7 @@ interface HCloudProviderLoadResponse {
 }
 
 export interface HCloudProviderLoadDependencies {
-  send(
-    request: HCloudProviderLoadRequest,
-  ): Effect.Effect<HCloudProviderLoadResponse, unknown>;
+  send(request: HCloudProviderLoadRequest): Effect.Effect<HCloudProviderLoadResponse, unknown>;
 }
 
 export interface HCloudProviderLoadInput {
@@ -44,14 +43,17 @@ export type HCloudProviderLoadResult = Readonly<Record<string, unknown>>;
 
 export class HCloudProviderLoadError extends AkuaCliError {}
 
-const productionDependencies: HCloudProviderLoadDependencies = {
-  send: sendHttpsRequest,
-};
-
 export function submitHcloudProviderLoad(
   input: HCloudProviderLoadInput,
-  dependencies: HCloudProviderLoadDependencies = productionDependencies,
-): Effect.Effect<HCloudProviderLoadResult, HCloudProviderLoadError> {
+): Effect.Effect<HCloudProviderLoadResult, HCloudProviderLoadError, Http>;
+export function submitHcloudProviderLoad(
+  input: HCloudProviderLoadInput,
+  dependencies: HCloudProviderLoadDependencies,
+): Effect.Effect<HCloudProviderLoadResult, HCloudProviderLoadError>;
+export function submitHcloudProviderLoad(
+  input: HCloudProviderLoadInput,
+  dependencies?: HCloudProviderLoadDependencies,
+): Effect.Effect<HCloudProviderLoadResult, HCloudProviderLoadError, Http> {
   return Effect.try({
     try: () =>
       encodeProviderTokenBody(
@@ -61,20 +63,26 @@ export function submitHcloudProviderLoad(
       ),
     catch: () => unknownSubmissionError(),
   }).pipe(
-    Effect.flatMap((body) =>
-      dependencies
-        .send({
-          url: HCloudProviderLoadUrl,
-          method: "POST",
-          headers: {
-            authorization: `Bearer ${input.callerToken}`,
-            "akua-context": input.workspace,
-            "idempotency-key": input.idempotencyKey,
-            "content-type": "application/json",
-          },
-          body,
-        })
-        .pipe(
+    Effect.flatMap((body) => {
+      const request: HCloudProviderLoadRequest = {
+        url: HCloudProviderLoadUrl,
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${input.callerToken}`,
+          "akua-context": input.workspace,
+          "idempotency-key": input.idempotencyKey,
+          "content-type": "application/json",
+        },
+        body,
+      };
+      const send = dependencies === undefined
+        ? Effect.gen(function* () {
+            const http = yield* Http;
+            if (http.postBytes === undefined) return yield* Effect.fail(unknownSubmissionError());
+            return yield* http.postBytes(request);
+          })
+        : dependencies.send(request);
+      return send.pipe(
           Effect.flatMap((response) => {
             if (response.status !== 201) {
               return Effect.fail(serverRejectedError(response.status, response.body));
@@ -93,33 +101,9 @@ export function submitHcloudProviderLoad(
               : Effect.fail(unknownSubmissionError()),
           ),
           Effect.ensuring(Effect.sync(() => clearBytes(body))),
-        ),
-    ),
-    Effect.ensuring(Effect.sync(() => clearBytes(input.providerToken))),
-  );
-}
-
-function sendHttpsRequest(
-  request: HCloudProviderLoadRequest,
-): Effect.Effect<HCloudProviderLoadResponse, HCloudProviderLoadError> {
-  return Effect.tryPromise({
-    try: () =>
-      fetch(request.url, {
-        method: request.method,
-        headers: request.headers,
-        body: new Blob([new Uint8Array(request.body)]),
-      }).then((response) =>
-        response.text().then((text) => ({ status: response.status, text })),
-      ),
-    catch: () => unknownSubmissionError(),
-  }).pipe(
-    Effect.flatMap(({ status, text }) => {
-      if (text.length > 16_384) return Effect.fail(invalidServerResponseError());
-      return Effect.try({
-        try: () => ({ status, body: text === "" ? {} : JSON.parse(text) }),
-        catch: () => invalidServerResponseError(),
-      });
+      );
     }),
+    Effect.ensuring(Effect.sync(() => clearBytes(input.providerToken))),
   );
 }
 

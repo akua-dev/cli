@@ -22,9 +22,13 @@ import { CliLive, Console, type CliServices } from "../runtime/services";
 const VERSION = "0.9.0"; // x-release-please-version
 
 export function main(
-  argv = process.argv.slice(2),
-  env = process.env,
-): void {
+  argv: readonly string[],
+  env: Record<string, string | undefined>,
+): Effect.Effect<number, never, CliServices> {
+  return mainEffect(argv, env);
+}
+
+if (import.meta.main) {
   const runMain = Runtime.makeRunMain(({ fiber, teardown }) => {
     fiber.addObserver((exit) => {
       if (Exit.isSuccess(exit)) {
@@ -36,7 +40,7 @@ export function main(
       });
     });
   });
-  runMain(Effect.provide(mainEffect(argv, env), CliLive));
+  runMain(Effect.provide(main(process.argv.slice(2), process.env), CliLive));
 }
 
 function mainEffect(
@@ -294,8 +298,4 @@ function fallbackErrorMode(argv: readonly string[]): OutputMode {
     return "quiet";
   }
   return "human";
-}
-
-if (import.meta.main) {
-  main();
 }

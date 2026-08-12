@@ -24,6 +24,13 @@ export interface HttpRequest {
   readonly fields: Readonly<Record<string, string>>;
 }
 
+export interface HttpBytesRequest {
+  readonly url: string;
+  readonly method: "POST";
+  readonly headers: Readonly<Record<string, string>>;
+  readonly body: Uint8Array;
+}
+
 export class HttpFailure extends Data.TaggedError("HttpFailure")<{
   readonly cause: unknown;
 }> {}
@@ -45,6 +52,9 @@ export class Http extends Context.Service<
   {
     readonly postForm: (
       request: HttpRequest,
+    ) => Effect.Effect<HttpResponse, HttpFailure>;
+    readonly postBytes?: (
+      request: HttpBytesRequest,
     ) => Effect.Effect<HttpResponse, HttpFailure>;
   }
 >()("platform/cli/Http") {}
@@ -121,6 +131,27 @@ export const HttpLive = Layer.succeed(Http, {
           response.text().then((text) => {
             if (text.length > MAX_DEVICE_RESPONSE_SIZE) {
               throw new Error("Device response is too large.");
+            }
+            return {
+              status: response.status,
+              body: text === "" ? {} : JSON.parse(text),
+            };
+          }),
+        ),
+      catch: (cause) => new HttpFailure({ cause }),
+    }),
+  postBytes: (request) =>
+    Effect.tryPromise({
+      try: (signal) =>
+        fetch(request.url, {
+          method: request.method,
+          headers: request.headers,
+          body: new Blob([new Uint8Array(request.body)]),
+          signal,
+        }).then((response) =>
+          response.text().then((text) => {
+            if (text.length > MAX_DEVICE_RESPONSE_SIZE) {
+              throw new Error("HTTP response is too large.");
             }
             return {
               status: response.status,

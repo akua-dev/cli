@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { Effect } from "effect";
 
 import { DEFAULT_OPENAPI_URL, fetchOpenApi, resolveSpecUrl, validateOpenApiDocument } from "../scripts/fetch-openapi";
+import { ScriptLive } from "../scripts/runtime/services";
 
 describe("OpenAPI fetch guard", () => {
   test("defaults to the production public OpenAPI endpoint", () => {
@@ -26,9 +27,9 @@ describe("OpenAPI fetch guard", () => {
     const spec = { paths: { "/health": { get: { operationId: "health" } } }, openapi: "3.1.0" };
     globalThis.fetch = (async () => Response.json(spec)) as unknown as typeof fetch;
     try {
-      await Effect.runPromise(fetchOpenApi(new URL(DEFAULT_OPENAPI_URL), output));
+      await Effect.runPromise(Effect.provide(fetchOpenApi(new URL(DEFAULT_OPENAPI_URL), output), ScriptLive));
       const first = await readFile(output, "utf8");
-      await Effect.runPromise(fetchOpenApi(new URL(DEFAULT_OPENAPI_URL), output));
+      await Effect.runPromise(Effect.provide(fetchOpenApi(new URL(DEFAULT_OPENAPI_URL), output), ScriptLive));
       const second = await readFile(output, "utf8");
 
       expect(second).toBe(first);

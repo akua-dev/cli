@@ -22,10 +22,12 @@ audit.
   filesystem, `process`, and console) out of commands, workflows, and scripts.
   A live service layer may bridge a host API only inside an Effect constructor,
   mapping failure to a tagged error.
-- The binary terminal owns the single runtime/fiber handoff. No command,
-  runtime helper, service, or script calls `runPromise` (`Effect.runPromise`),
-  `runFork`, or a runtime directly. The terminal itself must not use native
-  `async`/`await`.
+- Each executable terminal owns its own runtime/fiber handoff: the CLI binary
+  and every executable script may call `Runtime.makeRunMain` only in its
+  minimal `if (import.meta.main)` guard. Exported functions, commands, runtime
+  helpers, and service modules never call `runPromise` (`Effect.runPromise`),
+  `runFork`, or a runtime directly. A terminal itself must not use native
+  `async`/`await`; its host reads, writes, and output stay in the same guard.
 
 ```ts
 class DeviceFailure extends Data.TaggedError("DeviceFailure")<{

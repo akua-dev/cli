@@ -11,6 +11,7 @@ import {
   type SecureTokenFileDependencies,
   type SecureTokenFileStat,
 } from "../src/runtime/secure-token-file";
+import { SecureTokenFileLive } from "../src/runtime/secure-token-file-services";
 
 const SYNTHETIC_BYTES = new Uint8Array([115, 121, 110, 116, 104, 101, 116, 105, 99]);
 const UID = 501;
@@ -88,7 +89,7 @@ describe("readSecureTokenFile", () => {
       await chmod(target, 0o600);
       await symlink(target, link);
 
-      await expect(Effect.runPromise(readSecureTokenFile(link)))
+      await expect(Effect.runPromise(Effect.provide(readSecureTokenFile(link), SecureTokenFileLive)))
         .rejects.toMatchObject({ code: "AKUA_LOADER_TOKEN_FILE_UNSAFE" });
     } finally {
       await rm(directory, { recursive: true, force: true });

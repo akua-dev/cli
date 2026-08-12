@@ -12,8 +12,9 @@ import {
   type HCloudProviderLoadResult,
 } from "../runtime/platform-client";
 import { clearBytes, readSecureTokenFile } from "../runtime/secure-token-file";
+import { SecureTokenFileLive } from "../runtime/secure-token-file-services";
 import type { RenderEnvelope } from "../runtime/render";
-import type { SecureConfig } from "../runtime/services";
+import { HttpLive, type SecureConfig } from "../runtime/services";
 
 export interface AgentOsDependencies {
   readProtectedCallerToken(
@@ -29,8 +30,8 @@ export interface AgentOsDependencies {
 const productionDependencies: AgentOsDependencies = {
   readProtectedCallerToken: (env) =>
     readProtectedCallerToken(env).pipe(Effect.mapError(toCliError)),
-  readSecureTokenFile,
-  submit: submitHcloudProviderLoad,
+  readSecureTokenFile: (path) => Effect.provide(readSecureTokenFile(path), SecureTokenFileLive),
+  submit: (input) => Effect.provide(submitHcloudProviderLoad(input), HttpLive),
   createIdempotencyKey: randomUUID,
 };
 

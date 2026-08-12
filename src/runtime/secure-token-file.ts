@@ -1,15 +1,13 @@
-import { constants } from "node:fs";
-import { lstat, open, type FileHandle } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 
 import { Effect } from "effect";
 
 import { AkuaCliError } from "./errors";
+import { SECURE_OPEN_FLAGS, SecureTokenFile } from "./secure-token-file-services";
+
+export { SECURE_OPEN_FLAGS } from "./secure-token-file-services";
 
 export const MAX_PROVIDER_TOKEN_BYTES = 4096;
-
-const O_CLOEXEC = process.platform === "linux" ? 0x80000 : 0x1000000;
-export const SECURE_OPEN_FLAGS = constants.O_RDONLY | constants.O_NOFOLLOW | O_CLOEXEC;
 
 export interface SecureTokenFileStat {
   dev: number;
@@ -21,7 +19,7 @@ export interface SecureTokenFileStat {
   isSymbolicLink(): boolean;
 }
 
-interface SecureTokenFileHandle {
+export interface SecureTokenFileHandle {
   stat(): Effect.Effect<SecureTokenFileStat, unknown>;
   read(buffer: Uint8Array, offset?: number, length?: number, position?: number): Effect.Effect<{ bytesRead: number }, unknown>;
   close(): Effect.Effect<void, unknown>;
@@ -33,22 +31,21 @@ export interface SecureTokenFileDependencies {
   open(path: string, flags: number): Effect.Effect<SecureTokenFileHandle, unknown>;
 }
 
-const productionDependencies: SecureTokenFileDependencies = {
-  getuid: () => {
-    if (typeof process.getuid !== "function") throw unsafeFileError();
-    return process.getuid();
-  },
-  lstat: (path) => Effect.tryPromise({ try: () => lstat(path), catch: (cause) => cause }),
-  open: (path, flags) =>
-    Effect.tryPromise({
-      try: () => open(path, flags),
-      catch: (cause) => cause,
-    }).pipe(Effect.map(adaptFileHandle)),
-};
-
+export function readSecureTokenFile(path: string): Effect.Effect<Uint8Array, AkuaCliError, SecureTokenFile>;
+export function readSecureTokenFile(path: string, dependencies: SecureTokenFileDependencies): Effect.Effect<Uint8Array, AkuaCliError>;
 export function readSecureTokenFile(
   path: string,
-  dependencies: SecureTokenFileDependencies = productionDependencies,
+  suppliedDependencies?: SecureTokenFileDependencies,
+): Effect.Effect<Uint8Array, AkuaCliError, SecureTokenFile> {
+  return Effect.gen(function* () {
+    const dependencies = suppliedDependencies === undefined ? (yield* SecureTokenFile).dependencies : suppliedDependencies;
+    return yield* readSecureTokenFileWithDependencies(path, dependencies);
+  });
+}
+
+function readSecureTokenFileWithDependencies(
+  path: string,
+  dependencies: SecureTokenFileDependencies,
 ): Effect.Effect<Uint8Array, AkuaCliError> {
   if (!isAbsolute(path)) return Effect.fail(invalidPathError());
   return safeLstat(path, dependencies).pipe(
@@ -74,18 +71,6 @@ export function readSecureTokenFile(
 
 export function clearBytes(bytes: Uint8Array): void {
   bytes.fill(0);
-}
-
-function adaptFileHandle(handle: FileHandle): SecureTokenFileHandle {
-  return {
-    stat: () => Effect.tryPromise({ try: () => handle.stat(), catch: (cause) => cause }),
-    read: (buffer, offset, length, position) =>
-      Effect.tryPromise({
-        try: () => handle.read(buffer, offset, length, position),
-        catch: (cause) => cause,
-      }).pipe(Effect.map((result) => ({ bytesRead: result.bytesRead }))),
-    close: () => Effect.tryPromise({ try: () => handle.close(), catch: (cause) => cause }),
-  };
 }
 
 function safeLstat(path: string, dependencies: SecureTokenFileDependencies): Effect.Effect<SecureTokenFileStat, AkuaCliError> {
