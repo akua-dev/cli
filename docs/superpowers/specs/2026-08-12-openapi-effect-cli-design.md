@@ -112,20 +112,24 @@ Generation is an explicit compatibility gate:
 
 ## Compatibility fixes
 
-The current public document contains two ECMAScript-style `/u` regex suffixes
-in organization-name schemas. OpenAPI `pattern` values are plain ECMA-262
-regular-expression strings, not JavaScript literal syntax. The server-side
-OpenAPI emitter must publish the pattern without the suffix. Until that lands,
-the CLI generator may apply a narrow, tested normalization that removes only a
-trailing `/u` from those two component patterns, and it must fail if another
-such pattern appears. This is temporary compatibility work, not a weakening of
-schema validation.
+OpenAPI `pattern` values are plain ECMA-262 regular-expression strings, not
+JavaScript literal syntax. The server-side OpenAPI emitter must publish the
+organization-name pattern without its JavaScript `/u` literal suffix while
+keeping Unicode validation at runtime. This is an API-producer correction, not
+a CLI normalization exception.
 
 The current generator's `httpclient` output emits TypeScript assertions for
 query serialization. The CLI therefore uses generated `httpapi` output plus
 Effect `HttpApiClient`, whose generated contract has no assertions. The
-generator's warnings about unsupported SSE metadata or ignored response headers
-are treated as API-contract work items; generation cannot silently drop them.
+generator's beta.106 `httpapi` path currently drops response-header schemas,
+requires an error schema for every SSE stream, and warns despite correctly
+representing optional request bodies as a `NoContent` union. Before CLI
+generation begins, the pinned generator must gain typed response-header output,
+faithful no-error SSE support, and a non-warning optional-body representation.
+The install-log OpenAPI producer must describe its actual SSE event envelope
+and use the resulting minimal `x-effect-stream` extension. A CLI postprocess,
+raw-response workaround, or manual endpoint is prohibited because each loses
+the contract's generated type information.
 
 ## Delete-before-optimize pass
 
@@ -156,10 +160,10 @@ the absence of failure-capable control flow rather than forced to import Effect.
 ## Migration order
 
 1. Remove the obsolete AgentOS/HCloud surface and its archive documentation.
-2. Add pinned `@effect/openapi-generator`, normalization validation, and a
-   generated `HttpApi` artifact.
-3. Generate and consume the typed `HttpApiClient` through the existing Effect
-   service boundary.
+2. Correct the server OpenAPI contract and pin a tested Effect generator patch
+   for response headers, no-error SSE, and optional bodies.
+3. Add the generated `HttpApi` artifact and consume the typed `HttpApiClient`
+   through the existing Effect service boundary.
 4. Replace the registry-only route with the generic command executor and its
    secure JSON-input contract.
 5. Make the scheduled spec-update workflow regenerate all artifacts and reject

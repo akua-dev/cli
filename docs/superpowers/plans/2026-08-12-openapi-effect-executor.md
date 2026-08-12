@@ -40,13 +40,38 @@
 | `.github/workflows/update-openapi.yml` | Regenerates and permits only all generated OpenAPI artifacts. |
 | `README.md` | Documents executable generated commands and safe JSON-input usage. |
 
-### Task 1: Make core CLI failure control flow Effect-only
+### Task 0: Close the generated-contract compatibility gaps at their source
+
+**Files:**
+- Modify in the API repository: `packages/domains/organizations/src/roles.ts`, `packages/domains/organizations/src/schemas.ts`, `packages/domains/installs/src/endpoints/GetInstallLogs.ts`, `apps/api/src/openapi.gen.test.ts`
+- Modify in the pinned Effect generator patch or upstream checkout: `OpenApiGenerator.ts`, `ParsedOperation.ts`, `HttpApiTransformer.ts`, and their focused generator tests
+- Modify in this CLI repository: `package.json`, `bun.lock`, generator-patch provenance and verification test
+
+- [ ] **Step 1: Write failing producer and generator contract tests.** Prove organization create/update patterns contain no JavaScript literal flag, both bootstrap/drift `201` responses retain a typed `Location` header, `installs.getLogs` produces a typed no-error SSE endpoint, and the optional `orderDrafts.createWorkerBootstrap` body generates without a warning.
+
+- [ ] **Step 2: Run focused tests and observe RED.**
+
+Run the API OpenAPI test and the Effect generator's focused test files.
+
+Expected: the public document ends its organization pattern in `/u`; beta.106 reports `response-headers-ignored`, `sse-operation-skipped`, and `optional-request-body-approximated`.
+
+- [ ] **Step 3: Fix the producer and official generator behavior.** Keep the runtime Unicode regular expression but override only its OpenAPI pattern with the plain string. Describe the logs stream as the real SSE event envelope (`id?`, `event`, and string `data`) with the minimal `x-effect-stream: { encoding: "sse" }` contract. In the generator, preserve each response-header schema and emit `HttpApiSchema.WithHeaders` for every response alternative; accept no-error SSE as `StreamSse({ events })`; retain optional request-body `NoContent` unions without warning. Pin the reviewed upstream version or a reproducible package patch. Do not use a CLI postprocess, raw-response mode, or per-operation handwritten client.
+
+- [ ] **Step 4: Generate against the real public snapshot.**
+
+Run: the CLI Effect generator against `openapi/public.json` with warning-as-error enabled.
+
+Expected: zero warnings, `installs.getLogs` present, and both `Location` response schemas preserved in generated TypeScript.
+
+- [ ] **Step 5: Simplify, verify, and commit per repository.** Run each repository's required checks. Keep producer, upstream/patch, and CLI dependency changes as independently reviewable commits.
+
+### Task 1: Make core CLI failure control flow Effect-only (completed in `062e095`)
 
 **Files:**
 - Create: `test/strict-effect-control-flow.test.ts`
 - Modify: `src/runtime/mode.ts`, `src/commands/auth.ts`, `src/bin/akua.ts`, `test/mode.test.ts`, `test/auth-effect.test.ts`, `test/cli.test.ts`
 
-- [ ] **Step 1: Write failing structural and behavior tests.** Add AST assertions that `mode.ts`, `auth.ts`, and `akua.ts` contain no `ThrowStatement`; add a test that an invalid `--output` and an invalid auth argument return typed CLI error envelopes rather than escaping a thrown exception.
+- [x] **Step 1: Write failing structural and behavior tests.** Add AST assertions that `mode.ts`, `auth.ts`, and `akua.ts` contain no `ThrowStatement`; add a test that an invalid `--output` and an invalid auth argument return typed CLI error envelopes rather than escaping a thrown exception.
 
 ```ts
 test("core CLI modules contain no throw statements", () => {
@@ -59,13 +84,13 @@ test("invalid generated-command arguments render a usage envelope", async () => 
 })
 ```
 
-- [ ] **Step 2: Run the focused tests and observe RED.**
+- [x] **Step 2: Run the focused tests and observe RED.**
 
 Run: `bun test test/strict-effect-control-flow.test.ts test/mode.test.ts test/auth-effect.test.ts test/cli.test.ts`
 
 Expected: FAIL because the named files still contain `ThrowStatement` nodes.
 
-- [ ] **Step 3: Replace every synchronous parser with a typed Effect parser.** Convert `detectOutputMode`, auth parsers/response decoders, and CLI filter parsers to return `Effect.Effect<A, UsageFailure | DeviceRequestFailure>` or `Either` consumed immediately by an Effect constructor. Replace `Effect.try({ try: parser })` callbacks that depend on throwing with explicit predicates and `Effect.fail`.
+- [x] **Step 3: Replace every synchronous parser with a typed Effect parser.** Convert `detectOutputMode`, auth parsers/response decoders, and CLI filter parsers to return `Effect.Effect<A, UsageFailure | DeviceRequestFailure>` or `Either` consumed immediately by an Effect constructor. Replace `Effect.try({ try: parser })` callbacks that depend on throwing with explicit predicates and `Effect.fail`.
 
 ```ts
 const parseOutputMode = (input: OutputInput): Effect.Effect<OutputMode, UsageFailure> =>
@@ -74,13 +99,13 @@ const parseOutputMode = (input: OutputInput): Effect.Effect<OutputMode, UsageFai
     : Effect.fail(new UsageFailure({ error: usageError(outputMessage(input)) }))
 ```
 
-- [ ] **Step 4: Run the focused tests and source scan.**
+- [x] **Step 4: Run the focused tests and source scan.**
 
 Run: `bun test test/strict-effect-control-flow.test.ts test/mode.test.ts test/auth-effect.test.ts test/cli.test.ts && rg -n '\\bthrow\\b' src/runtime/mode.ts src/commands/auth.ts src/bin/akua.ts`
 
 Expected: tests pass; `rg` prints no rows.
 
-- [ ] **Step 5: Simplify and commit.** Run the simplify review, eliminate duplicated typed parser branches, then commit only the files listed for this task.
+- [x] **Step 5: Simplify and commit.** Run the simplify review, eliminate duplicated typed parser branches, then commit only the files listed for this task.
 
 ```bash
 git add test/strict-effect-control-flow.test.ts src/runtime/mode.ts src/commands/auth.ts src/bin/akua.ts test/mode.test.ts test/auth-effect.test.ts test/cli.test.ts
@@ -137,9 +162,9 @@ git commit -m "refactor(cli): remove throws from Effect scripts"
 
 **Files:**
 - Modify: `package.json`, `bun.lock`, `scripts/generate-commands.ts`, `test/strict-effect-control-flow.test.ts`
-- Create: `scripts/generate-effect-api.ts`, `src/generated/openapi-api.gen.ts`, `test/generated-api.test.ts`, `openapi/effect-generator-patch.json`
+- Create: `scripts/generate-effect-api.ts`, `src/generated/openapi-api.gen.ts`, `test/generated-api.test.ts`
 
-- [ ] **Step 1: Add failing generation contract tests.** Test that generation consumes the checked-in spec, rejects unsupported regex-literal flags except the two explicitly listed normalization targets, fails on warnings for public routes, emits the expected `secretsCreate` endpoint, and parses with zero TypeScript assertions or raw throws.
+- [ ] **Step 1: Add failing generation contract tests.** Test that generation consumes the checked-in spec, fails on every warning for public routes, emits `secretsCreate`, `installsGetLogs`, and typed `Location` headers, and parses with zero TypeScript assertions or raw throws.
 
 ```ts
 test("generated Effect contract is strict and contains secrets.create", () => {
@@ -156,7 +181,7 @@ Run: `bun test test/generated-api.test.ts`
 
 Expected: FAIL because no generated Effect API artifact or generator command exists.
 
-- [ ] **Step 3: Add exact beta generator dependencies and deterministic generator command.** Add `@effect/openapi-generator@4.0.0-beta.106` and `@effect/platform-node@4.0.0-beta.106` as development dependencies. Implement `generate-effect-api` with Effect CLI/services, use the `httpapi` format, normalize only the two known organization regex values through `openapi/effect-generator-patch.json`, turn every generator warning into an Effect failure, and write `src/generated/openapi-api.gen.ts`.
+- [ ] **Step 3: Add the reviewed exact generator dependency and deterministic generator command.** Add the Task 0-reviewed `@effect/openapi-generator` and matching platform package as development dependencies. Implement `generate-effect-api` with Effect CLI/services, use the `httpapi` format, turn every generator warning into an Effect failure, and write `src/generated/openapi-api.gen.ts`. No contract normalization occurs in the CLI.
 
 ```ts
 const source = yield* OpenApiGenerator.OpenApiGenerator.generate(spec, {
@@ -176,7 +201,7 @@ Expected: generated file is current, tests pass, and build succeeds.
 - [ ] **Step 5: Simplify and commit.** Keep normalization data-only and narrowly tested; do not hand-edit generated code.
 
 ```bash
-git add package.json bun.lock scripts/generate-effect-api.ts openapi/effect-generator-patch.json src/generated/openapi-api.gen.ts scripts/generate-commands.ts test/generated-api.test.ts test/strict-effect-control-flow.test.ts
+git add package.json bun.lock scripts/generate-effect-api.ts src/generated/openapi-api.gen.ts scripts/generate-commands.ts test/generated-api.test.ts test/strict-effect-control-flow.test.ts
 git commit -m "feat(cli): generate Effect API contract from OpenAPI"
 ```
 
@@ -275,7 +300,7 @@ git commit -m "chore(cli): enforce generated Effect API drift"
 
 ## Plan self-review
 
-- **Spec coverage:** Tasks 1–2 remove every existing raw `throw`; Task 3 generates the strict typed Effect contract; Task 4 executes it without provider branching; Task 5 makes drift and documentation permanent.
+- **Spec coverage:** Task 0 makes the public contract and generator faithfully represent headers, SSE, optional bodies, and OpenAPI regexes. Tasks 1–2 remove every existing raw `throw`; Task 3 generates the strict typed Effect contract; Task 4 executes it without provider branching; Task 5 makes drift and documentation permanent.
 - **Delete-before-optimize:** Task 5 deletes the obsolete provider-loader plan; Tasks 3–4 do not retain a second HTTP client, runtime interpreter, or provider flags.
 - **Consistency:** `PublicApi` is generated in Task 3, bound in Task 4, and included in CI in Task 5. The generic input interface is introduced only after the typed client exists.
-- **No placeholders:** Every task names paths, tests, red command, green command, and commit scope.
+- **No placeholders:** Every task names paths, tests, red command, green command, and commit scope. Task 0 is deliberately before client generation because beta.106 cannot otherwise produce every public route and response type truthfully.
