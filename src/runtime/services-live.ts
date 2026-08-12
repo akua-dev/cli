@@ -10,8 +10,12 @@ import {
 import { dirname, join } from "node:path";
 
 import { Duration, Effect, Layer } from "effect";
+import {
+  FetchHttpClient,
+  HttpClient,
+  HttpClientRequest,
+} from "effect/unstable/http";
 
-import { encodeForm } from "./device-http";
 import { SecureTokenFileLive } from "./secure-token-file-live";
 import {
   Browser,
@@ -31,50 +35,36 @@ const CONFIG_FILE_MODE = 0o600;
 const CONFIG_DIR_MODE = 0o700;
 const MAX_DEVICE_RESPONSE_SIZE = 16_384;
 
-export const HttpLive = Layer.succeed(Http, {
-  postForm: (request) =>
-    Effect.tryPromise({
-      try: (signal) =>
-        fetch(request.url, {
-          method: "POST",
-          headers: { "content-type": "application/x-www-form-urlencoded" },
-          body: encodeForm(request.fields),
-          signal,
-        }).then((response) =>
-          response.text().then((text) => {
-            if (text.length > MAX_DEVICE_RESPONSE_SIZE) {
-              throw new Error("Device response is too large.");
-            }
-            return {
-              status: response.status,
-              body: text === "" ? {} : JSON.parse(text),
-            };
-          }),
+export const HttpLive = Layer.effect(
+  Http,
+  Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    return {
+      postForm: (request) =>
+        readJsonResponse(
+          client.execute(
+            HttpClientRequest.post(request.url).pipe(
+              HttpClientRequest.bodyUrlParams(request.fields),
+            ),
+          ),
+          "Device response is too large.",
         ),
-      catch: (cause) => new HttpFailure({ cause }),
-    }),
-  postBytes: (request) =>
-    Effect.tryPromise({
-      try: (signal) =>
-        fetch(request.url, {
-          method: request.method,
-          headers: request.headers,
-          body: new Blob([new Uint8Array(request.body)]),
-          signal,
-        }).then((response) =>
-          response.text().then((text) => {
-            if (text.length > MAX_DEVICE_RESPONSE_SIZE) {
-              throw new Error("HTTP response is too large.");
-            }
-            return {
-              status: response.status,
-              body: text === "" ? {} : JSON.parse(text),
-            };
-          }),
+      postBytes: (request) =>
+        readJsonResponse(
+          client.execute(
+            HttpClientRequest.post(request.url).pipe(
+              HttpClientRequest.setHeaders(request.headers),
+              HttpClientRequest.bodyUint8Array(
+                request.body,
+                request.headers["content-type"],
+              ),
+            ),
+          ),
+          "HTTP response is too large.",
         ),
-      catch: (cause) => new HttpFailure({ cause }),
-    }),
-});
+    };
+  }),
+).pipe(Layer.provide(FetchHttpClient.layer));
 
 export const BrowserLive = Layer.succeed(Browser, {
   launch: (url) =>
@@ -183,6 +173,34 @@ export const CliLive: Layer.Layer<CliServices> = Layer.mergeAll(
   IdGeneratorLive,
   SecureTokenFileLive,
 );
+
+function readJsonResponse(
+  response: ReturnType<HttpClient.HttpClient["execute"]>,
+  oversizedMessage: string,
+): Effect.Effect<{ readonly status: number; readonly body: unknown }, HttpFailure> {
+  return response.pipe(
+    Effect.flatMap((value) =>
+      value.text.pipe(
+        Effect.flatMap((text) =>
+          Effect.try({
+            try: () => {
+              if (text.length > MAX_DEVICE_RESPONSE_SIZE)
+                throw new Error(oversizedMessage);
+              return {
+                status: value.status,
+                body: text === "" ? {} : JSON.parse(text),
+              };
+            },
+            catch: (cause) => new HttpFailure({ cause }),
+          }),
+        ),
+      ),
+    ),
+    Effect.mapError((cause) =>
+      cause instanceof HttpFailure ? cause : new HttpFailure({ cause }),
+    ),
+  );
+}
 
 function readConfig(
   path: string,
