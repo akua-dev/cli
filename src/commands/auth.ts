@@ -1,6 +1,6 @@
 import { join } from "node:path";
 
-import { Clock, Duration, Effect, Layer } from "effect";
+import { Clock, Duration, Effect } from "effect";
 import type { Clock as ClockService } from "effect/Clock";
 
 import { AkuaCliError, usageError } from "../runtime/errors";
@@ -17,10 +17,8 @@ import {
 } from "../runtime/effect-runtime";
 import {
   Browser,
-  BrowserFailure,
   Console,
   Http,
-  HttpFailure,
   Process,
   SecureConfig,
   SecureConfigLive,
@@ -82,19 +80,6 @@ interface DeviceLoginResult {
 type AuthServices =
   Http | Browser | Process | Console | SecureConfig | ClockService;
 
-export interface AuthDependencies {
-  request(request: {
-    url: string;
-    body: unknown;
-    signal?: AbortSignal;
-  }): Promise<DeviceResponse>;
-  sleep(milliseconds: number): Promise<void>;
-  launchBrowser(url: string): Promise<void>;
-  displayDeviceAuthorization?(details: DeviceLoginDetails): void;
-  now?(): number;
-  signal?: AbortSignal;
-}
-
 export function authView(
   argv: readonly string[],
   env: Record<string, string | undefined>,
@@ -102,32 +87,8 @@ export function authView(
 export function authView(
   argv: readonly string[],
   env: Record<string, string | undefined>,
-  dependencies: AuthDependencies,
-): Promise<RenderEnvelope>;
-export function authView(
-  argv: readonly string[],
-  env: Record<string, string | undefined>,
-  dependencies?: AuthDependencies,
 ) {
-  const command = authProgram(argv, env);
-  if (dependencies === undefined) return command;
-  if (dependencies.signal?.aborted)
-    return Promise.reject(toCliError(new DeviceCancelledFailure()));
-  const provided = Effect.provide(
-    command,
-    testServices(dependencies),
-  ) as Effect.Effect<RenderEnvelope, CliFailure>;
-  return Effect.runPromise(
-    provided.pipe(
-      Effect.catchIf(
-        (failure): failure is DeviceRequestFailure =>
-          dependencies.signal?.aborted === true &&
-          failure._tag === "DeviceRequestFailure",
-        () => Effect.fail(new DeviceCancelledFailure()),
-      ),
-      Effect.mapError(toCliError),
-    ) as Effect.Effect<RenderEnvelope, AkuaCliError>,
-  );
+  return authProgram(argv, env);
 }
 
 function authProgram(
@@ -640,58 +601,4 @@ function flagName(value: string): string {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-function testServices(dependencies: AuthDependencies) {
-  const now = dependencies.now ?? Date.now;
-  return Layer.mergeAll(
-    Layer.succeed(Http, {
-      postForm: ({ url, fields }) =>
-        Effect.tryPromise({
-          try: () =>
-            dependencies.request({
-              url,
-              body: fields,
-              signal: dependencies.signal,
-            }),
-          catch: (cause) => new HttpFailure({ cause }),
-        }),
-    }),
-    Layer.succeed(Browser, {
-      launch: (url) =>
-        Effect.tryPromise({
-          try: () => dependencies.launchBrowser(url),
-          catch: (cause) => new BrowserFailure({ cause }),
-        }),
-    }),
-    Layer.succeed(Process, {
-      awaitSignal: dependencies.signal?.aborted ? Effect.void : Effect.never,
-    }),
-    Layer.succeed(Console, {
-      stdoutIsTTY: false,
-      writeStderr: (value) =>
-        Effect.sync(() => {
-          const [open, code] = value.trimEnd().split("\n");
-          dependencies.displayDeviceAuthorization?.({
-            verification_uri_complete: open.slice("Open ".length),
-            user_code: code.slice("Enter code: ".length),
-          });
-        }),
-      writeStdout: () => Effect.void,
-    }),
-    Layer.succeed(Clock.Clock, {
-      currentTimeMillisUnsafe: now,
-      currentTimeMillis: Effect.sync(now),
-      monotonicTimeNanosUnsafe: () => BigInt(now()) * 1_000_000n,
-      monotonicTimeNanos: Effect.sync(() => BigInt(now()) * 1_000_000n),
-      currentTimeNanosUnsafe: () => BigInt(now()) * 1_000_000n,
-      currentTimeNanos: Effect.sync(() => BigInt(now()) * 1_000_000n),
-      sleep: (duration) =>
-        Effect.tryPromise({
-          try: () => dependencies.sleep(Duration.toMillis(duration)),
-          catch: () => new DeviceRequestFailure(),
-        }).pipe(Effect.orDie),
-    }),
-    SecureConfigLive,
-  );
 }

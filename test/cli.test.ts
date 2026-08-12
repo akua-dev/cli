@@ -17,6 +17,7 @@ import {
 } from "../src/commands/auth";
 import { renderSuccess, type RenderEnvelope } from "../src/runtime/render";
 import { CliLive } from "../src/runtime/services";
+import { runAuthView } from "./auth-test-layer";
 
 describe("akua entrypoint", () => {
   test("fails loudly on unknown flags", async () => {
@@ -260,7 +261,7 @@ describe("akua entrypoint", () => {
       const deviceCode = "device-code-must-not-be-rendered";
       const accessToken = "access-token-must-not-be-rendered";
 
-      const envelope = await authView(
+      const envelope = await runAuthView(
         ["login"],
         { HOME: home },
         {
@@ -358,7 +359,7 @@ describe("akua entrypoint", () => {
       const sleeps: number[] = [];
       let tokenRequests = 0;
 
-      const envelope = await authView(
+      const envelope = await runAuthView(
         ["login"],
         { HOME: home },
         {
@@ -410,7 +411,7 @@ describe("akua entrypoint", () => {
     const home = await makeTempHome();
     try {
       const requests: Array<{ url: string; body: unknown }> = [];
-      const envelope = await authView(
+      const envelope = await runAuthView(
         ["login", "--no-browser"],
         { HOME: home },
         {
@@ -454,7 +455,7 @@ describe("akua entrypoint", () => {
       try {
         const deviceCode = "device-code-must-not-be-rendered";
         await expect(
-          authView(
+          runAuthView(
             ["login", "--no-browser"],
             { HOME: home },
             {
@@ -491,7 +492,7 @@ describe("akua entrypoint", () => {
     let cancelledRequested = false;
     try {
       await expect(
-        authView(
+        runAuthView(
           ["login", "--no-browser"],
           { HOME: cancelledHome },
           {
@@ -515,7 +516,7 @@ describe("akua entrypoint", () => {
     let calls = 0;
     try {
       await expect(
-        authView(
+        runAuthView(
           ["login", "--no-browser"],
           { HOME: expiredHome },
           {
@@ -555,7 +556,7 @@ describe("akua entrypoint", () => {
       tokenRequestStarted = resolve;
     });
     try {
-      const login = authView(
+      const login = runAuthView(
         ["login", "--no-browser"],
         { HOME: home },
         {

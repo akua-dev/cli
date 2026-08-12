@@ -5,8 +5,10 @@ import { TestClock } from "effect/testing";
 import { authView } from "../src/commands/auth";
 import {
   ConfigFailure,
+  DeviceAuthorizationFailure,
   DeviceCancelledFailure,
   DeviceRequestFailure,
+  ProtectedCredentialFailure,
   runCli,
   UsageFailure,
 } from "../src/runtime/effect-runtime";
@@ -18,6 +20,14 @@ import {
   SecureConfig,
 } from "../src/runtime/services";
 import type { RenderEnvelope } from "../src/runtime/render";
+
+// authView is an Effect boundary; test adapters belong in test layers instead.
+// @ts-expect-error authView must not accept host-Promise dependencies.
+authView(["status"], { HOME: "/test-home" }, {
+  request: async () => ({ status: 200, body: {} }),
+  sleep: async () => undefined,
+  launchBrowser: async () => undefined,
+});
 
 describe("Effect auth command", () => {
   test("runs the device flow through injected services and TestClock", async () => {
@@ -96,13 +106,73 @@ describe("Effect auth command", () => {
     });
   });
 
+  test("renders terminal device authorization failures through runCli", async () => {
+    const render = async (
+      reason: "access_denied" | "expired_token",
+    ): Promise<{ exitCode: number; payload: unknown }> => {
+      const stdout: string[] = [];
+      const responses = [
+        {
+          status: 200,
+          body: {
+            device_code: "device-code",
+            user_code: "ABCD-EFGH",
+            verification_uri: "https://example.test/device",
+            expires_in: 60,
+          },
+        },
+        { status: 400, body: { error: reason } },
+      ];
+      const services = Layer.mergeAll(
+        Layer.succeed(Http, {
+          postForm: () => Effect.sync(() => responses.shift()!),
+        }),
+        Layer.succeed(Browser, { launch: () => Effect.void }),
+        Layer.succeed(Process, { awaitSignal: Effect.never }),
+        Layer.succeed(Console, {
+          stdoutIsTTY: false,
+          writeStderr: () => Effect.void,
+          writeStdout: (value) => Effect.sync(() => stdout.push(value)),
+        }),
+        Layer.succeed(SecureConfig, {
+          readToken: () => Effect.succeed(undefined),
+          saveToken: () => Effect.void,
+          removeToken: () => Effect.succeed(false),
+        }),
+        TestClock.layer(),
+      );
+
+      const exitCode = await Effect.runPromise(
+        Effect.provide(
+          runCli(
+            authView(["login", "--no-browser"], { HOME: "/test-home" }),
+            { mode: "json" },
+          ),
+          services,
+        ) as Effect.Effect<number>,
+      );
+      return { exitCode, payload: JSON.parse(stdout.join("")) };
+    };
+
+    await expect(render("access_denied")).resolves.toMatchObject({
+      exitCode: 3,
+      payload: { error: { code: "AKUA_DEVICE_ACCESS_DENIED" } },
+    });
+    await expect(render("expired_token")).resolves.toMatchObject({
+      exitCode: 3,
+      payload: { error: { code: "AKUA_DEVICE_EXPIRED_TOKEN" } },
+    });
+  });
+
   test("maps tagged failures to distinct rendered error envelopes", async () => {
     const render = async (
       failure:
         | UsageFailure
         | ConfigFailure
         | DeviceRequestFailure
-        | DeviceCancelledFailure,
+        | DeviceCancelledFailure
+        | DeviceAuthorizationFailure
+        | ProtectedCredentialFailure,
     ) => {
       const stdout: string[] = [];
       const exitCode = await Effect.runPromise(
@@ -151,5 +221,38 @@ describe("Effect auth command", () => {
         error: { type: "runtime_error", code: "AKUA_DEVICE_CANCELLED" },
       },
     });
+    await expect(
+      render(new DeviceAuthorizationFailure({ reason: "access_denied" })),
+    ).resolves.toMatchObject({
+      exitCode: 3,
+      payload: {
+        error: {
+          type: "authentication_error",
+          code: "AKUA_DEVICE_ACCESS_DENIED",
+        },
+      },
+    });
+    await expect(
+      render(new DeviceAuthorizationFailure({ reason: "expired_token" })),
+    ).resolves.toMatchObject({
+      exitCode: 3,
+      payload: {
+        error: {
+          type: "authentication_error",
+          code: "AKUA_DEVICE_EXPIRED_TOKEN",
+        },
+      },
+    });
+    await expect(render(new ProtectedCredentialFailure())).resolves.toMatchObject(
+      {
+        exitCode: 3,
+        payload: {
+          error: {
+            type: "authentication_error",
+            code: "AKUA_LOADER_AUTH_REQUIRED",
+          },
+        },
+      },
+    );
   });
 });
