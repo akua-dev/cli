@@ -28,6 +28,15 @@ Run `mise run check` and `mise run generate:check` for every change. Release
 changes also require the focused release/workflow tests and a current-host
 compiled archive smoke through `mise run release:smoke`.
 
+## Effect v4 production code
+
+Before changing production CLI code in `src/` or `scripts/`, load
+`skills/effect-v4/SKILL.md`. Keep command flow on the audited Effect v4
+services/layers and tagged-failure model; only the binary terminal owns the
+runtime/fiber handoff. Before handoff, run the skill's source scan, focused Bun
+tests, and `mise run check`; inspect each source scan hit rather than treating
+the command as a cosmetic check.
+
 The hand-written Agent OS provider-ingress command and its security suites are
 specified in `docs/architecture.md`, `test/secure-token-file.test.ts`, and
 `test/agent-os-loader.test.ts`.
