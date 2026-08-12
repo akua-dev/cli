@@ -45,7 +45,6 @@ export interface CliRenderer {
   readonly mode: OutputMode | (() => OutputMode);
 }
 
-/** The only Promise boundary for command execution and rendering. */
 export function runCli<R>(
   command: Effect.Effect<RenderEnvelope, CliFailure, R>,
   renderer: CliRenderer,
