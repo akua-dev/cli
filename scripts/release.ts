@@ -1,4 +1,5 @@
-import { Effect, Runtime } from "effect";
+import { Console, Effect, Option, Runtime } from "effect";
+import { Command, Flag } from "effect/unstable/cli";
 
 import {
   RELEASE_TARGETS as releaseTargets,
@@ -15,6 +16,7 @@ import {
   validateVersion as validateReleaseVersion,
 } from "./runtime/release-services";
 import { ReleaseHostLive } from "./runtime/release-host-live";
+import { ScriptCliLive } from "./runtime/cli-live";
 import type {
   PackageExistingExecutablesInput,
   PackageReleaseInput,
@@ -118,42 +120,84 @@ export function hostTargetId(): Effect.Effect<
   });
 }
 
-function readCliFlags(argv: readonly string[]): {
-  command: string;
-  version: string;
-  outputDir: string;
-  targetId?: string;
-  existingDir?: string;
-} {
-  const [command, ...flags] = argv;
-  if (
-    !command ||
-    !["matrix", "package", "verify", "smoke", "upload-plan"].includes(command)
-  )
-    throw new Error(
-      "Usage: bun scripts/release.ts <matrix|package|verify|smoke|upload-plan> --version <version> --output <directory> [--target <target>] [--existing <directory>]",
-    );
-  if (command === "matrix") return { command, version: "", outputDir: "" };
-  const values: Record<string, string> = {};
-  for (let index = 0; index < flags.length; index += 2) {
-    const flag = flags[index];
-    const value = flags[index + 1];
-    if (!flag?.startsWith("--") || !value || value.startsWith("--"))
-      throw new Error(`Invalid release argument near: ${flag ?? "<end>"}`);
-    values[flag.slice(2)] = value;
-  }
-  if (!values.version || !values.output)
-    throw new Error("Both --version and --output are required");
-  if (command === "upload-plan" && !values.existing)
-    throw new Error("--existing is required for upload-plan");
-  return {
-    command,
-    version: values.version,
-    outputDir: values.output,
-    targetId: values.target,
-    existingDir: values.existing,
-  };
-}
+const versionFlag = Flag.string("version").pipe(
+  Flag.withDescription("Release version"),
+);
+const outputFlag = Flag.string("output").pipe(
+  Flag.withDescription("Release output directory"),
+);
+
+const matrixCommand = Command.make("matrix", {}, () =>
+  Console.log(JSON.stringify(releaseMatrix())),
+).pipe(Command.withDescription("Print the release target matrix as JSON"));
+
+const packageCommand = Command.make(
+  "package",
+  { version: versionFlag, outputDir: outputFlag },
+  ({ version, outputDir }) => packageRelease({ version, outputDir }),
+).pipe(Command.withDescription("Package all release artifacts"));
+
+const verifyCommand = Command.make(
+  "verify",
+  { version: versionFlag, outputDir: outputFlag },
+  ({ version, outputDir }) => verifyReleaseDirectory(outputDir, version),
+).pipe(Command.withDescription("Verify release artifacts"));
+
+const smokeCommand = Command.make(
+  "smoke",
+  {
+    version: versionFlag,
+    outputDir: outputFlag,
+    targetId: Flag.string("target").pipe(
+      Flag.optional,
+      Flag.withDescription(
+        "Release target to smoke; defaults to the host target",
+      ),
+    ),
+  },
+  ({ version, outputDir, targetId }) => {
+    const target = Option.getOrUndefined(targetId);
+    return target === undefined
+      ? hostTargetId().pipe(
+          Effect.flatMap((hostTarget) =>
+            smokeReleaseArtifact({
+              version,
+              outputDir,
+              targetId: hostTarget,
+            }),
+          ),
+        )
+      : smokeReleaseArtifact({ version, outputDir, targetId: target });
+  },
+).pipe(Command.withDescription("Install and smoke a release artifact"));
+
+const uploadPlanCommand = Command.make(
+  "upload-plan",
+  {
+    version: versionFlag,
+    outputDir: outputFlag,
+    existingDir: Flag.string("existing").pipe(
+      Flag.withDescription("Directory containing already-published assets"),
+    ),
+  },
+  ({ version, outputDir, existingDir }) =>
+    planReleaseUploads(outputDir, existingDir, version).pipe(
+      Effect.tap((plan) => Console.log(JSON.stringify(plan))),
+    ),
+).pipe(
+  Command.withDescription("Print missing immutable release assets as JSON"),
+);
+
+export const releaseCommand = Command.make("release").pipe(
+  Command.withDescription("Package and verify CLI release artifacts"),
+  Command.withSubcommands([
+    matrixCommand,
+    packageCommand,
+    verifyCommand,
+    smokeCommand,
+    uploadPlanCommand,
+  ]),
+);
 
 if (import.meta.main) {
   Runtime.makeRunMain(({ fiber, teardown }) => {
@@ -163,56 +207,9 @@ if (import.meta.main) {
       }),
     );
   })(
-    Effect.try({
-      try: () => readCliFlags(process.argv.slice(2)),
-      catch: toError,
-    }).pipe(
-      Effect.flatMap((input) => {
-        if (input.command === "matrix")
-          return Effect.sync(() =>
-            console.log(JSON.stringify(releaseMatrix())),
-          );
-        if (input.command === "package")
-          return packageRelease({
-            version: input.version,
-            outputDir: input.outputDir,
-          });
-        if (input.command === "verify")
-          return verifyReleaseDirectory(input.outputDir, input.version);
-        if (input.command === "upload-plan")
-          return input.existingDir === undefined
-            ? Effect.fail(new Error("--existing is required for upload-plan"))
-            : planReleaseUploads(
-                input.outputDir,
-                input.existingDir,
-                input.version,
-              ).pipe(
-                Effect.tap((plan) =>
-                  Effect.sync(() => console.log(JSON.stringify(plan))),
-                ),
-              );
-        if (input.targetId !== undefined) {
-          return smokeReleaseArtifact({
-            version: input.version,
-            outputDir: input.outputDir,
-            targetId: input.targetId,
-          });
-        }
-        return hostTargetId().pipe(
-          Effect.flatMap((targetId) =>
-            smokeReleaseArtifact({
-              version: input.version,
-              outputDir: input.outputDir,
-              targetId,
-            }),
-          ),
-        );
-      }),
+    Command.run(releaseCommand, { version: "0.9.0" }).pipe(
       Effect.provide(ReleaseHostLive),
+      Effect.provide(ScriptCliLive),
     ),
   );
-}
-
-function toError(error: unknown): Error {
-  return error instanceof Error ? error : new Error(String(error));
 }

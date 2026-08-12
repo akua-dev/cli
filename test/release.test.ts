@@ -12,10 +12,13 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { parse, join } from "node:path";
-import { Effect } from "effect";
+import { Console, Effect, Layer } from "effect";
+import { Command } from "effect/unstable/cli";
 
+import { RELEASE_TARGETS, releaseCommand } from "../scripts/release";
 import { ReleaseHost } from "../scripts/runtime/release-services";
 import { ReleaseHostLive } from "../scripts/runtime/release-host-live";
+import { cliTestLayer } from "./cli-test-layer";
 
 function runRelease<A, E>(program: Effect.Effect<A, E, ReleaseHost>): A {
   return Effect.runSync(Effect.provide(program, ReleaseHostLive));
@@ -43,10 +46,31 @@ test("keeps exported release contract helpers free of host APIs", async () => {
 });
 
 describe("release target contract", () => {
+  test("renders the release matrix as JSON through the matrix subcommand", async () => {
+    const stdout: string[] = [];
+    const testConsole = Object.assign(Object.create(console), {
+      log: (value: string) => stdout.push(value),
+    }) as Console.Console;
+
+    await Effect.runPromise(
+      Command.runWith(releaseCommand, { version: "test" })(["matrix"]).pipe(
+        Effect.provide(Layer.mergeAll(cliTestLayer, ReleaseHostLive)),
+        Effect.provideService(Console.Console, testConsole),
+      ),
+    );
+
+    expect(JSON.parse(stdout.join("\n"))).toEqual({
+      include: RELEASE_TARGETS.map((target) => ({
+        target: target.id,
+        runner: target.runner,
+      })),
+    });
+  });
+
   test("public release operations require ReleaseHost and never provide its live layer", async () => {
     const release = await import("../scripts/release");
     const source = await readFile("scripts/release.ts", "utf8");
-    const publicApi = source.slice(0, source.indexOf("function readCliFlags"));
+    const publicApi = source.slice(0, source.indexOf("if (import.meta.main)"));
     const program: Effect.Effect<void, Error, ReleaseHost> =
       release.assertSafeOutputDirectory(join(process.cwd(), "dist", "release"));
 

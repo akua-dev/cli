@@ -23,3 +23,10 @@ export class ScriptFiles extends Context.Service<
     ) => Effect.Effect<void, ScriptHostFailure>;
   }
 >()("platform/scripts/Files") {}
+
+export class ScriptEnvironment extends Context.Service<
+  ScriptEnvironment,
+  {
+    readonly openApiUrl: Effect.Effect<string | undefined>;
+  }
+>()("platform/scripts/Environment") {}

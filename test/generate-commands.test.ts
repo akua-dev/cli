@@ -1,8 +1,38 @@
 import { describe, expect, test } from "bun:test";
+import { Effect, Layer } from "effect";
+import { Command } from "effect/unstable/cli";
 
-import { collectPublicCommands } from "../scripts/generate-commands";
+import {
+  collectPublicCommands,
+  generateCommandsCommand,
+} from "../scripts/generate-commands";
+import { ScriptFiles } from "../scripts/runtime/services";
+import { cliTestLayer } from "./cli-test-layer";
 
 describe("collectPublicCommands", () => {
+  test("parses --check and fails when the generated registry is stale", async () => {
+    let reads = 0;
+    const services = Layer.mergeAll(
+      cliTestLayer,
+      Layer.succeed(ScriptFiles, {
+        readText: () =>
+          Effect.sync(() => {
+            reads += 1;
+            return reads === 1 ? JSON.stringify({ paths: {} }) : "out of date";
+          }),
+        writeText: () => Effect.void,
+      }),
+    );
+
+    await expect(
+      Effect.runPromise(
+        Command.runWith(generateCommandsCommand, { version: "test" })([
+          "--check",
+        ]).pipe(Effect.provide(services)),
+      ),
+    ).rejects.toThrow("src/generated/commands.gen.ts is out of date");
+  });
+
   test("includes public operations and excludes non-public operations", () => {
     const commands = collectPublicCommands({
       paths: {
@@ -52,6 +82,9 @@ describe("collectPublicCommands", () => {
       },
     });
 
-    expect(commands.map((command) => command.operation_id)).toEqual(["agents.list", "zebras.list"]);
+    expect(commands.map((command) => command.operation_id)).toEqual([
+      "agents.list",
+      "zebras.list",
+    ]);
   });
 });
