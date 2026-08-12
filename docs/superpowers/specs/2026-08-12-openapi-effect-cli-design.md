@@ -11,6 +11,13 @@ The generated client is static source committed to the repository and checked
 in CI. An installed CLI never fetches or interprets an arbitrary OpenAPI
 document at runtime.
 
+All production control flow is Effect control flow. Production `src/` and
+`scripts/` contain no `throw` statement, native Promise control flow, or
+untyped failure helper. A module that can fail exposes an `Effect.Effect` and
+uses a typed error channel; a module that only declares immutable types,
+constants, or generated static data may remain pure and does not acquire a
+meaningless Effect import.
+
 ## Goals
 
 - Make every public OpenAPI operation executable through the normal CLI.
@@ -140,6 +147,11 @@ Effect client, decodes a documented success response, renders a documented
 error response, rejects undeclared flags, and never exposes stdin/file request
 contents. CI proves generated artifacts are current, syntactically strict, and
 typecheck against the pinned dependency set.
+
+The production invariant additionally rejects `throw`, `Promise`, `async`,
+`await`, type assertions, Effect runtime execution outside terminals, and host
+I/O outside explicitly named live adapters. Pure data modules are audited for
+the absence of failure-capable control flow rather than forced to import Effect.
 
 ## Migration order
 
