@@ -12,7 +12,10 @@ test("patched Effect generator preserves headers and SSE contracts without warni
     writeFileSync(specPath, JSON.stringify(specification()));
     const result = Bun.spawnSync({
       cmd: [
-        "./node_modules/.bin/openapigen",
+        process.execPath,
+        "x",
+        "--no-install",
+        "openapigen",
         "--spec",
         specPath,
         "--format",

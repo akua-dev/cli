@@ -893,7 +893,9 @@ async function runAkua(
   }
 
   const proc = Bun.spawn({
-    cmd: ["bun", "src/bin/akua.ts", ...args],
+    // Use this Bun process directly: the CI PATH can be a mise shim, while
+    // tests need a deterministic executable for each isolated child process.
+    cmd: [process.execPath, "src/bin/akua.ts", ...args],
     stdout: "pipe",
     stderr: "pipe",
     env: childEnv,
