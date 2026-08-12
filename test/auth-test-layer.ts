@@ -16,8 +16,8 @@ import {
   Http,
   HttpFailure,
   Process,
-  SecureConfigLive,
 } from "../src/runtime/services";
+import { SecureConfigLive } from "../src/runtime/services-live";
 
 export interface AuthTestDependencies {
   request(request: {

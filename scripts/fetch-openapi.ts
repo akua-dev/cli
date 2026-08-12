@@ -1,6 +1,7 @@
 import { Effect, Runtime } from "effect";
 
-import { ScriptFiles, ScriptHttp, ScriptLive } from "./runtime/services";
+import { ScriptFiles, ScriptHttp } from "./runtime/services";
+import { ScriptLive } from "./runtime/services-live";
 
 export const DEFAULT_OPENAPI_URL = "https://api.akua.dev/v1/openapi.json";
 export const DEFAULT_OUTPUT_PATH = "openapi/public.json";

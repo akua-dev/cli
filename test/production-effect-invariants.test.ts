@@ -4,22 +4,6 @@ import { join } from "node:path";
 import ts from "typescript";
 
 const productionRoots = ["src", "scripts"];
-const approvedLiveServiceModules = new Map<string, readonly string[]>([
-  [
-    "src/runtime/services.ts",
-    [
-      "HttpLive",
-      "BrowserLive",
-      "ProcessLive",
-      "ConsoleLive",
-      "SecureConfigLive",
-      "ClockLive",
-    ],
-  ],
-  ["src/runtime/secure-token-file-services.ts", ["SecureTokenFileLive"]],
-  ["scripts/runtime/services.ts", ["ScriptHttpLive", "ScriptFilesLive"]],
-  ["scripts/runtime/release-host-live.ts", ["ReleaseHostLive"]],
-]);
 const hostModules = new Set([
   "node:child_process",
   "node:crypto",
@@ -145,10 +129,74 @@ test("runtime handoff inspection recognizes aliased and destructured makeRunMain
   ]);
 });
 
+test("host I/O inspection rejects host APIs in non-live service definitions", () => {
+  const source = [
+    'import { readFile } from "node:fs/promises";',
+    'readFile("config.json");',
+    "export const HttpLive = undefined;",
+    "export const BrowserLive = undefined;",
+    "export const ProcessLive = undefined;",
+    "export const ConsoleLive = undefined;",
+    "export const SecureConfigLive = undefined;",
+    "export const ClockLive = undefined;",
+  ].join("\n");
+
+  expect(inspectSyntheticHostIo("src/runtime/services.ts", source)).toEqual([
+    {
+      file: "src/runtime/services.ts",
+      rule: "host I/O outside a typed live service",
+    },
+  ]);
+});
+
+test("runtime handoff inspection follows Runtime aliases and function-local destructures", () => {
+  const runtimeAlias = ts.createSourceFile(
+    "src/bin/akua.ts",
+    'import { Runtime } from "effect";\nconst R = Runtime;\nR.makeRunMain(() => {});',
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  const localDestructure = ts.createSourceFile(
+    "src/bin/akua.ts",
+    'import { Runtime } from "effect";\nfunction start() { const { makeRunMain } = Runtime; makeRunMain(() => {}); }',
+    ts.ScriptTarget.Latest,
+    true,
+  );
+
+  expect(inspectRuntimeHandoffs("src/bin/akua.ts", runtimeAlias)).toEqual([
+    {
+      file: "src/bin/akua.ts",
+      rule: "Runtime.makeRunMain outside import.meta.main",
+    },
+  ]);
+  expect(inspectRuntimeHandoffs("src/bin/akua.ts", localDestructure)).toEqual([
+    {
+      file: "src/bin/akua.ts",
+      rule: "Runtime.makeRunMain outside import.meta.main",
+    },
+  ]);
+});
+
 test("runtime handoff inspection requires makeRunMain in the terminal guard body", () => {
   const source = ts.createSourceFile(
     "src/bin/akua.ts",
     'import { Runtime } from "effect";\nif (import.meta.main) {\n  function start() { Runtime.makeRunMain(() => {}); }\n  start();\n}',
+    ts.ScriptTarget.Latest,
+    true,
+  );
+
+  expect(inspectRuntimeHandoffs("src/bin/akua.ts", source)).toEqual([
+    {
+      file: "src/bin/akua.ts",
+      rule: "Runtime.makeRunMain outside import.meta.main",
+    },
+  ]);
+});
+
+test("runtime handoff inspection requires a block-bodied import.meta.main guard", () => {
+  const source = ts.createSourceFile(
+    "src/bin/akua.ts",
+    'import { Runtime } from "effect";\nif (import.meta.main) Runtime.makeRunMain(() => {});',
     ts.ScriptTarget.Latest,
     true,
   );
@@ -199,12 +247,32 @@ function inspectHostIo(
 
   visit(sourceFile, (node) => {
     if (!isHostIo(node, checker)) return;
-    if (isApprovedLiveServiceModule(file, sourceFile)) return;
+    if (isApprovedLiveServiceModule(file)) return;
     if (isExecutableTerminal(file, node)) return;
     violations.push({ file, rule: "host I/O outside a typed live service" });
   });
 
   return violations;
+}
+
+function inspectSyntheticHostIo(file: string, source: string): Violation[] {
+  const sourceFile = ts.createSourceFile(
+    file,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  const compilerHost = ts.createCompilerHost({ noLib: true, noResolve: true });
+  const originalGetSourceFile = compilerHost.getSourceFile.bind(compilerHost);
+  compilerHost.getSourceFile = (name, languageVersion) =>
+    name === file ? sourceFile : originalGetSourceFile(name, languageVersion);
+  const program = ts.createProgram({
+    rootNames: [file],
+    options: { noLib: true, noResolve: true },
+    host: compilerHost,
+  });
+
+  return inspectHostIo(file, program, program.getTypeChecker());
 }
 
 function isHostIo(node: ts.Node, checker: ts.TypeChecker): boolean {
@@ -245,17 +313,8 @@ function isHostIo(node: ts.Node, checker: ts.TypeChecker): boolean {
   );
 }
 
-function isApprovedLiveServiceModule(
-  file: string,
-  sourceFile: ts.SourceFile,
-): boolean {
-  const liveExports = approvedLiveServiceModules.get(file);
-  return (
-    liveExports !== undefined &&
-    liveExports.every((name) =>
-      sourceFile.text.includes(`export const ${name}`),
-    )
-  );
+function isApprovedLiveServiceModule(file: string): boolean {
+  return file.endsWith("-live.ts");
 }
 
 function isExecutableTerminal(file: string, node: ts.Node): boolean {
@@ -286,9 +345,13 @@ function inspectRuntimeHandoffs(
   file: string,
   sourceFile: ts.SourceFile,
 ): Violation[] {
+  const bindings = collectRuntimeBindings(sourceFile);
   const violations: Violation[] = [];
   visit(sourceFile, (node) => {
-    if (!isRuntimeMakeRunMain(node) || isRuntimeTerminalBody(file, node))
+    if (
+      !isRuntimeMakeRunMain(node, bindings) ||
+      isRuntimeTerminalBody(file, node)
+    )
       return;
     violations.push({
       file,
@@ -298,58 +361,101 @@ function inspectRuntimeHandoffs(
   return violations;
 }
 
-function isRuntimeMakeRunMain(node: ts.Node): boolean {
+interface RuntimeBindings {
+  readonly runtime: ReadonlySet<string>;
+  readonly makeRunMain: ReadonlySet<string>;
+}
+
+function collectRuntimeBindings(sourceFile: ts.SourceFile): RuntimeBindings {
+  const runtime = new Set<string>();
+  const makeRunMain = new Set<string>();
+
+  visit(sourceFile, (node) => {
+    if (!ts.isImportDeclaration(node) || !isEffectImport(node)) return;
+    const bindings = node.importClause?.namedBindings;
+    if (!bindings || !ts.isNamedImports(bindings)) return;
+    for (const element of bindings.elements) {
+      if ((element.propertyName?.text ?? element.name.text) === "Runtime")
+        runtime.add(element.name.text);
+    }
+  });
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    visit(sourceFile, (node) => {
+      if (!ts.isVariableDeclaration(node) || node.initializer === undefined)
+        return;
+      if (ts.isIdentifier(node.name)) {
+        if (isRuntimeAlias(node.initializer, runtime))
+          changed ||= addBinding(runtime, node.name.text);
+        if (isMakeRunMainAlias(node.initializer, runtime, makeRunMain))
+          changed ||= addBinding(makeRunMain, node.name.text);
+        return;
+      }
+      if (
+        ts.isObjectBindingPattern(node.name) &&
+        isRuntimeAlias(node.initializer, runtime)
+      ) {
+        for (const element of node.name.elements) {
+          if (!isMakeRunMainBinding(element) || !ts.isIdentifier(element.name))
+            continue;
+          changed ||= addBinding(makeRunMain, element.name.text);
+        }
+      }
+    });
+  }
+
+  return { runtime, makeRunMain };
+}
+
+function isEffectImport(node: ts.ImportDeclaration): boolean {
+  return (
+    ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "effect"
+  );
+}
+
+function addBinding(bindings: Set<string>, name: string): boolean {
+  if (bindings.has(name)) return false;
+  bindings.add(name);
+  return true;
+}
+
+function isRuntimeAlias(
+  expression: ts.Expression,
+  runtime: ReadonlySet<string>,
+): boolean {
+  return ts.isIdentifier(expression) && runtime.has(expression.text);
+}
+
+function isMakeRunMainAlias(
+  expression: ts.Expression,
+  runtime: ReadonlySet<string>,
+  makeRunMain: ReadonlySet<string>,
+): boolean {
+  return (
+    (ts.isIdentifier(expression) && makeRunMain.has(expression.text)) ||
+    (ts.isPropertyAccessExpression(expression) &&
+      expression.name.text === "makeRunMain" &&
+      isRuntimeAlias(expression.expression, runtime))
+  );
+}
+
+function isRuntimeMakeRunMain(
+  node: ts.Node,
+  bindings: RuntimeBindings,
+): boolean {
   if (!ts.isCallExpression(node)) return false;
   if (ts.isPropertyAccessExpression(node.expression)) {
     return (
       node.expression.name.text === "makeRunMain" &&
-      isRuntimeIdentifier(node.expression.expression)
+      isRuntimeAlias(node.expression.expression, bindings.runtime)
     );
   }
   return (
     ts.isIdentifier(node.expression) &&
-    isDestructuredRuntimeMakeRunMain(node.expression)
+    bindings.makeRunMain.has(node.expression.text)
   );
-}
-
-function isRuntimeIdentifier(node: ts.Expression): boolean {
-  if (!ts.isIdentifier(node)) return false;
-  return node.getSourceFile().statements.some((statement) => {
-    if (
-      !ts.isImportDeclaration(statement) ||
-      statement.moduleSpecifier.getText() !== '"effect"'
-    )
-      return false;
-    const bindings = statement.importClause?.namedBindings;
-    if (!bindings || !ts.isNamedImports(bindings)) return false;
-    return bindings.elements.some(
-      (element) =>
-        (element.propertyName?.text ?? element.name.text) === "Runtime" &&
-        element.name.text === node.text,
-    );
-  });
-}
-
-function isDestructuredRuntimeMakeRunMain(node: ts.Identifier): boolean {
-  return node.getSourceFile().statements.some((statement) => {
-    if (!ts.isVariableStatement(statement)) return false;
-    return statement.declarationList.declarations.some((declaration) => {
-      const initializer = declaration.initializer;
-      return (
-        ts.isObjectBindingPattern(declaration.name) &&
-        initializer !== undefined &&
-        ts.isIdentifier(initializer) &&
-        isRuntimeIdentifier(initializer) &&
-        declaration.name.elements.some(
-          (element) =>
-            ts.isBindingElement(element) &&
-            ts.isIdentifier(element.name) &&
-            element.name.text === node.text &&
-            isMakeRunMainBinding(element),
-        )
-      );
-    });
-  });
 }
 
 function isMakeRunMainBinding(element: ts.BindingElement): boolean {
@@ -370,15 +476,11 @@ function isRuntimeTerminalBody(file: string, node: ts.Node): boolean {
     current = current.parent;
   if (current === undefined) return false;
   const parent = current.parent;
-  if (ts.isIfStatement(parent))
-    return (
-      isImportMetaMainGuard(parent.expression) &&
-      parent.thenStatement === current
-    );
   return (
     ts.isBlock(parent) &&
     ts.isIfStatement(parent.parent) &&
     isImportMetaMainGuard(parent.parent.expression) &&
+    parent.parent.thenStatement === parent &&
     current.parent === parent
   );
 }

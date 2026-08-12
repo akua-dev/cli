@@ -1,7 +1,8 @@
 import { Effect, Runtime } from "effect";
 
 import type { CommandDefinition } from "../src/runtime/registry";
-import { ScriptFiles, ScriptLive } from "./runtime/services";
+import { ScriptFiles } from "./runtime/services";
+import { ScriptLive } from "./runtime/services-live";
 
 const SPEC_PATH = "openapi/public.json";
 const OUTPUT_PATH = "src/generated/commands.gen.ts";

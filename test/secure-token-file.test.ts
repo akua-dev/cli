@@ -11,7 +11,7 @@ import {
   type SecureTokenFileDependencies,
   type SecureTokenFileStat,
 } from "../src/runtime/secure-token-file";
-import { SecureTokenFileLive } from "../src/runtime/secure-token-file-services";
+import { SecureTokenFileLive } from "../src/runtime/secure-token-file-live";
 
 const SYNTHETIC_BYTES = new Uint8Array([115, 121, 110, 116, 104, 101, 116, 105, 99]);
 const UID = 501;

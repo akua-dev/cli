@@ -17,7 +17,7 @@ import {
 } from "../src/commands/auth";
 import { renderSuccess, type RenderEnvelope } from "../src/runtime/render";
 import { toCliError } from "../src/runtime/effect-runtime";
-import { CliLive } from "../src/runtime/services";
+import { CliLive } from "../src/runtime/services-live";
 import { runAuthView } from "./auth-test-layer";
 
 describe("akua entrypoint", () => {

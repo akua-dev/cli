@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { Effect } from "effect";
 
 import { DEFAULT_OPENAPI_URL, fetchOpenApi, resolveSpecUrl, validateOpenApiDocument } from "../scripts/fetch-openapi";
-import { ScriptLive } from "../scripts/runtime/services";
+import { ScriptLive } from "../scripts/runtime/services-live";
 
 describe("OpenAPI fetch guard", () => {
   test("defaults to the production public OpenAPI endpoint", () => {

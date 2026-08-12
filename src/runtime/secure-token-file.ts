@@ -3,9 +3,10 @@ import { isAbsolute } from "node:path";
 import { Effect } from "effect";
 
 import { AkuaCliError } from "./errors";
-import { SECURE_OPEN_FLAGS, SecureTokenFile } from "./secure-token-file-services";
+import { SECURE_OPEN_FLAGS } from "./secure-token-file-live";
+import { SecureTokenFile } from "./secure-token-file-services";
 
-export { SECURE_OPEN_FLAGS } from "./secure-token-file-services";
+export { SECURE_OPEN_FLAGS } from "./secure-token-file-live";
 
 export const MAX_PROVIDER_TOKEN_BYTES = 4096;
 

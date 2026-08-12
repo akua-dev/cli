@@ -17,7 +17,8 @@ import {
   runCli,
   type CliFailure,
 } from "../runtime/effect-runtime";
-import { CliLive, Console, type CliServices } from "../runtime/services";
+import { CliLive } from "../runtime/services-live";
+import { Console, type CliServices } from "../runtime/services";
 
 const VERSION = "0.9.0"; // x-release-please-version
 
