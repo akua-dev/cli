@@ -325,6 +325,36 @@ describe("akua entrypoint", () => {
     }
   });
 
+  test("auth device login accepts RFC-compliant fallback responses", async () => {
+    const home = await makeTempHome();
+    try {
+      const requests: Array<{ url: string; body: unknown }> = [];
+      const envelope = await authView(["login", "--no-browser"], { HOME: home }, {
+        request: async ({ url, body }) => {
+          requests.push({ url, body });
+          return url.endsWith("/device/code")
+            ? {
+                status: 200,
+                body: {
+                  device_code: "device-code-must-not-be-rendered",
+                  user_code: "ABCD-EFGH",
+                  verification_uri: "https://akua.dev/device",
+                  expires_in: 60,
+                },
+              }
+            : { status: 200, body: { access_token: "access-token-must-not-be-rendered" } };
+        },
+        sleep: async () => undefined,
+        launchBrowser: async () => undefined,
+      });
+
+      expect(requests[0]?.body).toEqual({ client_id: "akua-cli", scope: "platform" });
+      expect(envelope.data).toMatchObject({ verification_uri_complete: "https://akua.dev/device" });
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
   test("auth login reports terminal device-flow outcomes without disclosing the device code", async () => {
     for (const error of ["access_denied", "expired_token"] as const) {
       const home = await makeTempHome();
@@ -406,6 +436,47 @@ describe("akua entrypoint", () => {
       expect(requests).toBe(1);
     } finally {
       await rm(expiredHome, { recursive: true, force: true });
+    }
+  });
+
+  test("auth device login aborts an in-flight token request", async () => {
+    const home = await makeTempHome();
+    const controller = new AbortController();
+    let tokenSignal: AbortSignal | undefined;
+    let tokenRequestStarted: (() => void) | undefined;
+    const tokenRequest = new Promise<void>((resolve) => {
+      tokenRequestStarted = resolve;
+    });
+    try {
+      const login = authView(["login", "--no-browser"], { HOME: home }, {
+        request: ({ url, signal }) => {
+          if (url.endsWith("/device/code")) {
+            return Promise.resolve({
+              status: 200,
+              body: {
+                device_code: "device-code-must-not-be-rendered",
+                user_code: "ABCD-EFGH",
+                verification_uri: "https://akua.dev/device",
+                expires_in: 60,
+                interval: 1,
+              },
+            });
+          }
+          tokenSignal = signal;
+          tokenRequestStarted?.();
+          return new Promise((_, reject) => signal?.addEventListener("abort", () => reject(new Error("aborted")), { once: true }));
+        },
+        sleep: async () => undefined,
+        launchBrowser: async () => undefined,
+        signal: controller.signal,
+      });
+      await tokenRequest;
+      controller.abort();
+
+      await expect(login).rejects.toMatchObject({ code: "AKUA_DEVICE_CANCELLED" });
+      expect(tokenSignal?.aborted).toBe(true);
+    } finally {
+      await rm(home, { recursive: true, force: true });
     }
   });
 

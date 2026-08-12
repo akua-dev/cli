@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 
 import { AkuaCliError, usageError } from "../runtime/errors";
 import type { RenderEnvelope } from "../runtime/render";
+import { encodeForm } from "../runtime/device-http";
 
 const CONFIG_FILE_MODE = 0o600;
 const CONFIG_DIR_MODE = 0o700;
@@ -35,9 +36,9 @@ interface DeviceCodeResponse {
   device_code: string;
   user_code: string;
   verification_uri: string;
-  verification_uri_complete: string;
+  verification_uri_complete?: string;
   expires_in: number;
-  interval: number;
+  interval?: number;
 }
 
 interface DeviceTokenResponse {
@@ -248,22 +249,23 @@ async function completeDeviceLogin(
 ): Promise<{ token: string; details: DeviceLoginDetails; observations: string[] }> {
   throwIfAborted(dependencies.signal);
   const deviceCode = parseDeviceCodeResponse(
-    await dependencies.request({
+    await requestDevice(dependencies, {
       url: `${AUTH_BASE_URL}/device/code`,
       body: { client_id: DEVICE_CLIENT_ID, scope: DEVICE_SCOPE },
       signal: dependencies.signal,
     }),
   );
+  const verificationUriComplete = deviceCode.verification_uri_complete ?? deviceCode.verification_uri;
   dependencies.displayDeviceAuthorization?.({
-    verification_uri_complete: deviceCode.verification_uri_complete,
+    verification_uri_complete: verificationUriComplete,
     user_code: deviceCode.user_code,
   });
-  const observations = noBrowser ? [] : await tryLaunchBrowser(deviceCode.verification_uri_complete, dependencies);
+  const observations = noBrowser ? [] : await tryLaunchBrowser(verificationUriComplete, dependencies);
   const token = await pollForDeviceToken(deviceCode, dependencies);
   return {
     token,
     details: {
-      verification_uri_complete: deviceCode.verification_uri_complete,
+      verification_uri_complete: verificationUriComplete,
       user_code: deviceCode.user_code,
     },
     observations,
@@ -273,11 +275,11 @@ async function completeDeviceLogin(
 async function pollForDeviceToken(deviceCode: DeviceCodeResponse, dependencies: AuthDependencies): Promise<string> {
   const now = dependencies.now ?? Date.now;
   const deadline = now() + deviceCode.expires_in * 1_000;
-  let interval = deviceCode.interval * 1_000;
+  let interval = (deviceCode.interval ?? 5) * 1_000;
 
   while (now() < deadline) {
     throwIfAborted(dependencies.signal);
-    const response = await dependencies.request({
+    const response = await requestDevice(dependencies, {
       url: `${AUTH_BASE_URL}/device/token`,
       body: {
         grant_type: DEVICE_GRANT_TYPE,
@@ -335,10 +337,12 @@ function isDeviceCodeResponse(value: unknown): value is DeviceCodeResponse {
   if (!isRecord(value)) {
     return false;
   }
-  return ["device_code", "user_code", "verification_uri", "verification_uri_complete"].every(
+  return ["device_code", "user_code", "verification_uri"].every(
     (field) => typeof value[field] === "string" && value[field] !== "",
-  ) && typeof value.expires_in === "number" && Number.isFinite(value.expires_in) && value.expires_in > 0 &&
-    typeof value.interval === "number" && Number.isFinite(value.interval) && value.interval > 0;
+  ) && (value.verification_uri_complete === undefined ||
+    (typeof value.verification_uri_complete === "string" && value.verification_uri_complete !== "")) &&
+    typeof value.expires_in === "number" && Number.isFinite(value.expires_in) && value.expires_in > 0 &&
+    (value.interval === undefined || (typeof value.interval === "number" && Number.isFinite(value.interval) && value.interval > 0));
 }
 
 function isDeviceTokenResponse(value: unknown): value is DeviceTokenResponse {
@@ -375,13 +379,30 @@ async function sleepWithCancellation(milliseconds: number, dependencies: AuthDep
     return;
   }
   throwIfAborted(signal);
-  await Promise.race([
-    dependencies.sleep(milliseconds),
-    new Promise<never>((_, reject) => {
-      signal.addEventListener("abort", () => reject(deviceCancellationError()), { once: true });
-    }),
-  ]);
+  let cancel: (() => void) | undefined;
+  try {
+    await Promise.race([
+      dependencies.sleep(milliseconds),
+      new Promise<never>((_, reject) => {
+        cancel = () => reject(deviceCancellationError());
+        signal.addEventListener("abort", cancel, { once: true });
+      }),
+    ]);
+  } finally {
+    if (cancel !== undefined) {
+      signal.removeEventListener("abort", cancel);
+    }
+  }
   throwIfAborted(signal);
+}
+
+async function requestDevice(dependencies: AuthDependencies, request: DeviceRequest): Promise<DeviceResponse> {
+  try {
+    return await dependencies.request(request);
+  } catch {
+    throwIfAborted(request.signal);
+    throw deviceFlowError("request_failed");
+  }
 }
 
 function deviceCancellationError(): AkuaCliError {
@@ -406,15 +427,20 @@ async function sendDeviceRequest(request: DeviceRequest): Promise<DeviceResponse
   try {
     response = await fetch(request.url, {
       method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(request.body),
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: encodeForm(request.body as Record<string, string>),
       signal: request.signal,
     });
   } catch {
     throwIfAborted(request.signal);
     throw deviceFlowError("request_failed");
   }
-  const text = await response.text();
+  let text: string;
+  try {
+    text = await response.text();
+  } catch {
+    throw deviceFlowError("request_failed");
+  }
   if (text.length > MAX_DEVICE_RESPONSE_SIZE) {
     throw deviceFlowError("request_failed");
   }

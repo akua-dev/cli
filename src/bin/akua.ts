@@ -1,32 +1,40 @@
 #!/usr/bin/env bun
+import { Effect } from "effect";
+
 import { authView } from "../commands/auth";
 import { agentOsView } from "../commands/agent-os";
 import { buildHomeView } from "../commands/home";
 import { commandRegistry } from "../generated/commands.gen";
 import { AkuaCliError, commandNotImplemented, usageError } from "../runtime/errors";
 import { detectOutputMode, type OutputMode } from "../runtime/mode";
-import { renderError, renderSuccess, type RenderEnvelope } from "../runtime/render";
+import type { RenderEnvelope } from "../runtime/render";
+import { CommandFailure, runCli, type CliFailure } from "../runtime/effect-runtime";
 
 const VERSION = "0.9.0"; // x-release-please-version
 
 export async function main(argv = process.argv.slice(2), env = process.env): Promise<number> {
-  let mode: OutputMode = fallbackErrorMode(argv);
-  try {
-    mode = detectOutputMode({ argv, env, stdoutIsTTY: process.stdout.isTTY });
-    const command = await route(stripGlobalFlags(argv), env);
-    process.stdout.write(renderSuccess(command, mode));
-    return 0;
-  } catch (error) {
-    const cliError = error instanceof AkuaCliError ? error : usageError(error instanceof Error ? error.message : String(error));
-    process.stdout.write(renderError(cliError, mode));
-    return cliError.exitCode;
-  }
+  let mode = fallbackErrorMode(argv);
+  const command = Effect.flatMap(
+    Effect.try({
+      try: () => {
+        mode = detectOutputMode({ argv, env, stdoutIsTTY: process.stdout.isTTY });
+      },
+      catch: (error) => new CommandFailure({ error: toCliError(error) }),
+    }),
+    () => route(argv, env),
+  );
+  return runCli(command, { mode: () => mode, writeStdout: (value) => process.stdout.write(value) });
 }
 
-async function route(argv: readonly string[], env: Record<string, string | undefined>): Promise<RenderEnvelope> {
-  if (argv.length === 0) {
-    return buildHomeView();
-  }
+function route(argv: readonly string[], env: Record<string, string | undefined>): Effect.Effect<RenderEnvelope, CliFailure> {
+  return Effect.tryPromise({
+    try: async () => routePromise(stripGlobalFlags(argv), env),
+    catch: (error) => new CommandFailure({ error: toCliError(error) }),
+  });
+}
+
+async function routePromise(argv: readonly string[], env: Record<string, string | undefined>): Promise<RenderEnvelope> {
+  if (argv.length === 0) return buildHomeView();
 
   if (argv.includes("--help") || argv.includes("-h")) {
     return helpView();
@@ -63,6 +71,10 @@ async function route(argv: readonly string[], env: Record<string, string | undef
   }
 
   throw usageError(`Unknown command: ${argv.join(" ")}`);
+}
+
+function toCliError(error: unknown): AkuaCliError {
+  return error instanceof AkuaCliError ? error : usageError(error instanceof Error ? error.message : String(error));
 }
 
 function commandsView(argv: readonly string[]): RenderEnvelope {
