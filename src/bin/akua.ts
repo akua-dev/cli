@@ -5,51 +5,89 @@ import { authView } from "../commands/auth";
 import { agentOsView } from "../commands/agent-os";
 import { buildHomeView } from "../commands/home";
 import { commandRegistry } from "../generated/commands.gen";
-import { AkuaCliError, commandNotImplemented, usageError } from "../runtime/errors";
+import {
+  AkuaCliError,
+  commandNotImplemented,
+  usageError,
+} from "../runtime/errors";
 import { detectOutputMode, type OutputMode } from "../runtime/mode";
 import type { RenderEnvelope } from "../runtime/render";
-import { CommandFailure, runCli, type CliFailure } from "../runtime/effect-runtime";
+import {
+  CommandFailure,
+  runCli,
+  type CliFailure,
+} from "../runtime/effect-runtime";
+import { CliLive, Console } from "../runtime/services";
 
 const VERSION = "0.9.0"; // x-release-please-version
 
-export async function main(argv = process.argv.slice(2), env = process.env): Promise<number> {
-  let mode = fallbackErrorMode(argv);
-  const command = Effect.flatMap(
-    Effect.try({
-      try: () => {
-        mode = detectOutputMode({ argv, env, stdoutIsTTY: process.stdout.isTTY });
-      },
-      catch: (error) => new CommandFailure({ error: toCliError(error) }),
-    }),
-    () => route(argv, env),
+export async function main(
+  argv = process.argv.slice(2),
+  env = process.env,
+): Promise<number> {
+  return Effect.runPromise(
+    Effect.provide(mainEffect(argv, env), CliLive) as Effect.Effect<number>,
   );
-  return runCli(command, { mode: () => mode, writeStdout: (value) => process.stdout.write(value) });
 }
 
-function route(argv: readonly string[], env: Record<string, string | undefined>): Effect.Effect<RenderEnvelope, CliFailure> {
-  return Effect.tryPromise({
-    try: async () => routePromise(stripGlobalFlags(argv), env),
-    catch: (error) => new CommandFailure({ error: toCliError(error) }),
+function mainEffect(
+  argv: readonly string[],
+  env: Record<string, string | undefined>,
+) {
+  let mode = fallbackErrorMode(argv);
+  return Effect.gen(function* () {
+    const console = yield* Console;
+    const command = Effect.try({
+      try: () => {
+        mode = detectOutputMode({
+          argv,
+          env,
+          stdoutIsTTY: console.stdoutIsTTY,
+        });
+      },
+      catch: (error) => new CommandFailure({ error: toCliError(error) }),
+    }).pipe(Effect.andThen(route(argv, env)));
+    return yield* runCli(command, { mode: () => mode });
   });
 }
 
-async function routePromise(argv: readonly string[], env: Record<string, string | undefined>): Promise<RenderEnvelope> {
-  if (argv.length === 0) return buildHomeView();
+function route(
+  argv: readonly string[],
+  env: Record<string, string | undefined>,
+) {
+  return Effect.try({
+    try: () => stripGlobalFlags(argv),
+    catch: (error) => new CommandFailure({ error: toCliError(error) }),
+  }).pipe(Effect.flatMap((stripped) => routeCommand(stripped, env)));
+}
+
+function routeCommand(
+  argv: readonly string[],
+  env: Record<string, string | undefined>,
+) {
+  if (argv.length === 0) return Effect.succeed(buildHomeView());
 
   if (argv.includes("--help") || argv.includes("-h")) {
-    return helpView();
+    return Effect.succeed(helpView());
   }
 
-  if (argv.includes("--version") || argv.includes("-v") || argv.includes("-V")) {
-    return {
+  if (
+    argv.includes("--version") ||
+    argv.includes("-v") ||
+    argv.includes("-V")
+  ) {
+    return Effect.succeed({
       command: "akua --version",
       observations: [VERSION],
       data: { version: VERSION },
-    };
+    });
   }
 
   if (argv[0] === "commands") {
-    return commandsView(argv.slice(1));
+    return Effect.try({
+      try: () => commandsView(argv.slice(1)),
+      catch: (error) => new CommandFailure({ error: toCliError(error) }),
+    });
   }
 
   if (argv[0] === "auth") {
@@ -57,24 +95,43 @@ async function routePromise(argv: readonly string[], env: Record<string, string 
   }
 
   if (argv[0] === "agent-os") {
-    return agentOsView(argv.slice(1), env);
+    return Effect.tryPromise({
+      try: () => agentOsView(argv.slice(1), env),
+      catch: (error) => new CommandFailure({ error: toCliError(error) }),
+    });
   }
 
   const unknownFlag = argv.find((arg) => arg.startsWith("-"));
   if (unknownFlag) {
-    throw usageError(`Unknown flag: ${flagName(unknownFlag)}`);
+    return Effect.fail(
+      new CommandFailure({
+        error: usageError(`Unknown flag: ${flagName(unknownFlag)}`),
+      }),
+    );
   }
 
-  const maybeGenerated = commandRegistry.find((definition) => definition.command === argv.join(" "));
+  const maybeGenerated = commandRegistry.find(
+    (definition) => definition.command === argv.join(" "),
+  );
   if (maybeGenerated) {
-    throw commandNotImplemented(maybeGenerated.operation_id);
+    return Effect.fail(
+      new CommandFailure({
+        error: commandNotImplemented(maybeGenerated.operation_id),
+      }),
+    );
   }
 
-  throw usageError(`Unknown command: ${argv.join(" ")}`);
+  return Effect.fail(
+    new CommandFailure({
+      error: usageError(`Unknown command: ${argv.join(" ")}`),
+    }),
+  );
 }
 
 function toCliError(error: unknown): AkuaCliError {
-  return error instanceof AkuaCliError ? error : usageError(error instanceof Error ? error.message : String(error));
+  return error instanceof AkuaCliError
+    ? error
+    : usageError(error instanceof Error ? error.message : String(error));
 }
 
 function commandsView(argv: readonly string[]): RenderEnvelope {
@@ -93,7 +150,9 @@ function commandsView(argv: readonly string[]): RenderEnvelope {
 
   return {
     command: "akua commands",
-    observations: [`${filtered.length} of ${commandRegistry.length} public operations shown.`],
+    observations: [
+      `${filtered.length} of ${commandRegistry.length} public operations shown.`,
+    ],
     data: filtered,
     next_steps: [
       { command: "akua commands --resource workspaces" },
@@ -194,7 +253,10 @@ function readFlagValue(
   const value = argv[index];
   if (value === flag) {
     const next = argv[index + 1];
-    if (next === undefined || (next.startsWith("-") && !(flag === "--limit" && /^-\d/.test(next)))) {
+    if (
+      next === undefined ||
+      (next.startsWith("-") && !(flag === "--limit" && /^-\d/.test(next)))
+    ) {
       return { value: undefined, consumedNext: false };
     }
     return { value: next, consumedNext: true };
@@ -209,7 +271,9 @@ function flagName(value: string): string {
 
 function parsePositiveInteger(value: string, flag: string): number {
   if (!/^[1-9]\d*$/.test(value)) {
-    throw usageError(`Invalid value for ${flag}: ${value}. Expected a positive integer.`);
+    throw usageError(
+      `Invalid value for ${flag}: ${value}. Expected a positive integer.`,
+    );
   }
   return Number(value);
 }

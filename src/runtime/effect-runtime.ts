@@ -1,50 +1,132 @@
 import { Data, Effect } from "effect";
 
-import { AkuaCliError } from "./errors";
-import { renderError, renderSuccess, type RenderEnvelope } from "./render";
+import { AkuaCliError, usageError } from "./errors";
 import type { OutputMode } from "./mode";
+import { renderError, renderSuccess, type RenderEnvelope } from "./render";
+import { Console } from "./services";
 
-interface FailureFields {
+export class UsageFailure extends Data.TaggedError("UsageFailure")<{
+  readonly message: string;
+}> {}
+
+export class ConfigFailure extends Data.TaggedError("ConfigFailure")<{
+  readonly operation: "read" | "write" | "remove";
+  readonly path: string;
+  readonly cause: unknown;
+}> {}
+
+export class DeviceRequestFailure extends Data.TaggedError(
+  "DeviceRequestFailure",
+)<{}> {}
+export class DeviceCancelledFailure extends Data.TaggedError(
+  "DeviceCancelledFailure",
+)<{}> {}
+
+export class DeviceAuthorizationFailure extends Data.TaggedError(
+  "DeviceAuthorizationFailure",
+)<{
+  readonly reason: "access_denied" | "expired_token";
+}> {}
+
+export class ProtectedCredentialFailure extends Data.TaggedError(
+  "ProtectedCredentialFailure",
+)<{}> {}
+
+/** Compatibility boundary for commands that have not migrated to Effect yet. */
+export class CommandFailure extends Data.TaggedError("CommandFailure")<{
   readonly error: AkuaCliError;
-}
-
-export class UsageFailure extends Data.TaggedError("UsageFailure")<FailureFields> {}
-export class ConfigFailure extends Data.TaggedError("ConfigFailure")<FailureFields> {}
-export class DeviceRequestFailure extends Data.TaggedError("DeviceRequestFailure")<FailureFields> {}
-export class DeviceCancelledFailure extends Data.TaggedError("DeviceCancelledFailure")<FailureFields> {}
-export class CommandFailure extends Data.TaggedError("CommandFailure")<FailureFields> {}
+}> {}
 
 export type CliFailure =
   | UsageFailure
   | ConfigFailure
   | DeviceRequestFailure
   | DeviceCancelledFailure
+  | DeviceAuthorizationFailure
+  | ProtectedCredentialFailure
   | CommandFailure;
 
 export interface CliRenderer {
   readonly mode: OutputMode | (() => OutputMode);
-  readonly writeStdout: (value: string) => void;
-}
-
-export function fail(error: AkuaCliError): Effect.Effect<never, CliFailure> {
-  return Effect.fail(new CommandFailure({ error }));
 }
 
 /** The only Promise boundary for command execution and rendering. */
-export async function runCli(
-  command: Effect.Effect<RenderEnvelope, CliFailure>,
+export function runCli<R>(
+  command: Effect.Effect<RenderEnvelope, CliFailure, R>,
   renderer: CliRenderer,
-): Promise<number> {
-  return Effect.runPromise(Effect.matchEffect(command, {
-    onSuccess: (envelope) => Effect.sync(() => {
-      renderer.writeStdout(renderSuccess(envelope, rendererMode(renderer)));
-      return 0;
-    }),
-    onFailure: ({ error }) => Effect.sync(() => {
-      renderer.writeStdout(renderError(error, rendererMode(renderer)));
-      return error.exitCode;
-    }),
-  }));
+): Effect.Effect<number, never, R | Console> {
+  return Effect.gen(function* () {
+    const console = yield* Console;
+    return yield* Effect.matchEffect(command, {
+      onSuccess: (envelope) =>
+        console
+          .writeStdout(renderSuccess(envelope, rendererMode(renderer)))
+          .pipe(Effect.as(0)),
+      onFailure: (failure) => {
+        const error = toCliError(failure);
+        return console
+          .writeStdout(renderError(error, rendererMode(renderer)))
+          .pipe(Effect.as(error.exitCode));
+      },
+    });
+  });
+}
+
+export function toCliError(failure: CliFailure): AkuaCliError {
+  switch (failure._tag) {
+    case "UsageFailure":
+      return usageError(failure.message);
+    case "ConfigFailure":
+      return new AkuaCliError({
+        type: "runtime_error",
+        code: "AKUA_CONFIG_ERROR",
+        message: `Failed to ${failure.operation} Akua config at ${failure.path}: ${errorMessage(failure.cause)}`,
+      });
+    case "DeviceRequestFailure":
+      return deviceError(
+        "AKUA_DEVICE_REQUEST_FAILED",
+        "Device authorization could not be completed.",
+      );
+    case "DeviceCancelledFailure":
+      return new AkuaCliError({
+        type: "runtime_error",
+        code: "AKUA_DEVICE_CANCELLED",
+        message: "Device authorization was cancelled.",
+      });
+    case "DeviceAuthorizationFailure":
+      return failure.reason === "access_denied"
+        ? deviceError(
+            "AKUA_DEVICE_ACCESS_DENIED",
+            "Device authorization was denied.",
+          )
+        : deviceError(
+            "AKUA_DEVICE_EXPIRED_TOKEN",
+            "Device authorization expired. Start login again.",
+          );
+    case "ProtectedCredentialFailure":
+      return new AkuaCliError({
+        type: "authentication_error",
+        code: "AKUA_LOADER_AUTH_REQUIRED",
+        message:
+          "A protected local Akua credential is required for this provider loader.",
+        exitCode: 3,
+      });
+    case "CommandFailure":
+      return failure.error;
+  }
+}
+
+function deviceError(code: string, message: string): AkuaCliError {
+  return new AkuaCliError({
+    type: "authentication_error",
+    code,
+    message,
+    exitCode: 3,
+  });
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function rendererMode(renderer: CliRenderer): OutputMode {

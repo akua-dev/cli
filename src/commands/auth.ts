@@ -1,17 +1,32 @@
-import { randomUUID } from "node:crypto";
-import { chmod, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
+
+import { Clock, Duration, Effect, Layer } from "effect";
+import type { Clock as ClockService } from "effect/Clock";
 
 import { AkuaCliError, usageError } from "../runtime/errors";
+import {
+  ConfigFailure,
+  CommandFailure,
+  DeviceAuthorizationFailure,
+  DeviceCancelledFailure,
+  DeviceRequestFailure,
+  ProtectedCredentialFailure,
+  toCliError,
+  type CliFailure,
+  UsageFailure,
+} from "../runtime/effect-runtime";
+import {
+  Browser,
+  BrowserFailure,
+  Console,
+  Http,
+  HttpFailure,
+  Process,
+  SecureConfig,
+  SecureConfigLive,
+  type SecureConfigFailure,
+} from "../runtime/services";
 import type { RenderEnvelope } from "../runtime/render";
-import { encodeForm } from "../runtime/device-http";
-
-const CONFIG_FILE_MODE = 0o600;
-const CONFIG_DIR_MODE = 0o700;
-
-type AkuaConfig = Record<string, unknown> & {
-  token?: string;
-};
 
 type CredentialSource = "env" | "config" | "none";
 
@@ -19,7 +34,6 @@ const AUTH_BASE_URL = "https://akua.dev/api/auth";
 const DEVICE_CLIENT_ID = "akua-cli";
 const DEVICE_SCOPE = "platform";
 const DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code";
-const MAX_DEVICE_RESPONSE_SIZE = 16_384;
 
 interface AuthStatus {
   authenticated: boolean;
@@ -54,14 +68,26 @@ interface DeviceResponse {
   body: unknown;
 }
 
-interface DeviceRequest {
-  url: string;
-  body: unknown;
-  signal?: AbortSignal;
+interface LoginFlags {
+  token?: string;
+  noBrowser: boolean;
 }
 
+interface DeviceLoginResult {
+  token: string;
+  details?: DeviceLoginDetails;
+  observations: string[];
+}
+
+type AuthServices =
+  Http | Browser | Process | Console | SecureConfig | ClockService;
+
 export interface AuthDependencies {
-  request(request: DeviceRequest): Promise<DeviceResponse>;
+  request(request: {
+    url: string;
+    body: unknown;
+    signal?: AbortSignal;
+  }): Promise<DeviceResponse>;
   sleep(milliseconds: number): Promise<void>;
   launchBrowser(url: string): Promise<void>;
   displayDeviceAuthorization?(details: DeviceLoginDetails): void;
@@ -69,116 +95,407 @@ export interface AuthDependencies {
   signal?: AbortSignal;
 }
 
-class ConfigParseError extends AkuaCliError {}
-
-const productionDependencies: AuthDependencies = {
-  request: sendDeviceRequest,
-  sleep: async (milliseconds) => Bun.sleep(milliseconds),
-  launchBrowser,
-  displayDeviceAuthorization: ({ verification_uri_complete, user_code }) => {
-    process.stderr.write(`Open ${verification_uri_complete}\nEnter code: ${user_code}\n`);
-  },
-  now: () => Date.now(),
-};
-
-export async function authView(
+export function authView(
   argv: readonly string[],
   env: Record<string, string | undefined>,
-  dependencies: AuthDependencies = productionDependencies,
-): Promise<RenderEnvelope> {
-  const subcommand = argv[0];
-  if (subcommand === undefined) {
-    throw usageError("Missing auth subcommand.");
-  }
-
-  if (subcommand === "login") {
-    return loginView(argv.slice(1), env, dependencies);
-  }
-  if (subcommand === "status") {
-    return statusView(argv.slice(1), env);
-  }
-  if (subcommand === "logout") {
-    return logoutView(argv.slice(1), env);
-  }
-
-  throw usageError("Unknown auth subcommand.");
-}
-
-export async function readProtectedCallerToken(env: Record<string, string | undefined>): Promise<string> {
-  if (hasEnvToken(env)) {
-    throw new AkuaCliError({
-      type: "usage_error",
-      code: "AKUA_LOADER_ENV_AUTH_FORBIDDEN",
-      message: "Environment authentication is not accepted for this provider loader.",
-      exitCode: 2,
-    });
-  }
-
-  const token = (await readConfig(resolveConfigPath(env))).token;
-  if (typeof token !== "string" || token === "") {
-    throw new AkuaCliError({
-      type: "authentication_error",
-      code: "AKUA_LOADER_AUTH_REQUIRED",
-      message: "A protected local Akua credential is required for this provider loader.",
-      exitCode: 3,
-    });
-  }
-  return token;
-}
-
-async function loginView(
+): Effect.Effect<RenderEnvelope, CliFailure, AuthServices>;
+export function authView(
   argv: readonly string[],
   env: Record<string, string | undefined>,
   dependencies: AuthDependencies,
-): Promise<RenderEnvelope> {
-  const login = parseLoginFlags(argv);
-  const configPath = resolveConfigPath(env);
-  const result = login.token === undefined ? await runDeviceLogin(login.noBrowser, dependencies) : {
-    token: login.token,
-    details: undefined,
-    observations: [],
-  };
-  await saveStoredToken(configPath, result.token);
-
-  return {
-    command: "akua auth login",
-    observations: [...result.observations, "Authentication token saved."],
-    data: {
-      authenticated: true,
-      source: "config",
-      config_path: configPath,
-      ...result.details,
-    } satisfies AuthStatus,
-    next_steps: [{ command: "akua auth status" }],
-  };
+): Promise<RenderEnvelope>;
+export function authView(
+  argv: readonly string[],
+  env: Record<string, string | undefined>,
+  dependencies?: AuthDependencies,
+) {
+  const command = authProgram(argv, env);
+  if (dependencies === undefined) return command;
+  if (dependencies.signal?.aborted)
+    return Promise.reject(toCliError(new DeviceCancelledFailure()));
+  const provided = Effect.provide(
+    command,
+    testServices(dependencies),
+  ) as Effect.Effect<RenderEnvelope, CliFailure>;
+  return Effect.runPromise(
+    provided.pipe(
+      Effect.catchIf(
+        (failure): failure is DeviceRequestFailure =>
+          dependencies.signal?.aborted === true &&
+          failure._tag === "DeviceRequestFailure",
+        () => Effect.fail(new DeviceCancelledFailure()),
+      ),
+      Effect.mapError(toCliError),
+    ) as Effect.Effect<RenderEnvelope, AkuaCliError>,
+  );
 }
 
-async function runDeviceLogin(
-  noBrowser: boolean,
-  dependencies: AuthDependencies,
-): Promise<{ token: string; details: DeviceLoginDetails; observations: string[] }> {
-  if (dependencies.signal !== undefined) {
-    return completeDeviceLogin(noBrowser, dependencies);
-  }
-
-  const controller = new AbortController();
-  const cancel = () => controller.abort();
-  process.once("SIGINT", cancel);
-  process.once("SIGTERM", cancel);
-  try {
-    return await completeDeviceLogin(noBrowser, { ...dependencies, signal: controller.signal });
-  } finally {
-    process.removeListener("SIGINT", cancel);
-    process.removeListener("SIGTERM", cancel);
-  }
+function authProgram(
+  argv: readonly string[],
+  env: Record<string, string | undefined>,
+): Effect.Effect<RenderEnvelope, CliFailure, AuthServices> {
+  return parseAuthCommand(argv).pipe(
+    Effect.flatMap(
+      (command): Effect.Effect<RenderEnvelope, CliFailure, AuthServices> => {
+        if (command.subcommand === "login") return loginView(command.argv, env);
+        if (command.subcommand === "status")
+          return statusView(command.argv, env);
+        return logoutView(command.argv, env);
+      },
+    ),
+  ) as Effect.Effect<RenderEnvelope, CliFailure, AuthServices>;
 }
 
-async function statusView(argv: readonly string[], env: Record<string, string | undefined>): Promise<RenderEnvelope> {
-  rejectUnexpectedAuthArgs("status", argv);
-  const configPath = optionalConfigPath(env);
-  const source = hasEnvToken(env) ? "env" : await storedCredentialSource(configPath ?? resolveConfigPath(env));
+export function readProtectedCallerToken(
+  env: Record<string, string | undefined>,
+) {
+  return Effect.try({
+    try: () => resolveConfigPath(env),
+    catch: usageFailure,
+  }).pipe(
+    Effect.flatMap(
+      (configPath): Effect.Effect<string, CliFailure, SecureConfig> => {
+        if (hasEnvToken(env)) {
+          return Effect.fail(
+            new CommandFailure({
+              error: new AkuaCliError({
+                type: "usage_error",
+                code: "AKUA_LOADER_ENV_AUTH_FORBIDDEN",
+                message:
+                  "Environment authentication is not accepted for this provider loader.",
+                exitCode: 2,
+              }),
+            }),
+          );
+        }
+        return Effect.gen(function* () {
+          const config = yield* SecureConfig;
+          const token = yield* config
+            .readToken(configPath)
+            .pipe(Effect.mapError(configFailure));
+          return yield* token === undefined
+            ? Effect.fail(new ProtectedCredentialFailure())
+            : Effect.succeed(token);
+        });
+      },
+    ),
+  ) as Effect.Effect<string, CliFailure, SecureConfig>;
+}
+
+/** Adapter retained until the Agent OS command is migrated to Effect. */
+export async function readProtectedCallerTokenForAgentOs(
+  env: Record<string, string | undefined>,
+): Promise<string> {
+  return Effect.runPromise(
+    Effect.provide(readProtectedCallerToken(env), SecureConfigLive).pipe(
+      Effect.mapError(toCliError),
+    ) as Effect.Effect<string, AkuaCliError>,
+  );
+}
+
+function loginView(
+  argv: readonly string[],
+  env: Record<string, string | undefined>,
+) {
+  return Effect.try({
+    try: () => ({
+      flags: parseLoginFlags(argv),
+      configPath: resolveConfigPath(env),
+    }),
+    catch: usageFailure,
+  }).pipe(
+    Effect.flatMap(({ flags, configPath }) => {
+      const result: Effect.Effect<DeviceLoginResult, CliFailure, AuthServices> =
+        flags.token === undefined
+          ? runDeviceLogin(flags.noBrowser)
+          : Effect.succeed({
+              token: flags.token,
+              details: undefined,
+              observations: [],
+            } satisfies DeviceLoginResult);
+      return result.pipe(
+        Effect.flatMap((login) =>
+          Effect.gen(function* () {
+            const config = yield* SecureConfig;
+            yield* config
+              .saveToken(configPath, login.token)
+              .pipe(Effect.mapError(configFailure));
+            return {
+              command: "akua auth login",
+              observations: [
+                ...login.observations,
+                "Authentication token saved.",
+              ],
+              data: {
+                authenticated: true,
+                source: "config",
+                config_path: configPath,
+                ...login.details,
+              } satisfies AuthStatus,
+              next_steps: [{ command: "akua auth status" }],
+            } satisfies RenderEnvelope;
+          }),
+        ),
+      );
+    }),
+  );
+}
+
+function runDeviceLogin(noBrowser: boolean) {
+  return Effect.gen(function* () {
+    const process = yield* Process;
+    return yield* completeDeviceLogin(noBrowser).pipe(
+      Effect.raceFirst(
+        process.awaitSignal.pipe(
+          Effect.andThen(Effect.fail(new DeviceCancelledFailure())),
+        ),
+      ),
+    );
+  });
+}
+
+function completeDeviceLogin(noBrowser: boolean) {
+  return Effect.gen(function* () {
+    const deviceCode = yield* requestDevice(`${AUTH_BASE_URL}/device/code`, {
+      client_id: DEVICE_CLIENT_ID,
+      scope: DEVICE_SCOPE,
+    }).pipe(Effect.flatMap(parseDeviceCode));
+    const verificationUriComplete =
+      deviceCode.verification_uri_complete ?? deviceCode.verification_uri;
+    const console = yield* Console;
+    yield* console.writeStderr(
+      `Open ${verificationUriComplete}\nEnter code: ${deviceCode.user_code}\n`,
+    );
+    const observations = noBrowser
+      ? []
+      : yield* tryLaunchBrowser(verificationUriComplete);
+    const clock = yield* Clock.Clock;
+    const startedAt = yield* clock.currentTimeMillis;
+    const token = yield* pollForDeviceToken(
+      deviceCode,
+      startedAt + deviceCode.expires_in * 1_000,
+      (deviceCode.interval ?? 5) * 1_000,
+    );
+    return {
+      token,
+      details: {
+        verification_uri_complete: verificationUriComplete,
+        user_code: deviceCode.user_code,
+      },
+      observations,
+    };
+  });
+}
+
+function pollForDeviceToken(
+  deviceCode: DeviceCodeResponse,
+  deadline: number,
+  interval: number,
+): Effect.Effect<
+  string,
+  DeviceAuthorizationFailure | DeviceRequestFailure,
+  Http | ClockService
+> {
+  return Effect.gen(function* () {
+    const clock = yield* Clock.Clock;
+    const now = yield* clock.currentTimeMillis;
+    if (now >= deadline)
+      return yield* Effect.fail(
+        new DeviceAuthorizationFailure({ reason: "expired_token" }),
+      );
+    const response = yield* requestDevice(`${AUTH_BASE_URL}/device/token`, {
+      grant_type: DEVICE_GRANT_TYPE,
+      device_code: deviceCode.device_code,
+      client_id: DEVICE_CLIENT_ID,
+    });
+    const token = yield* parseDeviceToken(response);
+    if (token !== undefined) return token;
+    const error = deviceError(response);
+    if (error === "access_denied" || error === "expired_token") {
+      return yield* Effect.fail(
+        new DeviceAuthorizationFailure({ reason: error }),
+      );
+    }
+    if (error !== "authorization_pending" && error !== "slow_down") {
+      return yield* Effect.fail(new DeviceRequestFailure());
+    }
+    const nextInterval = error === "slow_down" ? interval + 5_000 : interval;
+    if (now + nextInterval >= deadline) {
+      return yield* Effect.fail(
+        new DeviceAuthorizationFailure({ reason: "expired_token" }),
+      );
+    }
+    yield* clock.sleep(Duration.millis(nextInterval));
+    return yield* pollForDeviceToken(deviceCode, deadline, nextInterval);
+  });
+}
+
+function requestDevice(url: string, fields: Record<string, string>) {
+  return Effect.gen(function* () {
+    const http = yield* Http;
+    return yield* http
+      .postForm({ url, fields })
+      .pipe(Effect.mapError(() => new DeviceRequestFailure()));
+  });
+}
+
+function parseDeviceCode(response: DeviceResponse) {
+  return Effect.try({
+    try: () => {
+      if (
+        response.status < 200 ||
+        response.status >= 300 ||
+        !isDeviceCodeResponse(response.body)
+      ) {
+        throw new Error("Invalid device-code response.");
+      }
+      return response.body;
+    },
+    catch: () => new DeviceRequestFailure(),
+  });
+}
+
+function parseDeviceToken(response: DeviceResponse) {
+  return Effect.try({
+    try: () => {
+      if (response.status < 200 || response.status >= 300) return undefined;
+      if (!isDeviceTokenResponse(response.body))
+        throw new Error("Invalid device-token response.");
+      return response.body.access_token;
+    },
+    catch: () => new DeviceRequestFailure(),
+  });
+}
+
+function tryLaunchBrowser(url: string) {
+  return Effect.gen(function* () {
+    const browser = yield* Browser;
+    return yield* browser.launch(url).pipe(
+      Effect.match({
+        onFailure: () => [
+          "Could not open a browser. Open the verification URL manually.",
+        ],
+        onSuccess: () => [],
+      }),
+    );
+  });
+}
+
+function statusView(
+  argv: readonly string[],
+  env: Record<string, string | undefined>,
+) {
+  return Effect.try({
+    try: () => {
+      rejectUnexpectedAuthArgs("status", argv);
+      return optionalConfigPath(env);
+    },
+    catch: usageFailure,
+  }).pipe(
+    Effect.flatMap((configPath) => {
+      if (hasEnvToken(env))
+        return Effect.succeed(statusEnvelope("env", configPath));
+      if (configPath === undefined)
+        return Effect.succeed(statusEnvelope("none", undefined));
+      return Effect.gen(function* () {
+        const config = yield* SecureConfig;
+        const token = yield* config
+          .readToken(configPath)
+          .pipe(Effect.mapError(configFailure));
+        return statusEnvelope(
+          token === undefined ? "none" : "config",
+          configPath,
+        );
+      });
+    }),
+  );
+}
+
+function logoutView(
+  argv: readonly string[],
+  env: Record<string, string | undefined>,
+) {
+  return Effect.try({
+    try: () => {
+      rejectUnexpectedAuthArgs("logout", argv);
+      return resolveConfigPath(env);
+    },
+    catch: usageFailure,
+  }).pipe(
+    Effect.flatMap((configPath) =>
+      Effect.gen(function* () {
+        const config = yield* SecureConfig;
+        const hadStoredToken = yield* config
+          .removeToken(configPath)
+          .pipe(Effect.mapError(configFailure));
+        const envStillAuthenticated = hasEnvToken(env);
+        return {
+          command: "akua auth logout",
+          observations: [
+            logoutObservation(hadStoredToken, envStillAuthenticated),
+          ],
+          data: {
+            authenticated: envStillAuthenticated,
+            source: envStillAuthenticated ? "env" : "none",
+            config_path: configPath,
+          } satisfies AuthStatus,
+          next_steps: envStillAuthenticated
+            ? [{ command: "unset AKUA_API_TOKEN" }]
+            : [{ command: "akua auth login --token <token>" }],
+        } satisfies RenderEnvelope;
+      }),
+    ),
+  );
+}
+
+function parseAuthCommand(argv: readonly string[]) {
+  return Effect.try({
+    try: () => {
+      const subcommand = argv[0];
+      if (subcommand === undefined)
+        throw usageError("Missing auth subcommand.");
+      if (
+        subcommand !== "login" &&
+        subcommand !== "status" &&
+        subcommand !== "logout"
+      ) {
+        throw usageError("Unknown auth subcommand.");
+      }
+      return { subcommand, argv: argv.slice(1) };
+    },
+    catch: usageFailure,
+  });
+}
+
+function parseLoginFlags(argv: readonly string[]): LoginFlags {
+  let token: string | undefined;
+  let noBrowser = false;
+  for (let index = 0; index < argv.length; index += 1) {
+    const value = argv[index];
+    if (!value.startsWith("-"))
+      throw usageError("Unexpected argument for auth login.");
+    const name = flagName(value);
+    if (name === "--no-browser") {
+      if (value !== "--no-browser")
+        throw usageError("--no-browser does not accept a value.");
+      noBrowser = true;
+      continue;
+    }
+    if (name !== "--token") throw usageError(`Unknown flag: ${name}`);
+    const raw = readFlagValue(argv, index, name);
+    if (raw.value === undefined || raw.value === "")
+      throw usageError("Missing value for --token.");
+    token = raw.value;
+    if (raw.consumedNext) index += 1;
+  }
+  return { token, noBrowser };
+}
+
+function statusEnvelope(
+  source: CredentialSource,
+  configPath: string | undefined,
+): RenderEnvelope {
   const authenticated = source !== "none";
-
   return {
     command: "akua auth status",
     observations: [statusObservation(source)],
@@ -187,283 +504,73 @@ async function statusView(argv: readonly string[], env: Record<string, string | 
       source,
       config_path: configPath,
     } satisfies AuthStatus,
-    next_steps: authenticated ? undefined : [{ command: "akua auth login --token <token>" }],
+    next_steps: authenticated
+      ? undefined
+      : [{ command: "akua auth login --token <token>" }],
   };
 }
 
-async function logoutView(argv: readonly string[], env: Record<string, string | undefined>): Promise<RenderEnvelope> {
-  rejectUnexpectedAuthArgs("logout", argv);
-  const configPath = resolveConfigPath(env);
-  const hadStoredToken = await removeStoredToken(configPath);
-  const envStillAuthenticated = hasEnvToken(env);
-
-  return {
-    command: "akua auth logout",
-    observations: [logoutObservation(hadStoredToken, envStillAuthenticated)],
-    data: {
-      authenticated: envStillAuthenticated,
-      source: envStillAuthenticated ? "env" : "none",
-      config_path: configPath,
-    } satisfies AuthStatus,
-    next_steps: envStillAuthenticated ? [{ command: "unset AKUA_API_TOKEN" }] : [{ command: "akua auth login --token <token>" }],
-  };
-}
-
-function parseLoginFlags(argv: readonly string[]): { token?: string; noBrowser: boolean } {
-  let token: string | undefined;
-  let noBrowser = false;
-  for (let index = 0; index < argv.length; index += 1) {
-    const value = argv[index];
-    if (!value.startsWith("-")) {
-      throw usageError("Unexpected argument for auth login.");
-    }
-
-    const name = flagName(value);
-    if (name === "--no-browser") {
-      if (value !== "--no-browser") {
-        throw usageError("--no-browser does not accept a value.");
-      }
-      noBrowser = true;
-      continue;
-    }
-    if (name !== "--token") {
-      throw usageError(`Unknown flag: ${name}`);
-    }
-
-    const raw = readFlagValue(argv, index, name);
-    if (raw.value === undefined || raw.value === "") {
-      throw usageError("Missing value for --token.");
-    }
-    token = raw.value;
-    if (raw.consumedNext) {
-      index += 1;
-    }
-  }
-
-  return { token, noBrowser };
-}
-
-async function completeDeviceLogin(
-  noBrowser: boolean,
-  dependencies: AuthDependencies,
-): Promise<{ token: string; details: DeviceLoginDetails; observations: string[] }> {
-  throwIfAborted(dependencies.signal);
-  const deviceCode = parseDeviceCodeResponse(
-    await requestDevice(dependencies, {
-      url: `${AUTH_BASE_URL}/device/code`,
-      body: { client_id: DEVICE_CLIENT_ID, scope: DEVICE_SCOPE },
-      signal: dependencies.signal,
-    }),
+function isDeviceCodeResponse(value: unknown): value is DeviceCodeResponse {
+  if (!isRecord(value)) return false;
+  return (
+    ["device_code", "user_code", "verification_uri"].every(
+      (field) => typeof value[field] === "string" && value[field] !== "",
+    ) &&
+    (value.verification_uri_complete === undefined ||
+      (typeof value.verification_uri_complete === "string" &&
+        value.verification_uri_complete !== "")) &&
+    typeof value.expires_in === "number" &&
+    Number.isFinite(value.expires_in) &&
+    value.expires_in > 0 &&
+    (value.interval === undefined ||
+      (typeof value.interval === "number" &&
+        Number.isFinite(value.interval) &&
+        value.interval > 0))
   );
-  const verificationUriComplete = deviceCode.verification_uri_complete ?? deviceCode.verification_uri;
-  dependencies.displayDeviceAuthorization?.({
-    verification_uri_complete: verificationUriComplete,
-    user_code: deviceCode.user_code,
-  });
-  const observations = noBrowser ? [] : await tryLaunchBrowser(verificationUriComplete, dependencies);
-  const token = await pollForDeviceToken(deviceCode, dependencies);
-  return {
-    token,
-    details: {
-      verification_uri_complete: verificationUriComplete,
-      user_code: deviceCode.user_code,
-    },
-    observations,
-  };
 }
 
-async function pollForDeviceToken(deviceCode: DeviceCodeResponse, dependencies: AuthDependencies): Promise<string> {
-  const now = dependencies.now ?? Date.now;
-  const deadline = now() + deviceCode.expires_in * 1_000;
-  let interval = (deviceCode.interval ?? 5) * 1_000;
-
-  while (now() < deadline) {
-    throwIfAborted(dependencies.signal);
-    const response = await requestDevice(dependencies, {
-      url: `${AUTH_BASE_URL}/device/token`,
-      body: {
-        grant_type: DEVICE_GRANT_TYPE,
-        device_code: deviceCode.device_code,
-        client_id: DEVICE_CLIENT_ID,
-      },
-      signal: dependencies.signal,
-    });
-    const token = parseDeviceTokenResponse(response);
-    if (token !== undefined) {
-      return token;
-    }
-
-    const error = deviceError(response);
-    if (error === "access_denied" || error === "expired_token") {
-      throw deviceFlowError(error);
-    }
-    if (error !== "authorization_pending" && error !== "slow_down") {
-      throw deviceFlowError("request_failed");
-    }
-    if (error === "slow_down") {
-      interval += 5_000;
-    }
-    if (now() + interval >= deadline) {
-      break;
-    }
-    await sleepWithCancellation(interval, dependencies);
-  }
-
-  throw deviceFlowError("expired_token");
-}
-
-function parseDeviceCodeResponse(response: DeviceResponse): DeviceCodeResponse {
-  if (response.status < 200 || response.status >= 300 || !isDeviceCodeResponse(response.body)) {
-    throw deviceFlowError("request_failed");
-  }
-  return response.body;
-}
-
-function parseDeviceTokenResponse(response: DeviceResponse): string | undefined {
-  if (response.status < 200 || response.status >= 300) {
-    return undefined;
-  }
-  if (!isDeviceTokenResponse(response.body)) {
-    throw deviceFlowError("request_failed");
-  }
-  return response.body.access_token;
+function isDeviceTokenResponse(value: unknown): value is DeviceTokenResponse {
+  return (
+    isRecord(value) &&
+    typeof value.access_token === "string" &&
+    value.access_token !== ""
+  );
 }
 
 function deviceError(response: DeviceResponse): string | undefined {
   return isDeviceErrorResponse(response.body) ? response.body.error : undefined;
 }
 
-function isDeviceCodeResponse(value: unknown): value is DeviceCodeResponse {
-  if (!isRecord(value)) {
-    return false;
-  }
-  return ["device_code", "user_code", "verification_uri"].every(
-    (field) => typeof value[field] === "string" && value[field] !== "",
-  ) && (value.verification_uri_complete === undefined ||
-    (typeof value.verification_uri_complete === "string" && value.verification_uri_complete !== "")) &&
-    typeof value.expires_in === "number" && Number.isFinite(value.expires_in) && value.expires_in > 0 &&
-    (value.interval === undefined || (typeof value.interval === "number" && Number.isFinite(value.interval) && value.interval > 0));
-}
-
-function isDeviceTokenResponse(value: unknown): value is DeviceTokenResponse {
-  return isRecord(value) && typeof value.access_token === "string" && value.access_token !== "";
-}
-
 function isDeviceErrorResponse(value: unknown): value is DeviceErrorResponse {
-  return isRecord(value) && (value.error === undefined || typeof value.error === "string");
+  return (
+    isRecord(value) &&
+    (value.error === undefined || typeof value.error === "string")
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-async function tryLaunchBrowser(url: string, dependencies: AuthDependencies): Promise<string[]> {
-  try {
-    await dependencies.launchBrowser(url);
-    return [];
-  } catch {
-    return ["Could not open a browser. Open the verification URL manually."];
-  }
-}
-
-function throwIfAborted(signal: AbortSignal | undefined): void {
-  if (signal?.aborted) {
-    throw deviceCancellationError();
-  }
-}
-
-async function sleepWithCancellation(milliseconds: number, dependencies: AuthDependencies): Promise<void> {
-  const signal = dependencies.signal;
-  if (signal === undefined) {
-    await dependencies.sleep(milliseconds);
-    return;
-  }
-  throwIfAborted(signal);
-  let cancel: (() => void) | undefined;
-  try {
-    await Promise.race([
-      dependencies.sleep(milliseconds),
-      new Promise<never>((_, reject) => {
-        cancel = () => reject(deviceCancellationError());
-        signal.addEventListener("abort", cancel, { once: true });
-      }),
-    ]);
-  } finally {
-    if (cancel !== undefined) {
-      signal.removeEventListener("abort", cancel);
-    }
-  }
-  throwIfAborted(signal);
-}
-
-async function requestDevice(dependencies: AuthDependencies, request: DeviceRequest): Promise<DeviceResponse> {
-  try {
-    return await dependencies.request(request);
-  } catch {
-    throwIfAborted(request.signal);
-    throw deviceFlowError("request_failed");
-  }
-}
-
-function deviceCancellationError(): AkuaCliError {
-  return new AkuaCliError({
-    type: "runtime_error",
-    code: "AKUA_DEVICE_CANCELLED",
-    message: "Device authorization was cancelled.",
+function usageFailure(error: unknown): UsageFailure {
+  return new UsageFailure({
+    message:
+      error instanceof AkuaCliError ? error.message : errorMessage(error),
   });
 }
 
-function deviceFlowError(reason: "access_denied" | "expired_token" | "request_failed"): AkuaCliError {
-  const details = {
-    access_denied: { code: "AKUA_DEVICE_ACCESS_DENIED", message: "Device authorization was denied." },
-    expired_token: { code: "AKUA_DEVICE_EXPIRED_TOKEN", message: "Device authorization expired. Start login again." },
-    request_failed: { code: "AKUA_DEVICE_REQUEST_FAILED", message: "Device authorization could not be completed." },
-  }[reason];
-  return new AkuaCliError({ type: "authentication_error", ...details, exitCode: 3 });
+function configFailure(error: SecureConfigFailure): ConfigFailure {
+  return new ConfigFailure({
+    operation: error.operation,
+    path: error.path,
+    cause: error.cause,
+  });
 }
 
-async function sendDeviceRequest(request: DeviceRequest): Promise<DeviceResponse> {
-  let response: Response;
-  try {
-    response = await fetch(request.url, {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: encodeForm(request.body as Record<string, string>),
-      signal: request.signal,
-    });
-  } catch {
-    throwIfAborted(request.signal);
-    throw deviceFlowError("request_failed");
-  }
-  let text: string;
-  try {
-    text = await response.text();
-  } catch {
-    throw deviceFlowError("request_failed");
-  }
-  if (text.length > MAX_DEVICE_RESPONSE_SIZE) {
-    throw deviceFlowError("request_failed");
-  }
-  try {
-    return { status: response.status, body: text === "" ? {} : JSON.parse(text) };
-  } catch {
-    throw deviceFlowError("request_failed");
-  }
-}
-
-async function launchBrowser(url: string): Promise<void> {
-  const command = process.platform === "darwin"
-    ? ["open", url]
-    : process.platform === "win32"
-      ? ["cmd", "/c", "start", "", url]
-      : ["xdg-open", url];
-  const processHandle = Bun.spawn({ cmd: command, stdout: "ignore", stderr: "ignore" });
-  if ((await processHandle.exited) !== 0) {
-    throw new Error("Browser launch failed.");
-  }
-}
-
-function rejectUnexpectedAuthArgs(subcommand: string, argv: readonly string[]): void {
+function rejectUnexpectedAuthArgs(
+  subcommand: string,
+  argv: readonly string[],
+): void {
   if (argv.length > 0) {
     const first = argv[0];
     throw first.startsWith("-")
@@ -472,159 +579,44 @@ function rejectUnexpectedAuthArgs(subcommand: string, argv: readonly string[]): 
   }
 }
 
-async function storedCredentialSource(configPath: string): Promise<CredentialSource> {
-  if (hasStoredToken(await readConfig(configPath))) {
-    return "config";
-  }
-  return "none";
-}
-
 function hasEnvToken(env: Record<string, string | undefined>): boolean {
   return env.AKUA_API_TOKEN !== undefined && env.AKUA_API_TOKEN !== "";
 }
 
 function resolveConfigPath(env: Record<string, string | undefined>): string {
   const home = env.HOME;
-  if (home === undefined || home === "") {
+  if (home === undefined || home === "")
     throw usageError("HOME is required to locate ~/.config/akua/config.json.");
-  }
   return join(home, ".config", "akua", "config.json");
 }
 
-function optionalConfigPath(env: Record<string, string | undefined>): string | undefined {
+function optionalConfigPath(
+  env: Record<string, string | undefined>,
+): string | undefined {
   const home = env.HOME;
-  return home === undefined || home === "" ? undefined : join(home, ".config", "akua", "config.json");
-}
-
-async function readConfig(configPath: string): Promise<AkuaConfig> {
-  const raw = await readConfigText(configPath);
-  if (raw === undefined) {
-    return {};
-  }
-  return parseConfig(raw, configPath);
-}
-
-async function readConfigText(configPath: string): Promise<string | undefined> {
-  try {
-    return await readFile(configPath, "utf8");
-  } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
-      return undefined;
-    }
-    throw configError("read", configPath, error);
-  }
-}
-
-function parseConfig(raw: string, configPath: string): AkuaConfig {
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (isConfigObject(parsed)) {
-      return parsed;
-    }
-    throw new Error("Akua config must be a JSON object.");
-  } catch (error) {
-    throw new ConfigParseError({
-      type: "runtime_error",
-      code: "AKUA_CONFIG_ERROR",
-      message: `Failed to read Akua config at ${configPath}: ${errorMessage(error)}`,
-    });
-  }
-}
-
-async function saveStoredToken(configPath: string, token: string): Promise<void> {
-  const config = await readConfig(configPath);
-  await writeConfig(configPath, { ...config, token });
-}
-
-async function writeConfig(configPath: string, config: AkuaConfig): Promise<void> {
-  const configDir = dirname(configPath);
-  const tempPath = join(configDir, `.config.json.${randomUUID()}.tmp`);
-
-  try {
-    await mkdir(configDir, { recursive: true, mode: CONFIG_DIR_MODE });
-    await chmod(configDir, CONFIG_DIR_MODE);
-    await writeFile(tempPath, `${JSON.stringify(config, null, 2)}\n`, { mode: CONFIG_FILE_MODE, flag: "wx" });
-    await chmod(tempPath, CONFIG_FILE_MODE);
-    await rename(tempPath, configPath);
-    await chmod(configPath, CONFIG_FILE_MODE);
-  } catch (error) {
-    await rm(tempPath, { force: true }).catch(() => undefined);
-    throw configError("write", configPath, error);
-  }
-}
-
-async function removeStoredToken(configPath: string): Promise<boolean> {
-  const raw = await readConfigText(configPath);
-  if (raw === undefined) {
-    return false;
-  }
-
-  let config: AkuaConfig;
-  try {
-    config = parseConfig(raw, configPath);
-  } catch (error) {
-    if (error instanceof ConfigParseError) {
-      try {
-        await rm(configPath, { force: true });
-        return true;
-      } catch (removeError) {
-        throw configError("remove", configPath, removeError);
-      }
-    }
-    throw configError("remove", configPath, error);
-  }
-
-  const hadStoredToken = hasStoredToken(config);
-  if (!hasOwnToken(config)) {
-    return false;
-  }
-
-  delete config.token;
-  await writeConfig(configPath, config);
-  return hadStoredToken;
-}
-
-function isConfigObject(value: unknown): value is AkuaConfig {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function hasStoredToken(config: AkuaConfig): boolean {
-  return typeof config.token === "string" && config.token !== "";
-}
-
-function hasOwnToken(config: AkuaConfig): boolean {
-  return Object.prototype.hasOwnProperty.call(config, "token");
-}
-
-function configError(operation: "read" | "write" | "remove", configPath: string, error: unknown): AkuaCliError {
-  return new AkuaCliError({
-    type: "runtime_error",
-    code: "AKUA_CONFIG_ERROR",
-    message: `Failed to ${operation} Akua config at ${configPath}: ${errorMessage(error)}`,
-  });
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  return home === undefined || home === ""
+    ? undefined
+    : join(home, ".config", "akua", "config.json");
 }
 
 function statusObservation(source: CredentialSource): string {
-  if (source === "env") {
-    return "Authenticated with AKUA_API_TOKEN.";
-  }
-  if (source === "config") {
-    return "Authenticated with stored token.";
-  }
+  if (source === "env") return "Authenticated with AKUA_API_TOKEN.";
+  if (source === "config") return "Authenticated with stored token.";
   return "No Akua authentication token found.";
 }
 
-function logoutObservation(hadStoredToken: boolean, envStillAuthenticated: boolean): string {
+function logoutObservation(
+  hadStoredToken: boolean,
+  envStillAuthenticated: boolean,
+): string {
   if (envStillAuthenticated) {
     return hadStoredToken
       ? "Stored authentication token removed. AKUA_API_TOKEN is still active."
       : "No stored authentication token found. AKUA_API_TOKEN is still active.";
   }
-  return hadStoredToken ? "Stored authentication token removed." : "No stored authentication token found.";
+  return hadStoredToken
+    ? "Stored authentication token removed."
+    : "No stored authentication token found.";
 }
 
 function readFlagValue(
@@ -635,15 +627,71 @@ function readFlagValue(
   const value = argv[index];
   if (value === flag) {
     const next = argv[index + 1];
-    if (next === undefined || next.startsWith("-")) {
+    if (next === undefined || next.startsWith("-"))
       return { value: undefined, consumedNext: false };
-    }
     return { value: next, consumedNext: true };
   }
-
   return { value: value.slice(flag.length + 1), consumedNext: false };
 }
 
 function flagName(value: string): string {
   return value.includes("=") ? value.slice(0, value.indexOf("=")) : value;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function testServices(dependencies: AuthDependencies) {
+  const now = dependencies.now ?? Date.now;
+  return Layer.mergeAll(
+    Layer.succeed(Http, {
+      postForm: ({ url, fields }) =>
+        Effect.tryPromise({
+          try: () =>
+            dependencies.request({
+              url,
+              body: fields,
+              signal: dependencies.signal,
+            }),
+          catch: (cause) => new HttpFailure({ cause }),
+        }),
+    }),
+    Layer.succeed(Browser, {
+      launch: (url) =>
+        Effect.tryPromise({
+          try: () => dependencies.launchBrowser(url),
+          catch: (cause) => new BrowserFailure({ cause }),
+        }),
+    }),
+    Layer.succeed(Process, {
+      awaitSignal: dependencies.signal?.aborted ? Effect.void : Effect.never,
+    }),
+    Layer.succeed(Console, {
+      stdoutIsTTY: false,
+      writeStderr: (value) =>
+        Effect.sync(() => {
+          const [open, code] = value.trimEnd().split("\n");
+          dependencies.displayDeviceAuthorization?.({
+            verification_uri_complete: open.slice("Open ".length),
+            user_code: code.slice("Enter code: ".length),
+          });
+        }),
+      writeStdout: () => Effect.void,
+    }),
+    Layer.succeed(Clock.Clock, {
+      currentTimeMillisUnsafe: now,
+      currentTimeMillis: Effect.sync(now),
+      monotonicTimeNanosUnsafe: () => BigInt(now()) * 1_000_000n,
+      monotonicTimeNanos: Effect.sync(() => BigInt(now()) * 1_000_000n),
+      currentTimeNanosUnsafe: () => BigInt(now()) * 1_000_000n,
+      currentTimeNanos: Effect.sync(() => BigInt(now()) * 1_000_000n),
+      sleep: (duration) =>
+        Effect.tryPromise({
+          try: () => dependencies.sleep(Duration.toMillis(duration)),
+          catch: () => new DeviceRequestFailure(),
+        }).pipe(Effect.orDie),
+    }),
+    SecureConfigLive,
+  );
 }

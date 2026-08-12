@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { isAbsolute } from "node:path";
 
-import { readProtectedCallerToken } from "./auth";
+import { readProtectedCallerTokenForAgentOs } from "./auth";
 import { usageError, AkuaCliError } from "../runtime/errors";
 import {
   submitHcloudProviderLoad,
@@ -12,14 +12,16 @@ import { clearBytes, readSecureTokenFile } from "../runtime/secure-token-file";
 import type { RenderEnvelope } from "../runtime/render";
 
 export interface AgentOsDependencies {
-  readProtectedCallerToken(env: Record<string, string | undefined>): Promise<string>;
+  readProtectedCallerToken(
+    env: Record<string, string | undefined>,
+  ): Promise<string>;
   readSecureTokenFile(path: string): Promise<Uint8Array>;
   submit(input: HCloudProviderLoadInput): Promise<HCloudProviderLoadResult>;
   createIdempotencyKey(): string;
 }
 
 const productionDependencies: AgentOsDependencies = {
-  readProtectedCallerToken,
+  readProtectedCallerToken: readProtectedCallerTokenForAgentOs,
   readSecureTokenFile,
   submit: submitHcloudProviderLoad,
   createIdempotencyKey: randomUUID,
@@ -38,13 +40,16 @@ export async function agentOsView(
     throw new AkuaCliError({
       type: "usage_error",
       code: "AKUA_LOADER_ENV_AUTH_FORBIDDEN",
-      message: "Environment authentication is not accepted for this provider loader.",
+      message:
+        "Environment authentication is not accepted for this provider loader.",
       exitCode: 2,
     });
   }
 
   const callerToken = await dependencies.readProtectedCallerToken(env);
-  const providerToken = await dependencies.readSecureTokenFile(options.tokenFile);
+  const providerToken = await dependencies.readSecureTokenFile(
+    options.tokenFile,
+  );
   try {
     const data = await dependencies.submit({
       workspace: options.workspace,
@@ -70,7 +75,9 @@ interface LoadHcloudProviderOptions {
   expectedSshKeyName?: string;
 }
 
-function parseLoadHcloudProviderFlags(argv: readonly string[]): LoadHcloudProviderOptions {
+function parseLoadHcloudProviderFlags(
+  argv: readonly string[],
+): LoadHcloudProviderOptions {
   let workspace: string | undefined;
   let tokenFile: string | undefined;
   let expectedSshKeyFingerprint: string | undefined;
@@ -108,12 +115,16 @@ function parseLoadHcloudProviderFlags(argv: readonly string[]): LoadHcloudProvid
       tokenFile = parsed.value;
     } else if (name === "--expected-ssh-key-fingerprint") {
       if (expectedSshKeyFingerprint !== undefined) {
-        throw usageError("The expected SSH key fingerprint may be specified only once.");
+        throw usageError(
+          "The expected SSH key fingerprint may be specified only once.",
+        );
       }
       expectedSshKeyFingerprint = parsed.value;
     } else {
       if (expectedSshKeyName !== undefined) {
-        throw usageError("The expected SSH key name may be specified only once.");
+        throw usageError(
+          "The expected SSH key name may be specified only once.",
+        );
       }
       expectedSshKeyName = parsed.value;
     }
@@ -125,18 +136,36 @@ function parseLoadHcloudProviderFlags(argv: readonly string[]): LoadHcloudProvid
     throw usageError("Missing required --token-file flag.");
   }
   if (tokenFile === "-" || !isAbsolute(tokenFile)) {
-    throw usageError("The provider token must be supplied through an absolute file path.");
+    throw usageError(
+      "The provider token must be supplied through an absolute file path.",
+    );
   }
-  if (expectedSshKeyFingerprint !== undefined && !isSafeExpectedSshField(expectedSshKeyFingerprint)) {
+  if (
+    expectedSshKeyFingerprint !== undefined &&
+    !isSafeExpectedSshField(expectedSshKeyFingerprint)
+  ) {
     throw usageError("The expected SSH key fingerprint is malformed.");
   }
-  if (expectedSshKeyName !== undefined && !isSafeExpectedSshField(expectedSshKeyName)) {
+  if (
+    expectedSshKeyName !== undefined &&
+    !isSafeExpectedSshField(expectedSshKeyName)
+  ) {
     throw usageError("The expected SSH key name is malformed.");
   }
-  if (expectedSshKeyName !== undefined && expectedSshKeyFingerprint === undefined) {
-    throw usageError("--expected-ssh-key-name requires --expected-ssh-key-fingerprint.");
+  if (
+    expectedSshKeyName !== undefined &&
+    expectedSshKeyFingerprint === undefined
+  ) {
+    throw usageError(
+      "--expected-ssh-key-name requires --expected-ssh-key-fingerprint.",
+    );
   }
-  return { workspace, tokenFile, expectedSshKeyFingerprint, expectedSshKeyName };
+  return {
+    workspace,
+    tokenFile,
+    expectedSshKeyFingerprint,
+    expectedSshKeyName,
+  };
 }
 
 function isSafeExpectedSshField(value: string): boolean {
