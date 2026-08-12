@@ -2,7 +2,6 @@ import { join } from "node:path";
 
 import { Duration, Effect } from "effect";
 
-import { AkuaCliError, usageError } from "../runtime/errors";
 import {
   ConfigFailure,
   DeviceAuthorizationFailure,
@@ -73,6 +72,11 @@ interface DeviceLoginResult {
   observations: string[];
 }
 
+interface AuthCommand {
+  subcommand: "login" | "status" | "logout";
+  argv: readonly string[];
+}
+
 type AuthServices =
   Http | Browser | Process | Console | SecureConfig | CliClock;
 
@@ -107,47 +111,49 @@ function loginView(
   argv: readonly string[],
   env: Record<string, string | undefined>,
 ) {
-  return Effect.try({
-    try: () => ({
-      flags: parseLoginFlags(argv),
-      configPath: resolveConfigPath(env),
-    }),
-    catch: usageFailure,
-  }).pipe(
-    Effect.flatMap(({ flags, configPath }) => {
-      const result: Effect.Effect<DeviceLoginResult, CliFailure, AuthServices> =
-        flags.token === undefined
-          ? runDeviceLogin(flags.noBrowser)
-          : Effect.succeed({
-              token: flags.token,
-              details: undefined,
-              observations: [],
-            } satisfies DeviceLoginResult);
-      return result.pipe(
-        Effect.flatMap((login) =>
-          Effect.gen(function* () {
-            const config = yield* SecureConfig;
-            yield* config
-              .saveToken(configPath, login.token)
-              .pipe(Effect.mapError(configFailure));
-            return {
-              command: "akua auth login",
-              observations: [
-                ...login.observations,
-                "Authentication token saved.",
-              ],
-              data: {
-                authenticated: true,
-                source: "config",
-                config_path: configPath,
-                ...login.details,
-              } satisfies AuthStatus,
-              next_steps: [{ command: "akua auth status" }],
-            } satisfies RenderEnvelope;
-          }),
-        ),
-      );
-    }),
+  return parseLoginFlags(argv).pipe(
+    Effect.flatMap((flags) =>
+      resolveConfigPath(env).pipe(
+        Effect.flatMap((configPath) => {
+          const result: Effect.Effect<
+            DeviceLoginResult,
+            CliFailure,
+            AuthServices
+          > =
+            flags.token === undefined
+              ? runDeviceLogin(flags.noBrowser)
+              : Effect.succeed({
+                  token: flags.token,
+                  details: undefined,
+                  observations: [],
+                } satisfies DeviceLoginResult);
+          return result.pipe(
+            Effect.flatMap((login) =>
+              Effect.gen(function* () {
+                const config = yield* SecureConfig;
+                yield* config
+                  .saveToken(configPath, login.token)
+                  .pipe(Effect.mapError(configFailure));
+                return {
+                  command: "akua auth login",
+                  observations: [
+                    ...login.observations,
+                    "Authentication token saved.",
+                  ],
+                  data: {
+                    authenticated: true,
+                    source: "config",
+                    config_path: configPath,
+                    ...login.details,
+                  } satisfies AuthStatus,
+                  next_steps: [{ command: "akua auth status" }],
+                } satisfies RenderEnvelope;
+              }),
+            ),
+          );
+        }),
+      ),
+    ),
   );
 }
 
@@ -250,31 +256,24 @@ function requestDevice(url: string, fields: Record<string, string>) {
 }
 
 function parseDeviceCode(response: DeviceResponse) {
-  return Effect.try({
-    try: () => {
-      if (
-        response.status < 200 ||
-        response.status >= 300 ||
-        !isDeviceCodeResponse(response.body)
-      ) {
-        throw new Error("Invalid device-code response.");
-      }
-      return response.body;
-    },
-    catch: () => new DeviceRequestFailure(),
-  });
+  if (
+    response.status < 200 ||
+    response.status >= 300 ||
+    !isDeviceCodeResponse(response.body)
+  ) {
+    return Effect.fail(new DeviceRequestFailure());
+  }
+  return Effect.succeed(response.body);
 }
 
 function parseDeviceToken(response: DeviceResponse) {
-  return Effect.try({
-    try: () => {
-      if (response.status < 200 || response.status >= 300) return undefined;
-      if (!isDeviceTokenResponse(response.body))
-        throw new Error("Invalid device-token response.");
-      return response.body.access_token;
-    },
-    catch: () => new DeviceRequestFailure(),
-  });
+  if (response.status < 200 || response.status >= 300) {
+    return Effect.succeed(undefined);
+  }
+  if (!isDeviceTokenResponse(response.body)) {
+    return Effect.fail(new DeviceRequestFailure());
+  }
+  return Effect.succeed(response.body.access_token);
 }
 
 function tryLaunchBrowser(url: string) {
@@ -295,13 +294,8 @@ function statusView(
   argv: readonly string[],
   env: Record<string, string | undefined>,
 ) {
-  return Effect.try({
-    try: () => {
-      rejectUnexpectedAuthArgs("status", argv);
-      return optionalConfigPath(env);
-    },
-    catch: usageFailure,
-  }).pipe(
+  return rejectUnexpectedAuthArgs("status", argv).pipe(
+    Effect.andThen(Effect.succeed(optionalConfigPath(env))),
     Effect.flatMap((configPath) => {
       if (hasEnvToken(env))
         return Effect.succeed(statusEnvelope("env", configPath));
@@ -325,13 +319,8 @@ function logoutView(
   argv: readonly string[],
   env: Record<string, string | undefined>,
 ) {
-  return Effect.try({
-    try: () => {
-      rejectUnexpectedAuthArgs("logout", argv);
-      return resolveConfigPath(env);
-    },
-    catch: usageFailure,
-  }).pipe(
+  return rejectUnexpectedAuthArgs("logout", argv).pipe(
+    Effect.andThen(resolveConfigPath(env)),
     Effect.flatMap((configPath) =>
       Effect.gen(function* () {
         const config = yield* SecureConfig;
@@ -358,47 +347,56 @@ function logoutView(
   );
 }
 
-function parseAuthCommand(argv: readonly string[]) {
-  return Effect.try({
-    try: () => {
-      const subcommand = argv[0];
-      if (subcommand === undefined)
-        throw usageError("Missing auth subcommand.");
-      if (
-        subcommand !== "login" &&
-        subcommand !== "status" &&
-        subcommand !== "logout"
-      ) {
-        throw usageError("Unknown auth subcommand.");
-      }
-      return { subcommand, argv: argv.slice(1) };
-    },
-    catch: usageFailure,
-  });
+function parseAuthCommand(
+  argv: readonly string[],
+): Effect.Effect<AuthCommand, UsageFailure> {
+  const subcommand = argv[0];
+  if (subcommand === undefined) {
+    return invalidAuthUsage("Missing auth subcommand.");
+  }
+  if (
+    subcommand !== "login" &&
+    subcommand !== "status" &&
+    subcommand !== "logout"
+  ) {
+    return invalidAuthUsage("Unknown auth subcommand.");
+  }
+  return Effect.succeed({ subcommand, argv: argv.slice(1) });
 }
 
-function parseLoginFlags(argv: readonly string[]): LoginFlags {
-  let token: string | undefined;
-  let noBrowser = false;
-  for (let index = 0; index < argv.length; index += 1) {
-    const value = argv[index];
-    if (!value.startsWith("-"))
-      throw usageError("Unexpected argument for auth login.");
-    const name = flagName(value);
-    if (name === "--no-browser") {
-      if (value !== "--no-browser")
-        throw usageError("--no-browser does not accept a value.");
-      noBrowser = true;
-      continue;
+function parseLoginFlags(
+  argv: readonly string[],
+): Effect.Effect<LoginFlags, UsageFailure> {
+  return Effect.gen(function* () {
+    let token: string | undefined;
+    let noBrowser = false;
+    for (let index = 0; index < argv.length; index += 1) {
+      const value = argv[index];
+      if (!value.startsWith("-")) {
+        return yield* invalidAuthUsage("Unexpected argument for auth login.");
+      }
+      const name = flagName(value);
+      if (name === "--no-browser") {
+        if (value !== "--no-browser") {
+          return yield* invalidAuthUsage("--no-browser does not accept a value.");
+        }
+        noBrowser = true;
+        continue;
+      }
+      if (name !== "--token") {
+        return yield* invalidAuthUsage(`Unknown flag: ${name}`);
+      }
+      const raw = readFlagValue(argv, index, name);
+      if (raw.value === undefined || raw.value === "") {
+        return yield* invalidAuthUsage("Missing value for --token.");
+      }
+      token = raw.value;
+      if (raw.consumedNext) {
+        index += 1;
+      }
     }
-    if (name !== "--token") throw usageError(`Unknown flag: ${name}`);
-    const raw = readFlagValue(argv, index, name);
-    if (raw.value === undefined || raw.value === "")
-      throw usageError("Missing value for --token.");
-    token = raw.value;
-    if (raw.consumedNext) index += 1;
-  }
-  return { token, noBrowser };
+    return { token, noBrowser };
+  });
 }
 
 function statusEnvelope(
@@ -462,13 +460,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function usageFailure(error: unknown): UsageFailure {
-  return new UsageFailure({
-    message:
-      error instanceof AkuaCliError ? error.message : errorMessage(error),
-  });
-}
-
 function configFailure(error: SecureConfigFailure): ConfigFailure {
   return new ConfigFailure({
     operation: error.operation,
@@ -480,24 +471,30 @@ function configFailure(error: SecureConfigFailure): ConfigFailure {
 function rejectUnexpectedAuthArgs(
   subcommand: string,
   argv: readonly string[],
-): void {
+): Effect.Effect<void, UsageFailure> {
   if (argv.length > 0) {
     const first = argv[0];
-    throw first.startsWith("-")
-      ? usageError(`Unknown flag: ${flagName(first)}`)
-      : usageError(`Unexpected argument for auth ${subcommand}.`);
+    return first.startsWith("-")
+      ? invalidAuthUsage(`Unknown flag: ${flagName(first)}`)
+      : invalidAuthUsage(`Unexpected argument for auth ${subcommand}.`);
   }
+  return Effect.void;
 }
 
 function hasEnvToken(env: Record<string, string | undefined>): boolean {
   return env.AKUA_API_TOKEN !== undefined && env.AKUA_API_TOKEN !== "";
 }
 
-function resolveConfigPath(env: Record<string, string | undefined>): string {
+function resolveConfigPath(
+  env: Record<string, string | undefined>,
+): Effect.Effect<string, UsageFailure> {
   const home = env.HOME;
-  if (home === undefined || home === "")
-    throw usageError("HOME is required to locate ~/.config/akua/config.json.");
-  return join(home, ".config", "akua", "config.json");
+  if (home === undefined || home === "") {
+    return invalidAuthUsage(
+      "HOME is required to locate ~/.config/akua/config.json.",
+    );
+  }
+  return Effect.succeed(join(home, ".config", "akua", "config.json"));
 }
 
 function optionalConfigPath(
@@ -548,6 +545,8 @@ function flagName(value: string): string {
   return value.includes("=") ? value.slice(0, value.indexOf("=")) : value;
 }
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+function invalidAuthUsage(
+  message: string,
+): Effect.Effect<never, UsageFailure> {
+  return Effect.fail(new UsageFailure({ message }));
 }

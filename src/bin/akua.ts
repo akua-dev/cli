@@ -4,17 +4,14 @@ import { Effect, Exit, Runtime } from "effect";
 import { authView } from "../commands/auth";
 import { buildHomeView } from "../commands/home";
 import { commandRegistry } from "../generated/commands.gen";
-import {
-  AkuaCliError,
-  commandNotImplemented,
-  usageError,
-} from "../runtime/errors";
+import { commandNotImplemented } from "../runtime/errors";
 import { detectOutputMode, type OutputMode } from "../runtime/mode";
 import type { RenderEnvelope } from "../runtime/render";
 import {
   CommandFailure,
   runCli,
   type CliFailure,
+  UsageFailure,
 } from "../runtime/effect-runtime";
 import { CliLive } from "../runtime/services-live";
 import { Console, type CliServices } from "../runtime/services";
@@ -50,16 +47,18 @@ function mainEffect(
   let mode = fallbackErrorMode(argv);
   return Effect.gen(function* () {
     const console = yield* Console;
-    const command = Effect.try({
-      try: () => {
-        mode = detectOutputMode({
-          argv,
-          env,
-          stdoutIsTTY: console.stdoutIsTTY,
-        });
-      },
-      catch: (error) => new CommandFailure({ error: toCliError(error) }),
-    }).pipe(Effect.andThen(route(argv, env)));
+    const command = detectOutputMode({
+      argv,
+      env,
+      stdoutIsTTY: console.stdoutIsTTY,
+    }).pipe(
+      Effect.tap((detectedMode) =>
+        Effect.sync(() => {
+          mode = detectedMode;
+        }),
+      ),
+      Effect.flatMap(() => route(argv, env)),
+    );
     return yield* runCli(command, { mode: () => mode });
   });
 }
@@ -68,10 +67,9 @@ function route(
   argv: readonly string[],
   env: Record<string, string | undefined>,
 ): Effect.Effect<RenderEnvelope, CliFailure, CliServices> {
-  return Effect.try({
-    try: () => stripGlobalFlags(argv),
-    catch: (error) => new CommandFailure({ error: toCliError(error) }),
-  }).pipe(Effect.flatMap((stripped) => routeCommand(stripped, env)));
+  return stripGlobalFlags(argv).pipe(
+    Effect.flatMap((stripped) => routeCommand(stripped, env)),
+  );
 }
 
 function routeCommand(
@@ -97,10 +95,7 @@ function routeCommand(
   }
 
   if (argv[0] === "commands") {
-    return Effect.try({
-      try: () => commandsView(argv.slice(1)),
-      catch: (error) => new CommandFailure({ error: toCliError(error) }),
-    });
+    return commandsView(argv.slice(1));
   }
 
   if (argv[0] === "auth") {
@@ -109,11 +104,7 @@ function routeCommand(
 
   const unknownFlag = argv.find((arg) => arg.startsWith("-"));
   if (unknownFlag) {
-    return Effect.fail(
-      new CommandFailure({
-        error: usageError(`Unknown flag: ${flagName(unknownFlag)}`),
-      }),
-    );
+    return invalidCommandsUsage(`Unknown flag: ${flagName(unknownFlag)}`);
   }
 
   const maybeGenerated = commandRegistry.find(
@@ -128,43 +119,8 @@ function routeCommand(
   }
 
   return Effect.fail(
-    new CommandFailure({
-      error: usageError(`Unknown command: ${argv.join(" ")}`),
-    }),
+    new UsageFailure({ message: `Unknown command: ${argv.join(" ")}` }),
   );
-}
-
-function toCliError(error: unknown): AkuaCliError {
-  return error instanceof AkuaCliError
-    ? error
-    : usageError(error instanceof Error ? error.message : String(error));
-}
-
-function commandsView(argv: readonly string[]): RenderEnvelope {
-  const { operationId, resource, limit } = parseCommandsFlags(argv);
-  const filtered = commandRegistry
-    .filter((command) => !operationId || command.operation_id === operationId)
-    .filter((command) => !resource || command.resource === resource)
-    .slice(0, Number.isFinite(limit) && limit > 0 ? limit : 20)
-    .map((command) => ({
-      operation_id: command.operation_id,
-      command: command.command,
-      method: command.method,
-      path: command.path,
-      summary: command.summary,
-    }));
-
-  return {
-    command: "akua commands",
-    observations: [
-      `${filtered.length} of ${commandRegistry.length} public operations shown.`,
-    ],
-    data: filtered,
-    next_steps: [
-      { command: "akua commands --resource workspaces" },
-      { command: "akua commands --operation-id <operation_id>" },
-    ],
-  };
 }
 
 function helpView(): RenderEnvelope {
@@ -188,7 +144,9 @@ function helpView(): RenderEnvelope {
   };
 }
 
-function stripGlobalFlags(argv: readonly string[]): string[] {
+function stripGlobalFlags(
+  argv: readonly string[],
+): Effect.Effect<string[], never> {
   const stripped: string[] = [];
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index];
@@ -204,7 +162,7 @@ function stripGlobalFlags(argv: readonly string[]): string[] {
     }
     stripped.push(value);
   }
-  return stripped;
+  return Effect.succeed(stripped);
 }
 
 interface CommandsFilters {
@@ -213,41 +171,47 @@ interface CommandsFilters {
   limit: number;
 }
 
-function parseCommandsFlags(argv: readonly string[]): CommandsFilters {
-  const knownFlags = new Set(["--operation-id", "--resource", "--limit"]);
-  let operationId: string | undefined;
-  let resource: string | undefined;
-  let limit = 20;
+function parseCommandsFlags(
+  argv: readonly string[],
+): Effect.Effect<CommandsFilters, UsageFailure> {
+  return Effect.gen(function* () {
+    const knownFlags = new Set(["--operation-id", "--resource", "--limit"]);
+    let operationId: string | undefined;
+    let resource: string | undefined;
+    let limit = 20;
 
-  for (let index = 0; index < argv.length; index += 1) {
-    const value = argv[index];
-    if (!value.startsWith("-")) {
-      throw usageError(`Unexpected argument for commands: ${value}`);
+    for (let index = 0; index < argv.length; index += 1) {
+      const value = argv[index];
+      if (!value.startsWith("-")) {
+        return yield* invalidCommandsUsage(
+          `Unexpected argument for commands: ${value}`,
+        );
+      }
+
+      const name = flagName(value);
+      if (!knownFlags.has(name)) {
+        return yield* invalidCommandsUsage(`Unknown flag: ${name}`);
+      }
+
+      const raw = readFlagValue(argv, index, name);
+      if (raw.value === undefined || raw.value === "") {
+        return yield* invalidCommandsUsage(`Missing value for ${name}.`);
+      }
+      if (raw.consumedNext) {
+        index += 1;
+      }
+
+      if (name === "--operation-id") {
+        operationId = raw.value;
+      } else if (name === "--resource") {
+        resource = raw.value;
+      } else {
+        limit = yield* parsePositiveInteger(raw.value, name);
+      }
     }
 
-    const name = flagName(value);
-    if (!knownFlags.has(name)) {
-      throw usageError(`Unknown flag: ${name}`);
-    }
-
-    const raw = readFlagValue(argv, index, name);
-    if (raw.value === undefined || raw.value === "") {
-      throw usageError(`Missing value for ${name}.`);
-    }
-    if (raw.consumedNext) {
-      index += 1;
-    }
-
-    if (name === "--operation-id") {
-      operationId = raw.value;
-    } else if (name === "--resource") {
-      resource = raw.value;
-    } else {
-      limit = parsePositiveInteger(raw.value, name);
-    }
-  }
-
-  return { operationId, resource, limit };
+    return { operationId, resource, limit };
+  });
 }
 
 function readFlagValue(
@@ -274,13 +238,16 @@ function flagName(value: string): string {
   return value.includes("=") ? value.slice(0, value.indexOf("=")) : value;
 }
 
-function parsePositiveInteger(value: string, flag: string): number {
+function parsePositiveInteger(
+  value: string,
+  flag: string,
+): Effect.Effect<number, UsageFailure> {
   if (!/^[1-9]\d*$/.test(value)) {
-    throw usageError(
+    return invalidCommandsUsage(
       `Invalid value for ${flag}: ${value}. Expected a positive integer.`,
     );
   }
-  return Number(value);
+  return Effect.succeed(Number(value));
 }
 
 function fallbackErrorMode(argv: readonly string[]): OutputMode {
@@ -291,4 +258,42 @@ function fallbackErrorMode(argv: readonly string[]): OutputMode {
     return "quiet";
   }
   return "human";
+}
+
+function commandsView(
+  argv: readonly string[],
+): Effect.Effect<RenderEnvelope, UsageFailure> {
+  return parseCommandsFlags(argv).pipe(
+    Effect.map(({ operationId, resource, limit }) => {
+      const filtered = commandRegistry
+        .filter((command) => !operationId || command.operation_id === operationId)
+        .filter((command) => !resource || command.resource === resource)
+        .slice(0, Number.isFinite(limit) && limit > 0 ? limit : 20)
+        .map((command) => ({
+          operation_id: command.operation_id,
+          command: command.command,
+          method: command.method,
+          path: command.path,
+          summary: command.summary,
+        }));
+
+      return {
+        command: "akua commands",
+        observations: [
+          `${filtered.length} of ${commandRegistry.length} public operations shown.`,
+        ],
+        data: filtered,
+        next_steps: [
+          { command: "akua commands --resource workspaces" },
+          { command: "akua commands --operation-id <operation_id>" },
+        ],
+      };
+    }),
+  );
+}
+
+function invalidCommandsUsage(
+  message: string,
+): Effect.Effect<never, UsageFailure> {
+  return Effect.fail(new UsageFailure({ message }));
 }
