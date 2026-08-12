@@ -42,40 +42,40 @@ export type ReleaseManifest = ReleaseManifestValue;
 export type ReleaseTarget = ReleaseTargetValue;
 export type ReleaseTargetId = ReleaseTargetIdValue;
 
-export function planReleaseUploads(candidateDir: string, existingDir: string, version: string) {
+export function planReleaseUploads(candidateDir: string, existingDir: string, version: string): Effect.Effect<string[], Error, ReleaseHost> {
   return Effect.gen(function* () {
     return yield* (yield* ReleaseHost).planUploads(candidateDir, existingDir, version);
-  }).pipe(Effect.provide(ReleaseHostLive));
+  });
 }
 
-export function assertSafeOutputDirectory(outputDir: string) {
+export function assertSafeOutputDirectory(outputDir: string): Effect.Effect<void, Error, ReleaseHost> {
   return Effect.gen(function* () {
     return yield* (yield* ReleaseHost).assertSafeOutputDirectory(outputDir);
-  }).pipe(Effect.provide(ReleaseHostLive));
+  });
 }
 
-export function packageExistingExecutables(input: PackageExistingExecutablesInput) {
+export function packageExistingExecutables(input: PackageExistingExecutablesInput): Effect.Effect<void, Error, ReleaseHost> {
   return Effect.gen(function* () {
     return yield* (yield* ReleaseHost).packageExistingExecutables(input);
-  }).pipe(Effect.provide(ReleaseHostLive));
+  });
 }
 
-export function packageRelease(input: PackageReleaseInput) {
+export function packageRelease(input: PackageReleaseInput): Effect.Effect<void, Error, ReleaseHost> {
   return Effect.gen(function* () {
     return yield* (yield* ReleaseHost).packageRelease(input);
-  }).pipe(Effect.provide(ReleaseHostLive));
+  });
 }
 
-export function smokeReleaseArtifact(input: { version: string; outputDir: string; targetId: string }) {
+export function smokeReleaseArtifact(input: { version: string; outputDir: string; targetId: string }): Effect.Effect<void, Error, ReleaseHost> {
   return Effect.gen(function* () {
     return yield* (yield* ReleaseHost).smokeReleaseArtifact(input);
-  }).pipe(Effect.provide(ReleaseHostLive));
+  });
 }
 
-export function verifyReleaseDirectory(outputDir: string, version: string) {
+export function verifyReleaseDirectory(outputDir: string, version: string): Effect.Effect<void, Error, ReleaseHost> {
   return Effect.gen(function* () {
     return yield* (yield* ReleaseHost).verifyReleaseDirectory(outputDir, version);
-  }).pipe(Effect.provide(ReleaseHostLive));
+  });
 }
 
 function readCliFlags(argv: readonly string[]): { command: string; version: string; outputDir: string; targetId?: string; existingDir?: string } {

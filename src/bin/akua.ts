@@ -67,7 +67,7 @@ function mainEffect(
 function route(
   argv: readonly string[],
   env: Record<string, string | undefined>,
-) {
+): Effect.Effect<RenderEnvelope, CliFailure, CliServices> {
   return Effect.try({
     try: () => stripGlobalFlags(argv),
     catch: (error) => new CommandFailure({ error: toCliError(error) }),
@@ -77,7 +77,7 @@ function route(
 function routeCommand(
   argv: readonly string[],
   env: Record<string, string | undefined>,
-) {
+): Effect.Effect<RenderEnvelope, CliFailure, CliServices> {
   if (argv.length === 0) return Effect.succeed(buildHomeView());
 
   if (argv.includes("--help") || argv.includes("-h")) {

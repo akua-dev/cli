@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { isAbsolute } from "node:path";
 
 import { Effect } from "effect";
@@ -12,34 +11,47 @@ import {
   type HCloudProviderLoadResult,
 } from "../runtime/platform-client";
 import { clearBytes, readSecureTokenFile } from "../runtime/secure-token-file";
-import { SecureTokenFileLive } from "../runtime/secure-token-file-services";
+import { SecureTokenFile } from "../runtime/secure-token-file-services";
 import type { RenderEnvelope } from "../runtime/render";
-import { HttpLive, type SecureConfig } from "../runtime/services";
+import { Http, IdGenerator, type SecureConfig } from "../runtime/services";
 
-export interface AgentOsDependencies {
+type AgentOsServices = SecureConfig | SecureTokenFile | Http | IdGenerator;
+
+export interface AgentOsDependencies<R = never> {
   readProtectedCallerToken(
     env: Record<string, string | undefined>,
-  ): Effect.Effect<string, AkuaCliError, SecureConfig>;
-  readSecureTokenFile(path: string): Effect.Effect<Uint8Array, AkuaCliError>;
+  ): Effect.Effect<string, AkuaCliError, R>;
+  readSecureTokenFile(
+    path: string,
+  ): Effect.Effect<Uint8Array, AkuaCliError, R>;
   submit(
     input: HCloudProviderLoadInput,
-  ): Effect.Effect<HCloudProviderLoadResult, AkuaCliError>;
-  createIdempotencyKey(): string;
+  ): Effect.Effect<HCloudProviderLoadResult, AkuaCliError, R>;
+  createIdempotencyKey(): Effect.Effect<string, never, R>;
 }
 
-const productionDependencies: AgentOsDependencies = {
+const productionDependencies: AgentOsDependencies<AgentOsServices> = {
   readProtectedCallerToken: (env) =>
     readProtectedCallerToken(env).pipe(Effect.mapError(toCliError)),
-  readSecureTokenFile: (path) => Effect.provide(readSecureTokenFile(path), SecureTokenFileLive),
-  submit: (input) => Effect.provide(submitHcloudProviderLoad(input), HttpLive),
-  createIdempotencyKey: randomUUID,
+  readSecureTokenFile,
+  submit: submitHcloudProviderLoad,
+  createIdempotencyKey: () => Effect.gen(function* () {
+    return yield* (yield* IdGenerator).generate();
+  }),
 };
 
 export function agentOsView(
   argv: readonly string[],
   env: Record<string, string | undefined>,
-  dependencies: AgentOsDependencies = productionDependencies,
-): Effect.Effect<RenderEnvelope, AkuaCliError, SecureConfig> {
+): Effect.Effect<RenderEnvelope, AkuaCliError, AgentOsServices> {
+  return agentOsViewWithDependencies(argv, env, productionDependencies);
+}
+
+export function agentOsViewWithDependencies<R>(
+  argv: readonly string[],
+  env: Record<string, string | undefined>,
+  dependencies: AgentOsDependencies<R>,
+): Effect.Effect<RenderEnvelope, AkuaCliError, R> {
   return Effect.try({
     try: () => {
       if (argv[0] !== "load-hcloud-provider") throw usageError("Unknown agent-os subcommand.");
@@ -61,7 +73,7 @@ export function agentOsView(
           providerToken,
           expectedSshKeyFingerprint: options.expectedSshKeyFingerprint,
           expectedSshKeyName: options.expectedSshKeyName,
-          idempotencyKey: dependencies.createIdempotencyKey(),
+          idempotencyKey: yield* dependencies.createIdempotencyKey(),
         }).pipe(
           Effect.map((data) => ({ command: "akua agent-os load-hcloud-provider", data })),
           Effect.ensuring(Effect.sync(() => clearBytes(providerToken))),

@@ -4,8 +4,10 @@ import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile
 import { parse, join } from "node:path";
 import { Effect } from "effect";
 
-function runRelease<A, E>(program: Effect.Effect<A, E>): A {
-  return Effect.runSync(program);
+import { ReleaseHost, ReleaseHostLive } from "../scripts/runtime/release-services";
+
+function runRelease<A, E>(program: Effect.Effect<A, E, ReleaseHost>): A {
+  return Effect.runSync(Effect.provide(program, ReleaseHostLive));
 }
 
 async function makeReleaseTempDir(): Promise<string> {
@@ -19,6 +21,17 @@ test("release packaging has a dedicated implementation module", async () => {
 });
 
 describe("release target contract", () => {
+  test("public release operations require ReleaseHost and never provide its live layer", async () => {
+    const release = await import("../scripts/release");
+    const source = await readFile("scripts/release.ts", "utf8");
+    const publicApi = source.slice(0, source.indexOf("function readCliFlags"));
+    const program: Effect.Effect<void, Error, ReleaseHost> =
+      release.assertSafeOutputDirectory(join(process.cwd(), "dist", "release"));
+
+    expect(program).toBeDefined();
+    expect(publicApi).not.toContain("Effect.provide(ReleaseHostLive)");
+  });
+
   test("exposes local package, verify, and smoke tasks without publishing a package", async () => {
     const packageJson = JSON.parse(await readFile("package.json", "utf8"));
     const mise = await readFile("mise.toml", "utf8");

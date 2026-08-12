@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { Effect, Layer } from "effect";
 
-import { agentOsView, type AgentOsDependencies } from "../src/commands/agent-os";
+import { agentOsView, agentOsViewWithDependencies, type AgentOsDependencies } from "../src/commands/agent-os";
+import { AkuaCliError } from "../src/runtime/errors";
 import {
   HCloudProviderLoadError,
   type HCloudProviderLoadInput,
@@ -10,7 +11,8 @@ import {
   type HCloudProviderLoadRequest,
 } from "../src/runtime/platform-client";
 import { renderError, renderSuccess } from "../src/runtime/render";
-import { SecureConfig } from "../src/runtime/services";
+import { SecureTokenFile } from "../src/runtime/secure-token-file-services";
+import { Http, IdGenerator, SecureConfig } from "../src/runtime/services";
 
 const SYNTHETIC_TOKEN = new Uint8Array([115, 121, 110, 116, 104, 101, 116, 105, 99]);
 const SYNTHETIC_ECHO = "synthetic-response-field";
@@ -193,14 +195,25 @@ describe("submitHcloudProviderLoad", () => {
 });
 
 describe("agent-os load-hcloud-provider", () => {
+  test("public command composition requires host services and never provides live layers", async () => {
+    const source = await readFile("src/commands/agent-os.ts", "utf8");
+    const program: Effect.Effect<unknown, AkuaCliError, SecureConfig | SecureTokenFile | Http | IdGenerator> =
+      agentOsView(commandArgs(), {});
+
+    expect(program).toBeDefined();
+    expect(source).not.toContain("Effect.provide");
+    expect(source).not.toContain("SecureTokenFileLive");
+    expect(source).not.toContain("HttpLive");
+  });
+
   test("accepts no anchor and rejects malformed anchor inputs before auth, file, or network access", async () => {
     const dependencies = fakeCommandDependencies();
     const rejectedValue = "synthetic-argv-value";
 
-    expect(runAgentOs(agentOsView(commandArgs(), {}, dependencies.dependencies))).toMatchObject({
+    expect(runAgentOs(agentOsViewWithDependencies(commandArgs(), {}, dependencies.dependencies))).toMatchObject({
       data: successResponse().body,
     });
-    expect(() => runAgentOs(agentOsView(
+    expect(() => runAgentOs(agentOsViewWithDependencies(
         [
           "load-hcloud-provider",
           "--workspace",
@@ -213,7 +226,7 @@ describe("agent-os load-hcloud-provider", () => {
         {},
         dependencies.dependencies,
       ))).toThrow(expect.objectContaining({ code: "AKUA_USAGE_ERROR" }));
-    expect(() => runAgentOs(agentOsView(
+    expect(() => runAgentOs(agentOsViewWithDependencies(
         [
           "load-hcloud-provider",
           "--workspace",
@@ -227,7 +240,7 @@ describe("agent-os load-hcloud-provider", () => {
         dependencies.dependencies,
       ))).toThrow(expect.objectContaining({ code: "AKUA_USAGE_ERROR" }));
 
-    const error = captureError(agentOsView(["load-hcloud-provider", "--workspace", "ws_synthetic", "--token", rejectedValue], {}, dependencies.dependencies));
+    const error = captureError(agentOsViewWithDependencies(["load-hcloud-provider", "--workspace", "ws_synthetic", "--token", rejectedValue], {}, dependencies.dependencies));
     expect(renderError(error, "json")).not.toContain(rejectedValue);
     expect(dependencies.fileReads).toBe(1);
     expect(dependencies.submissions).toBe(1);
@@ -236,7 +249,7 @@ describe("agent-os load-hcloud-provider", () => {
   test("rejects environment caller authentication before config, file, or network access", async () => {
     const dependencies = fakeCommandDependencies();
 
-    expect(() => runAgentOs(agentOsView(commandArgs(), { AKUA_API_TOKEN: "synthetic-environment-auth" }, dependencies.dependencies)))
+    expect(() => runAgentOs(agentOsViewWithDependencies(commandArgs(), { AKUA_API_TOKEN: "synthetic-environment-auth" }, dependencies.dependencies)))
       .toThrow(expect.objectContaining({ code: "AKUA_LOADER_ENV_AUTH_FORBIDDEN" }));
     expect(dependencies.events).toEqual([]);
   });
@@ -244,7 +257,7 @@ describe("agent-os load-hcloud-provider", () => {
   test("authenticates from protected config before reading the provider file and relays idempotency once", async () => {
     const dependencies = fakeCommandDependencies();
 
-    const view = runAgentOs(agentOsView(commandArgs(), {}, dependencies.dependencies));
+    const view = runAgentOs(agentOsViewWithDependencies(commandArgs(), {}, dependencies.dependencies));
 
     expect(dependencies.events).toEqual(["auth", "file", "network"]);
     expect(dependencies.submissions).toBe(1);
@@ -270,7 +283,7 @@ describe("agent-os load-hcloud-provider", () => {
         })),
     });
 
-    const error = captureError(agentOsView(commandArgs(), {}, dependencies.dependencies));
+    const error = captureError(agentOsViewWithDependencies(commandArgs(), {}, dependencies.dependencies));
 
     expect([...providerToken].every((byte) => byte === 0)).toBe(true);
     expect(renderError(error, "json")).not.toContain(providerMarker);
@@ -283,9 +296,9 @@ describe("agent-os load-hcloud-provider", () => {
       submit: (input) => Effect.sync(() => server.submit(input)),
     });
 
-    const first = runAgentOs(agentOsView(commandArgs(), {}, dependencies.dependencies));
+    const first = runAgentOs(agentOsViewWithDependencies(commandArgs(), {}, dependencies.dependencies));
     server.revoke();
-    const error = captureError(agentOsView(commandArgs(), {}, dependencies.dependencies));
+    const error = captureError(agentOsViewWithDependencies(commandArgs(), {}, dependencies.dependencies));
 
     expect(first.data).toEqual(successResponse().body);
     expect(error).toMatchObject({ code: "AKUA_LOADER_SERVER_REJECTED", status: 403 });
@@ -354,7 +367,7 @@ function fakeCommandDependencies(overrides: Partial<AgentOsDependencies> = {}) {
       input = submitted;
       return successResponse().body;
     }),
-    createIdempotencyKey: () => "00000000-0000-4000-8000-000000000006",
+    createIdempotencyKey: () => Effect.succeed("00000000-0000-4000-8000-000000000006"),
     ...overrides,
   };
   return {

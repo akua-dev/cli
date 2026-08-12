@@ -13,6 +13,7 @@ import { Context, Data, Effect, Layer } from "effect";
 import { Duration } from "effect";
 
 import { encodeForm } from "./device-http";
+import { SecureTokenFile, SecureTokenFileLive } from "./secure-token-file-services";
 
 export interface HttpResponse {
   readonly status: number;
@@ -106,13 +107,22 @@ export class CliClock extends Context.Service<
   }
 >()("platform/cli/Clock") {}
 
+export class IdGenerator extends Context.Service<
+  IdGenerator,
+  {
+    readonly generate: () => Effect.Effect<string>;
+  }
+>()("platform/cli/IdGenerator") {}
+
 export type CliServices =
   | Http
   | Browser
   | Process
   | Console
   | SecureConfig
-  | CliClock;
+  | CliClock
+  | IdGenerator
+  | SecureTokenFile;
 
 const CONFIG_FILE_MODE = 0o600;
 const CONFIG_DIR_MODE = 0o700;
@@ -213,6 +223,10 @@ export const ClockLive = Layer.succeed(CliClock, {
     }).pipe(Effect.orDie),
 });
 
+export const IdGeneratorLive = Layer.succeed(IdGenerator, {
+  generate: () => Effect.sync(randomUUID),
+});
+
 export const SecureConfigLive = Layer.succeed(SecureConfig, {
   readToken: (path) =>
     readConfig(path).pipe(
@@ -261,6 +275,8 @@ export const CliLive: Layer.Layer<CliServices> = Layer.mergeAll(
   ConsoleLive,
   SecureConfigLive,
   ClockLive,
+  IdGeneratorLive,
+  SecureTokenFileLive,
 );
 
 function readConfig(path: string): Effect.Effect<Record<string, unknown>, unknown> {
