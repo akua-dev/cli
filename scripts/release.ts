@@ -2,45 +2,44 @@ import { Console, Effect, Option, Runtime } from "effect";
 import { Command, Flag } from "effect/unstable/cli";
 
 import {
-  RELEASE_TARGETS as releaseTargets,
+  RELEASE_TARGETS,
   ReleaseHost,
-  archiveExtractCommand as releaseArchiveExtractCommand,
-  artifactName as releaseArtifactName,
-  assertCompiledExecutable as releaseAssertCompiledExecutable,
-  checksumLine as releaseChecksumLine,
-  homebrewManifestName as releaseHomebrewManifestName,
+  archiveExtractCommand,
+  artifactName,
+  assertCompiledExecutable,
+  checksumLine,
+  homebrewManifestName,
   releaseTargetIdForHost,
-  releaseAssetNames as releaseAssetNamesForVersion,
-  releaseManifestName as releaseManifestNameForVersion,
-  releaseMatrix as releaseMatrixForTargets,
-  validateVersion as validateReleaseVersion,
+  releaseAssetNames,
+  releaseManifestName,
+  releaseMatrix,
+  validateVersion,
 } from "./runtime/release-services";
 import { ReleaseHostLive } from "./runtime/release-host-live";
 import { ScriptCliLive } from "./runtime/cli-live";
 import type {
   PackageExistingExecutablesInput,
   PackageReleaseInput,
-  ReleaseAsset as ReleaseAssetValue,
-  ReleaseManifest as ReleaseManifestValue,
-  ReleaseTarget as ReleaseTargetValue,
-  ReleaseTargetId as ReleaseTargetIdValue,
+  ReleaseAsset,
+  ReleaseManifest,
+  ReleaseTarget,
+  ReleaseTargetId,
 } from "./runtime/release-services";
 
-export const RELEASE_TARGETS = releaseTargets;
-export const artifactName = releaseArtifactName;
-export const archiveExtractCommand = releaseArchiveExtractCommand;
-export const assertCompiledExecutable = releaseAssertCompiledExecutable;
-export const checksumLine = releaseChecksumLine;
-export const homebrewManifestName = releaseHomebrewManifestName;
-export { releaseTargetIdForHost };
-export const releaseAssetNames = releaseAssetNamesForVersion;
-export const releaseManifestName = releaseManifestNameForVersion;
-export const releaseMatrix = releaseMatrixForTargets;
-export const validateVersion = validateReleaseVersion;
-export type ReleaseAsset = ReleaseAssetValue;
-export type ReleaseManifest = ReleaseManifestValue;
-export type ReleaseTarget = ReleaseTargetValue;
-export type ReleaseTargetId = ReleaseTargetIdValue;
+export {
+  RELEASE_TARGETS,
+  archiveExtractCommand,
+  artifactName,
+  assertCompiledExecutable,
+  checksumLine,
+  homebrewManifestName,
+  releaseAssetNames,
+  releaseManifestName,
+  releaseMatrix,
+  releaseTargetIdForHost,
+  validateVersion,
+};
+export type { ReleaseAsset, ReleaseManifest, ReleaseTarget, ReleaseTargetId };
 
 export function planReleaseUploads(
   candidateDir: string,

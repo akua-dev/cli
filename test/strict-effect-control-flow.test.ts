@@ -1,21 +1,20 @@
 import { expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 
 import ts from "typescript";
 
-const coreFiles = [
-  "src/runtime/mode.ts",
-  "src/commands/auth.ts",
-  "src/bin/akua.ts",
-  "scripts/fetch-openapi.ts",
-  "scripts/generate-commands.ts",
-  "scripts/runtime/release-services.ts",
-  "scripts/runtime/release-host-live.ts",
-  "scripts/runtime/services-live.ts",
+const productionFiles = [
+  ...findTypeScriptFiles("src"),
+  ...findTypeScriptFiles("scripts"),
 ];
 
-test("core CLI modules and script runtimes contain no throw statements", () => {
-  expect(findThrowStatements(coreFiles)).toEqual([]);
+test("production CLI source contains no raw throw statements", () => {
+  expect(findThrowStatements(productionFiles)).toEqual([]);
+});
+
+test("release entrypoint contains no aliased imports", () => {
+  expect(findAliasedImports("scripts/release.ts")).toEqual([]);
 });
 
 test("invalid commands arguments render a usage envelope", async () => {
@@ -70,6 +69,33 @@ function findThrowStatements(files: readonly string[]) {
     visit(source);
     return throws;
   });
+}
+
+function findTypeScriptFiles(directory: string): string[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) return findTypeScriptFiles(path);
+    return entry.isFile() && path.endsWith(".ts") ? [path] : [];
+  });
+}
+
+function findAliasedImports(file: string): string[] {
+  const source = ts.createSourceFile(
+    file,
+    readFileSync(file, "utf8"),
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  const aliases: string[] = [];
+  const visit = (node: ts.Node) => {
+    if (ts.isImportSpecifier(node) && node.propertyName !== undefined) {
+      const { line } = source.getLineAndCharacterOfPosition(node.getStart());
+      aliases.push(`${file}:${line + 1}`);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return aliases;
 }
 
 async function runAkua(

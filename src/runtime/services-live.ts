@@ -9,7 +9,7 @@ import {
 } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-import { Duration, Effect, Layer } from "effect";
+import { Data, Duration, Effect, Layer } from "effect";
 import {
   FetchHttpClient,
   HttpClient,
@@ -33,6 +33,10 @@ const CONFIG_FILE_MODE = 0o600;
 const CONFIG_DIR_MODE = 0o700;
 const MAX_DEVICE_RESPONSE_SIZE = 16_384;
 
+class ConfigParseFailure extends Data.TaggedError("ConfigParseFailure")<{
+  readonly cause: Error;
+}> {}
+
 export const HttpLive = Layer.effect(
   Http,
   Effect.gen(function* () {
@@ -53,7 +57,7 @@ export const HttpLive = Layer.effect(
 
 export const BrowserLive = Layer.succeed(Browser, {
   launch: (url) =>
-    Effect.tryPromise({
+    Effect.try({
       try: () => {
         const command =
           process.platform === "darwin"
@@ -66,12 +70,26 @@ export const BrowserLive = Layer.succeed(Browser, {
           stdout: "ignore",
           stderr: "ignore",
         });
-        return processHandle.exited.then((exitCode) => {
-          if (exitCode !== 0) throw new Error("Browser launch failed.");
-        });
+        return processHandle;
       },
       catch: (cause) => new BrowserFailure({ cause }),
-    }),
+    }).pipe(
+      Effect.flatMap((processHandle) =>
+        Effect.tryPromise({
+          try: () => processHandle.exited,
+          catch: (cause) => new BrowserFailure({ cause }),
+        }),
+      ),
+      Effect.flatMap((exitCode) =>
+        exitCode === 0
+          ? Effect.void
+          : Effect.fail(
+              new BrowserFailure({
+                cause: new Error("Browser launch failed."),
+              }),
+            ),
+      ),
+    ),
 });
 
 export const ProcessLive = Layer.succeed(Process, {
@@ -161,17 +179,17 @@ function readJsonResponse(
     Effect.flatMap((value) =>
       value.text.pipe(
         Effect.flatMap((text) =>
-          Effect.try({
-            try: () => {
-              if (text.length > MAX_DEVICE_RESPONSE_SIZE)
-                throw new Error(oversizedMessage);
-              return {
-                status: value.status,
-                body: text === "" ? {} : JSON.parse(text),
-              };
-            },
-            catch: (cause) => new HttpFailure({ cause }),
-          }),
+          text.length > MAX_DEVICE_RESPONSE_SIZE
+            ? Effect.fail(
+                new HttpFailure({ cause: new Error(oversizedMessage) }),
+              )
+            : Effect.try({
+                try: () => ({
+                  status: value.status,
+                  body: text === "" ? {} : JSON.parse(text),
+                }),
+                catch: (cause) => new HttpFailure({ cause }),
+              }),
         ),
       ),
     ),
@@ -193,15 +211,19 @@ function readConfig(
     ),
     Effect.flatMap((raw) =>
       Effect.try({
-        try: () => {
-          const value: unknown = JSON.parse(raw);
-          if (!isRecord(value)) {
-            throw new Error("Akua config must be a JSON object.");
-          }
-          return value;
-        },
+        try: (): unknown => JSON.parse(raw),
         catch: (cause) => cause,
-      }),
+      }).pipe(
+        Effect.flatMap((value) =>
+          isRecord(value)
+            ? Effect.succeed(value)
+            : Effect.fail(
+                new ConfigParseFailure({
+                  cause: new Error("Akua config must be a JSON object."),
+                }),
+              ),
+        ),
+      ),
     ),
   );
 }
