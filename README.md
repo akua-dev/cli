@@ -2,9 +2,12 @@
 
 `akua` is the public Akua Cloud command-line interface. It is a self-contained
 Bun/TypeScript executable for humans, automation, and coding agents. The current
-MVP implements local token authentication, adaptive structured output, and
-discovery of the public operationId-driven command registry. Generated API
-commands are discoverable but not yet executable unless `akua --help` says so.
+MVP implements local token authentication, browser/device login, adaptive
+structured output, and discovery of the public operationId-driven command
+registry. It also checks in a generated typed Effect API for every public
+OpenAPI operation. The generated command entries are discoverable, but the
+generic executor is not yet wired, so API commands still report that execution
+is not implemented.
 
 The canonical executable is `akua`; there is no `cnap` compatibility binary.
 
@@ -131,7 +134,21 @@ export AKUA_API_TOKEN='sk_akua_...'
 akua auth status
 ```
 
-For a local persisted token:
+For an interactive browser/device login:
+
+```sh
+akua auth login
+```
+
+The CLI prints a verification URL and code, then attempts to open the URL in a
+browser. Use `--no-browser` when the machine cannot open a browser; complete
+the verification in any browser instead.
+
+```sh
+akua auth login --no-browser
+```
+
+For a local persisted token without an interactive login:
 
 ```sh
 akua auth login --token 'sk_akua_...'
@@ -143,8 +160,7 @@ akua auth logout
 `~/.config/akua/config.json`; the directory is forced to `0700` and the file to
 `0600`. Login replaces only `token` and preserves unknown config keys. Logout
 removes only the stored `token`, also preserving unknown config keys, and cannot
-clear `AKUA_API_TOKEN` from the parent process. Browser/device login is not part
-of this MVP.
+clear `AKUA_API_TOKEN` from the parent process.
 
 ## Human and agent output
 
@@ -180,7 +196,7 @@ The public source of truth is
 
 ```sh
 mise run spec:fetch       # fetch and stably format openapi/public.json
-mise run generate         # derive src/generated/commands.gen.ts
+mise run generate         # derive command registry and typed Effect API
 mise run generate:check   # fail if committed generated output has drifted
 mise run check            # drift check, typecheck/build, and tests
 ```
@@ -188,12 +204,15 @@ mise run check            # drift check, typecheck/build, and tests
 Generation is deterministic and operationId-driven. Only operations marked
 `x-platform-visibility: PUBLIC` are included. For example,
 `operationId: workspaces.list` becomes `akua workspaces list`; registry rows are
-sorted by operationId.
+sorted by operationId. The generated outputs are
+`src/generated/commands.gen.ts` and `src/generated/openapi-api.gen.ts`; the
+latter is the typed Effect API contract, not a hand-written HTTP client.
 
-The scheduled update workflow fetches and generates, then opens or updates a PR
-only when `openapi/public.json` or `src/generated/commands.gen.ts` changed. It
-fails if any other file changes. Re-running against an unchanged spec is a no-op,
-so OpenAPI updates remain idempotent and scope-limited.
+The generic executor is not yet wired to this generated API, so registry
+presence does not prove that an API command can run. The CLI remains
+provider-neutral: it has no provider-specific commands, flags, environment
+variables, or credential loaders. When execution is added, provider-specific
+data belongs only in the generated public API request input.
 
 ## CLI-owned agent skill
 

@@ -29,7 +29,17 @@ akua commands --output agent
 
 Use `akua commands --resource <resource>` or `akua commands --operation-id <operation_id>` to narrow the generated public command registry. Registry presence describes the generated surface; it does not prove that execution is implemented. If a command reports that it is not implemented, return to the docs or platform MCP instead of inventing flags or claiming success.
 
-Agents must never place authentication tokens in tool arguments, process argv, transcripts, or logs. When authentication setup is requested, instruct the human to run `akua auth login --token <token>` privately and locally themselves. Afterward, agents may run `akua auth status --output agent` to confirm the effective source without revealing the credential. Agents may run `akua auth logout` only when explicitly requested.
+Agents must never place authentication tokens in tool arguments, process argv,
+transcripts, or logs. With explicit user approval, an agent may run
+`akua auth login` in the target environment and guide the human through the
+browser/device verification. The CLI prints the verification URL and user code,
+then waits for the human to finish authorization; it never needs the user to
+paste a token into the chat or command line. Use `akua auth login --no-browser`
+when the target environment cannot open a browser. When an agent cannot run the
+target terminal, instruct the human to run `akua auth login` privately and
+locally themselves. Afterward, agents may run `akua auth status --output agent`
+to confirm the effective source without revealing the credential. Agents may run
+`akua auth logout` only when explicitly requested.
 
 ## Select structured output deliberately
 

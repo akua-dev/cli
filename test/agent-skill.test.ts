@@ -41,15 +41,17 @@ describe("canonical Akua agent skill", () => {
     expect(() => validateSkillPackage(skillPackage, skill, rootPackage.version)).not.toThrow();
   });
 
-  test("directs authentication setup through the human without exposing tokens", () => {
+  test("directs browser/device authentication through the human without exposing tokens", () => {
     const skill = readFileSync(SKILL_PATH, "utf8");
 
-    expect(skill).toContain(
-      "Agents must never place authentication tokens in tool arguments, process argv, transcripts, or logs.",
+    expect(skill).toMatch(
+      /Agents must never place authentication tokens in tool arguments, process argv,\s+transcripts, or logs\./,
     );
-    expect(skill).toContain(
-      "instruct the human to run `akua auth login --token <token>` privately and locally themselves",
+    expect(skill).toMatch(
+      /instruct the human to run `akua auth login` privately and\s+locally themselves/,
     );
+    expect(skill).toContain("`akua auth login --no-browser`");
+    expect(skill).toContain("With explicit user approval, an agent may run");
     expect(skill).toContain("agents may run `akua auth status --output agent`");
   });
 
