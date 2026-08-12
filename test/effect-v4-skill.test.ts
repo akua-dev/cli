@@ -41,6 +41,7 @@ describe("Effect v4 CLI quality guidance", () => {
       "`Promise`",
       "`async`",
       "`await`",
+      "`throw`",
       "`runPromise`",
       "`as`",
       "`as const`",
@@ -67,6 +68,26 @@ describe("Effect v4 CLI quality guidance", () => {
     expect(agents).toContain("production CLI");
     expect(agents).toContain("source scan");
     expect(agents).toContain("mise run check");
+  });
+
+  test("keeps generated public commands provider-neutral and Effect-only", () => {
+    const agents = readFileSync(AGENTS_PATH, "utf8");
+    const skill = readFileSync(EFFECT_SKILL_PATH, "utf8");
+
+    for (const rule of [
+      "`openapi/public.json` is the only source of truth",
+      "provider-neutral",
+      "generated path, query, header, and body",
+      "fail on warnings, skipped public",
+      "raw `throw`",
+      "typed error channel",
+      "Pure immutable data",
+    ]) {
+      expect(agents).toContain(rule);
+    }
+
+    expect(skill).toContain("raw `throw`");
+    expect(skill).toContain("typed `Data.TaggedError`");
   });
 
   test("keeps the required development skills and their referenced source material local", () => {

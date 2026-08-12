@@ -12,12 +12,16 @@ audit.
 ## Production model
 
 - In production `src/` and `scripts/`, do not use native `Promise`, `async`,
-  or `await`; a command returns `Effect.Effect` rather than exposing a Promise.
+  `await`, or raw `throw`; a command returns `Effect.Effect` rather than
+  exposing a Promise.
 - Put dependencies behind Effect services and layers (`Context.Service`,
   `Layer.succeed`, `Layer.mergeAll`). Commands request services; live adapters
   are supplied at composition.
-- Model recoverable failures as typed `Data.TaggedError` values and keep them
-  in the Effect error channel. Do not throw generic errors from command flow.
+- Model every failure as a typed `Data.TaggedError` value and keep it in the
+  Effect error channel. Do not throw generic errors, use untyped failure
+  helpers, or return an out-of-band sentinel from command flow.
+- Plain TypeScript is reserved for immutable types, constants, and static data.
+  A module that performs work or can fail must expose an `Effect.Effect` value.
 - In production `src/` and `scripts/`, keep direct host I/O (`fetch`, Bun, Node
   filesystem, `process`, and console) out of commands, workflows, and scripts.
   A live service layer may bridge a host API only inside an Effect constructor,
@@ -67,7 +71,7 @@ unapproved uses outside the binary terminal, and the host-I/O scan must point
 only to deliberate live-layer bridges:
 
 ```sh
-rg -n '\b(Promise|async|await|runPromise)\b|\bas const\b|\bas [A-Za-z_{]' src scripts
+rg -n '\b(Promise|async|await|throw|runPromise)\b|\bas const\b|\bas [A-Za-z_{]' src scripts
 rg -n '\b(fetch|Bun\.(file|write|spawn)|process\.|console\.|readFile|writeFile)\b' src/commands src/runtime scripts
 bun test
 mise run check
