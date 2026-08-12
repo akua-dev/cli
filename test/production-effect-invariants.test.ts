@@ -7,11 +7,18 @@ const productionRoots = ["src", "scripts"];
 const approvedLiveServiceModules = new Map<string, readonly string[]>([
   [
     "src/runtime/services.ts",
-    ["HttpLive", "BrowserLive", "ProcessLive", "ConsoleLive", "SecureConfigLive", "ClockLive"],
+    [
+      "HttpLive",
+      "BrowserLive",
+      "ProcessLive",
+      "ConsoleLive",
+      "SecureConfigLive",
+      "ClockLive",
+    ],
   ],
   ["src/runtime/secure-token-file-services.ts", ["SecureTokenFileLive"]],
   ["scripts/runtime/services.ts", ["ScriptHttpLive", "ScriptFilesLive"]],
-  ["scripts/runtime/release-services.ts", ["ReleaseHostLive"]],
+  ["scripts/runtime/release-host-live.ts", ["ReleaseHostLive"]],
 ]);
 const hostModules = new Set([
   "node:child_process",
@@ -25,7 +32,14 @@ const hostModules = new Set([
   "node:process",
   "node:tls",
 ]);
-const hostGlobals = new Set(["Bun", "Deno", "console", "fetch", "process", "require"]);
+const hostGlobals = new Set([
+  "Bun",
+  "Deno",
+  "console",
+  "fetch",
+  "process",
+  "require",
+]);
 
 interface Violation {
   readonly file: string;
@@ -56,7 +70,9 @@ test("production TypeScript is Effect-only and assertion-free", () => {
 test("production host I/O is isolated to live services and executable terminals", () => {
   const program = ts.createProgram(productionFiles(), {});
   const checker = program.getTypeChecker();
-  const violations = productionFiles().flatMap((file) => inspectHostIo(file, program, checker));
+  const violations = productionFiles().flatMap((file) =>
+    inspectHostIo(file, program, checker),
+  );
 
   expect(violations).toEqual([]);
 });
@@ -64,7 +80,10 @@ test("production host I/O is isolated to live services and executable terminals"
 test("production runtime handoffs stay inside import.meta.main terminal guards", () => {
   const violations = productionFiles().flatMap((file) => {
     const source = readFileSync(file, "utf8");
-    return inspectRuntimeHandoffs(file, ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true));
+    return inspectRuntimeHandoffs(
+      file,
+      ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true),
+    );
   });
 
   expect(violations).toEqual([]);
@@ -79,7 +98,66 @@ test("runtime handoff inspection rejects Runtime.makeRunMain outside its termina
   );
 
   expect(inspectRuntimeHandoffs("src/bin/akua.ts", source)).toEqual([
-    { file: "src/bin/akua.ts", rule: "Runtime.makeRunMain outside import.meta.main" },
+    {
+      file: "src/bin/akua.ts",
+      rule: "Runtime.makeRunMain outside import.meta.main",
+    },
+  ]);
+});
+
+test("runtime handoff inspection recognizes aliased and destructured makeRunMain calls", () => {
+  const aliased = ts.createSourceFile(
+    "src/bin/akua.ts",
+    'import { Runtime as RuntimeAlias } from "effect";\nRuntimeAlias.makeRunMain(() => {});',
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  const destructured = ts.createSourceFile(
+    "src/bin/akua.ts",
+    'import { Runtime } from "effect";\nconst { makeRunMain } = Runtime;\nmakeRunMain(() => {});',
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  const destructuredAlias = ts.createSourceFile(
+    "src/bin/akua.ts",
+    'import { Runtime } from "effect";\nconst { makeRunMain: runMain } = Runtime;\nrunMain(() => {});',
+    ts.ScriptTarget.Latest,
+    true,
+  );
+
+  expect(inspectRuntimeHandoffs("src/bin/akua.ts", aliased)).toEqual([
+    {
+      file: "src/bin/akua.ts",
+      rule: "Runtime.makeRunMain outside import.meta.main",
+    },
+  ]);
+  expect(inspectRuntimeHandoffs("src/bin/akua.ts", destructured)).toEqual([
+    {
+      file: "src/bin/akua.ts",
+      rule: "Runtime.makeRunMain outside import.meta.main",
+    },
+  ]);
+  expect(inspectRuntimeHandoffs("src/bin/akua.ts", destructuredAlias)).toEqual([
+    {
+      file: "src/bin/akua.ts",
+      rule: "Runtime.makeRunMain outside import.meta.main",
+    },
+  ]);
+});
+
+test("runtime handoff inspection requires makeRunMain in the terminal guard body", () => {
+  const source = ts.createSourceFile(
+    "src/bin/akua.ts",
+    'import { Runtime } from "effect";\nif (import.meta.main) {\n  function start() { Runtime.makeRunMain(() => {}); }\n  start();\n}',
+    ts.ScriptTarget.Latest,
+    true,
+  );
+
+  expect(inspectRuntimeHandoffs("src/bin/akua.ts", source)).toEqual([
+    {
+      file: "src/bin/akua.ts",
+      rule: "Runtime.makeRunMain outside import.meta.main",
+    },
   ]);
 });
 
@@ -115,7 +193,8 @@ function inspectHostIo(
   checker: ts.TypeChecker,
 ): Violation[] {
   const sourceFile = program.getSourceFile(file);
-  if (sourceFile === undefined) return [{ file, rule: "missing TypeScript source" }];
+  if (sourceFile === undefined)
+    return [{ file, rule: "missing TypeScript source" }];
   const violations: Violation[] = [];
 
   visit(sourceFile, (node) => {
@@ -138,7 +217,11 @@ function isHostIo(node: ts.Node, checker: ts.TypeChecker): boolean {
     node.expression.kind === ts.SyntaxKind.ImportKeyword
   ) {
     const module = node.arguments[0];
-    return module !== undefined && ts.isStringLiteral(module) && hostModules.has(module.text);
+    return (
+      module !== undefined &&
+      ts.isStringLiteral(module) &&
+      hostModules.has(module.text)
+    );
   }
   if (
     ts.isCallExpression(node) &&
@@ -146,49 +229,158 @@ function isHostIo(node: ts.Node, checker: ts.TypeChecker): boolean {
     node.expression.text === "require"
   ) {
     const module = node.arguments[0];
-    return module !== undefined && ts.isStringLiteral(module) && hostModules.has(module.text);
+    return (
+      module !== undefined &&
+      ts.isStringLiteral(module) &&
+      hostModules.has(module.text)
+    );
   }
   if (!ts.isIdentifier(node) || !hostGlobals.has(node.text)) return false;
   const symbol = checker.getSymbolAtLocation(node);
-  return symbol === undefined || !symbol.declarations?.some((declaration) => declaration.getSourceFile() === node.getSourceFile());
+  return (
+    symbol === undefined ||
+    !symbol.declarations?.some(
+      (declaration) => declaration.getSourceFile() === node.getSourceFile(),
+    )
+  );
 }
 
-function isApprovedLiveServiceModule(file: string, sourceFile: ts.SourceFile): boolean {
+function isApprovedLiveServiceModule(
+  file: string,
+  sourceFile: ts.SourceFile,
+): boolean {
   const liveExports = approvedLiveServiceModules.get(file);
-  return liveExports !== undefined && liveExports.every((name) => sourceFile.text.includes(`export const ${name}`));
+  return (
+    liveExports !== undefined &&
+    liveExports.every((name) =>
+      sourceFile.text.includes(`export const ${name}`),
+    )
+  );
 }
 
 function isExecutableTerminal(file: string, node: ts.Node): boolean {
-  if (file !== "src/bin/akua.ts" && !/^scripts\/(?:fetch-openapi|generate-commands|release)\.ts$/.test(file)) return false;
+  if (
+    file !== "src/bin/akua.ts" &&
+    !/^scripts\/(?:fetch-openapi|generate-commands|release)\.ts$/.test(file)
+  )
+    return false;
   let current: ts.Node | undefined = node;
   while (current !== undefined) {
-    if (ts.isIfStatement(current) && isImportMetaMainGuard(current.expression)) return true;
+    if (ts.isIfStatement(current) && isImportMetaMainGuard(current.expression))
+      return true;
     current = current.parent;
   }
   return false;
 }
 
 function isImportMetaMainGuard(expression: ts.Expression): boolean {
-  return ts.isPropertyAccessExpression(expression) &&
+  return (
+    ts.isPropertyAccessExpression(expression) &&
     expression.name.text === "main" &&
     ts.isMetaProperty(expression.expression) &&
-    expression.expression.keywordToken === ts.SyntaxKind.ImportKeyword;
+    expression.expression.keywordToken === ts.SyntaxKind.ImportKeyword
+  );
 }
 
-function inspectRuntimeHandoffs(file: string, sourceFile: ts.SourceFile): Violation[] {
+function inspectRuntimeHandoffs(
+  file: string,
+  sourceFile: ts.SourceFile,
+): Violation[] {
   const violations: Violation[] = [];
   visit(sourceFile, (node) => {
-    if (!isRuntimeMakeRunMain(node) || isExecutableTerminal(file, node)) return;
-    violations.push({ file, rule: "Runtime.makeRunMain outside import.meta.main" });
+    if (!isRuntimeMakeRunMain(node) || isRuntimeTerminalBody(file, node))
+      return;
+    violations.push({
+      file,
+      rule: "Runtime.makeRunMain outside import.meta.main",
+    });
   });
   return violations;
 }
 
 function isRuntimeMakeRunMain(node: ts.Node): boolean {
-  return ts.isPropertyAccessExpression(node) &&
+  if (!ts.isCallExpression(node)) return false;
+  if (ts.isPropertyAccessExpression(node.expression)) {
+    return (
+      node.expression.name.text === "makeRunMain" &&
+      isRuntimeIdentifier(node.expression.expression)
+    );
+  }
+  return (
     ts.isIdentifier(node.expression) &&
-    node.expression.text === "Runtime" &&
-    node.name.text === "makeRunMain";
+    isDestructuredRuntimeMakeRunMain(node.expression)
+  );
+}
+
+function isRuntimeIdentifier(node: ts.Expression): boolean {
+  if (!ts.isIdentifier(node)) return false;
+  return node.getSourceFile().statements.some((statement) => {
+    if (
+      !ts.isImportDeclaration(statement) ||
+      statement.moduleSpecifier.getText() !== '"effect"'
+    )
+      return false;
+    const bindings = statement.importClause?.namedBindings;
+    if (!bindings || !ts.isNamedImports(bindings)) return false;
+    return bindings.elements.some(
+      (element) =>
+        (element.propertyName?.text ?? element.name.text) === "Runtime" &&
+        element.name.text === node.text,
+    );
+  });
+}
+
+function isDestructuredRuntimeMakeRunMain(node: ts.Identifier): boolean {
+  return node.getSourceFile().statements.some((statement) => {
+    if (!ts.isVariableStatement(statement)) return false;
+    return statement.declarationList.declarations.some((declaration) => {
+      const initializer = declaration.initializer;
+      return (
+        ts.isObjectBindingPattern(declaration.name) &&
+        initializer !== undefined &&
+        ts.isIdentifier(initializer) &&
+        isRuntimeIdentifier(initializer) &&
+        declaration.name.elements.some(
+          (element) =>
+            ts.isBindingElement(element) &&
+            ts.isIdentifier(element.name) &&
+            element.name.text === node.text &&
+            isMakeRunMainBinding(element),
+        )
+      );
+    });
+  });
+}
+
+function isMakeRunMainBinding(element: ts.BindingElement): boolean {
+  const propertyName = element.propertyName;
+  return propertyName === undefined
+    ? ts.isIdentifier(element.name) && element.name.text === "makeRunMain"
+    : ts.isIdentifier(propertyName) && propertyName.text === "makeRunMain";
+}
+
+function isRuntimeTerminalBody(file: string, node: ts.Node): boolean {
+  if (
+    file !== "src/bin/akua.ts" &&
+    !/^scripts\/(?:fetch-openapi|generate-commands|release)\.ts$/.test(file)
+  )
+    return false;
+  let current: ts.Node | undefined = node;
+  while (current !== undefined && !ts.isStatement(current))
+    current = current.parent;
+  if (current === undefined) return false;
+  const parent = current.parent;
+  if (ts.isIfStatement(parent))
+    return (
+      isImportMetaMainGuard(parent.expression) &&
+      parent.thenStatement === current
+    );
+  return (
+    ts.isBlock(parent) &&
+    ts.isIfStatement(parent.parent) &&
+    isImportMetaMainGuard(parent.parent.expression) &&
+    current.parent === parent
+  );
 }
 
 function lexicalViolations(file: string, source: string): Violation[] {
