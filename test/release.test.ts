@@ -2,6 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { parse, join } from "node:path";
+import { Effect } from "effect";
+
+function runRelease<A, E>(program: Effect.Effect<A, E>): A {
+  return Effect.runSync(program);
+}
 
 async function makeReleaseTempDir(): Promise<string> {
   const releaseRoot = join(process.cwd(), "dist", "release");
@@ -151,7 +156,7 @@ describe("release target contract", () => {
       candidateDir: string,
       existingDir: string,
       version: string,
-    ) => Promise<string[]>;
+    ) => Effect.Effect<string[], Error>;
     const releaseAssetNames = release.releaseAssetNames as (version: string) => string[];
     const root = await makeReleaseTempDir();
 
@@ -167,7 +172,7 @@ describe("release target contract", () => {
       await copyFile(join(candidateDir, assetNames[0]), join(existingDir, assetNames[0]));
       await copyFile(join(candidateDir, assetNames[4]), join(existingDir, assetNames[4]));
 
-      await expect(planReleaseUploads(candidateDir, existingDir, "1.2.3")).resolves.toEqual(
+      expect(runRelease(planReleaseUploads(candidateDir, existingDir, "1.2.3"))).toEqual(
         assetNames.filter((_, index) => index !== 0 && index !== 4).map((name) => join(candidateDir, name)),
       );
     } finally {
@@ -185,7 +190,7 @@ describe("release target contract", () => {
       candidateDir: string,
       existingDir: string,
       version: string,
-    ) => Promise<string[]>;
+    ) => Effect.Effect<string[], Error>;
     const releaseAssetNames = release.releaseAssetNames as (version: string) => string[];
     const root = await makeReleaseTempDir();
 
@@ -200,8 +205,8 @@ describe("release target contract", () => {
       }
       await writeFile(join(existingDir, assetNames[0]), "different bytes\n");
 
-      await expect(planReleaseUploads(candidateDir, existingDir, "1.2.3"))
-        .rejects.toThrow(`Existing release asset does not match candidate: ${assetNames[0]}`);
+      expect(() => runRelease(planReleaseUploads(candidateDir, existingDir, "1.2.3")))
+        .toThrow(`Existing release asset does not match candidate: ${assetNames[0]}`);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -214,8 +219,8 @@ describe("release target contract", () => {
       version: string;
       outputDir: string;
       binaries: Record<string, string>;
-    }) => Promise<void>;
-    const verifyReleaseDirectory = release.verifyReleaseDirectory as (outputDir: string, version: string) => Promise<void>;
+    }) => Effect.Effect<void, Error>;
+    const verifyReleaseDirectory = release.verifyReleaseDirectory as (outputDir: string, version: string) => Effect.Effect<void, Error>;
     const root = await makeReleaseTempDir();
 
     try {
@@ -223,13 +228,13 @@ describe("release target contract", () => {
       const outputDir = join(root, "release");
       await writeFile(source, "#!/bin/sh\necho akua fixture\n");
       await chmod(source, 0o755);
-      await packageExistingExecutables({
+      runRelease(packageExistingExecutables({
         version: "1.2.3",
         outputDir,
         binaries: Object.fromEntries(targets.map((target) => [target.id, source])),
-      });
+      }));
 
-      await expect(verifyReleaseDirectory(outputDir, "1.2.3")).resolves.toBeUndefined();
+      expect(runRelease(verifyReleaseDirectory(outputDir, "1.2.3"))).toBeUndefined();
       const manifest = JSON.parse(await readFile(join(outputDir, "akua-v1.2.3-manifest.json"), "utf8"));
       expect(manifest).toMatchObject({
         schema_version: 1,
@@ -277,7 +282,7 @@ describe("release target contract", () => {
       version: string;
       outputDir: string;
       binaries: Record<string, string>;
-    }) => Promise<void>;
+    }) => Effect.Effect<void, Error>;
     const root = await makeReleaseTempDir();
 
     try {
@@ -288,9 +293,9 @@ describe("release target contract", () => {
       await writeFile(source, "#!/bin/sh\necho akua fixture\n");
       await chmod(source, 0o755);
 
-      await packageExistingExecutables({ version: "1.2.3", outputDir: firstOutputDir, binaries });
+      runRelease(packageExistingExecutables({ version: "1.2.3", outputDir: firstOutputDir, binaries }));
       await Bun.sleep(2100);
-      await packageExistingExecutables({ version: "1.2.3", outputDir: secondOutputDir, binaries });
+      runRelease(packageExistingExecutables({ version: "1.2.3", outputDir: secondOutputDir, binaries }));
 
       for (const name of releaseAssetNames("1.2.3")) {
         const [first, second] = await Promise.all([
@@ -313,8 +318,8 @@ describe("release target contract", () => {
       version: string;
       outputDir: string;
       binaries: Record<string, string>;
-    }) => Promise<void>;
-    const verifyReleaseDirectory = release.verifyReleaseDirectory as (outputDir: string, version: string) => Promise<void>;
+    }) => Effect.Effect<void, Error>;
+    const verifyReleaseDirectory = release.verifyReleaseDirectory as (outputDir: string, version: string) => Effect.Effect<void, Error>;
     const root = await makeReleaseTempDir();
 
     try {
@@ -322,14 +327,14 @@ describe("release target contract", () => {
       const outputDir = join(root, "release");
       await writeFile(source, "#!/bin/sh\necho akua fixture\n");
       await chmod(source, 0o755);
-      await packageExistingExecutables({
+      runRelease(packageExistingExecutables({
         version: "1.2.3",
         outputDir,
         binaries: Object.fromEntries(targets.map((target) => [target.id, source])),
-      });
+      }));
       await writeFile(join(outputDir, "akua-v1.2.3-linux-x64.tar.gz"), "tampered");
 
-      await expect(verifyReleaseDirectory(outputDir, "1.2.3")).rejects.toThrow("checksum mismatch");
+      expect(() => runRelease(verifyReleaseDirectory(outputDir, "1.2.3"))).toThrow("checksum mismatch");
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -337,32 +342,27 @@ describe("release target contract", () => {
 
   test("rejects release output directories that could erase the checkout or filesystem root", async () => {
     const release = await import("../scripts/release") as Record<string, unknown>;
-    const assertSafeOutputDirectory = release.assertSafeOutputDirectory as (outputDir: string) => Promise<void>;
+    const assertSafeOutputDirectory = release.assertSafeOutputDirectory as (outputDir: string) => Effect.Effect<void, Error>;
 
-    await expect(assertSafeOutputDirectory(process.cwd())).rejects.toThrow("Unsafe release output directory");
-    await expect(assertSafeOutputDirectory(parse(process.cwd()).root))
-      .rejects.toThrow("Unsafe release output directory");
-    await expect(assertSafeOutputDirectory(join(process.cwd(), "src")))
-      .rejects.toThrow("Unsafe release output directory");
-    await expect(assertSafeOutputDirectory(join(process.cwd(), "docs")))
-      .rejects.toThrow("Unsafe release output directory");
-    await expect(assertSafeOutputDirectory(join(process.cwd(), "dist", "js")))
-      .rejects.toThrow("Unsafe release output directory");
-    await expect(assertSafeOutputDirectory(join(process.cwd(), "dist", "release")))
-      .resolves.toBeUndefined();
+    expect(() => runRelease(assertSafeOutputDirectory(process.cwd()))).toThrow("Unsafe release output directory");
+    expect(() => runRelease(assertSafeOutputDirectory(parse(process.cwd()).root))).toThrow("Unsafe release output directory");
+    expect(() => runRelease(assertSafeOutputDirectory(join(process.cwd(), "src")))).toThrow("Unsafe release output directory");
+    expect(() => runRelease(assertSafeOutputDirectory(join(process.cwd(), "docs")))).toThrow("Unsafe release output directory");
+    expect(() => runRelease(assertSafeOutputDirectory(join(process.cwd(), "dist", "js")))).toThrow("Unsafe release output directory");
+    expect(runRelease(assertSafeOutputDirectory(join(process.cwd(), "dist", "release")))).toBeUndefined();
   });
 
   test("rejects release output paths beneath a symlinked ancestor", async () => {
     const release = await import("../scripts/release") as Record<string, unknown>;
-    const assertSafeOutputDirectory = release.assertSafeOutputDirectory as (outputDir: string) => Promise<void>;
+    const assertSafeOutputDirectory = release.assertSafeOutputDirectory as (outputDir: string) => Effect.Effect<void, Error>;
     const root = await makeReleaseTempDir();
     const target = await mkdtemp(join(process.cwd(), ".tmp-akua-release-target-"));
     const linkedDirectory = join(root, "linked-output");
 
     try {
       await symlink(target, linkedDirectory, "dir");
-      await expect(assertSafeOutputDirectory(join(linkedDirectory, "release")))
-        .rejects.toThrow("symlink");
+      expect(() => runRelease(assertSafeOutputDirectory(join(linkedDirectory, "release"))))
+        .toThrow("symlink");
     } finally {
       await rm(root, { recursive: true, force: true });
       await rm(target, { recursive: true, force: true });
@@ -376,8 +376,8 @@ describe("release target contract", () => {
       version: string;
       outputDir: string;
       binaries: Record<string, string>;
-    }) => Promise<void>;
-    const verifyReleaseDirectory = release.verifyReleaseDirectory as (outputDir: string, version: string) => Promise<void>;
+    }) => Effect.Effect<void, Error>;
+    const verifyReleaseDirectory = release.verifyReleaseDirectory as (outputDir: string, version: string) => Effect.Effect<void, Error>;
     const root = await makeReleaseTempDir();
 
     try {
@@ -385,17 +385,17 @@ describe("release target contract", () => {
       const outputDir = join(root, "release");
       await writeFile(source, "#!/bin/sh\necho akua fixture\n");
       await chmod(source, 0o755);
-      await packageExistingExecutables({
+      runRelease(packageExistingExecutables({
         version: "1.2.3",
         outputDir,
         binaries: Object.fromEntries(targets.map((target) => [target.id, source])),
-      });
+      }));
       const manifestPath = join(outputDir, "akua-v1.2.3-homebrew.json");
       const homebrew = JSON.parse(await readFile(manifestPath, "utf8"));
       homebrew.platforms.linux_intel.sha256 = "0".repeat(64);
       await writeFile(manifestPath, `${JSON.stringify(homebrew, null, 2)}\n`);
 
-      await expect(verifyReleaseDirectory(outputDir, "1.2.3")).rejects.toThrow("Homebrew manifest mismatch");
+      expect(() => runRelease(verifyReleaseDirectory(outputDir, "1.2.3"))).toThrow("Homebrew manifest mismatch");
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -440,12 +440,12 @@ describe("release target contract", () => {
       version: string;
       outputDir: string;
       binaries: Record<string, string>;
-    }) => Promise<void>;
+    }) => Effect.Effect<void, Error>;
     const smokeReleaseArtifact = release.smokeReleaseArtifact as (input: {
       version: string;
       outputDir: string;
       targetId: string;
-    }) => Promise<void>;
+    }) => Effect.Effect<void, Error>;
     const root = await makeReleaseTempDir();
 
     try {
@@ -456,17 +456,17 @@ describe("release target contract", () => {
         "#!/bin/sh\ncase \"$1\" in\n  --version) echo '{\"status\":\"ok\",\"data\":{\"version\":\"1.2.3\"}}' ;;\n  --help) echo 'Usage: akua' ;;\n  commands) echo 'commands[1]' ;;\n  *) exit 2 ;;\nesac\n",
       );
       await chmod(source, 0o755);
-      await packageExistingExecutables({
+      runRelease(packageExistingExecutables({
         version: "1.2.3",
         outputDir,
         binaries: Object.fromEntries(targets.map((target) => [target.id, source])),
-      });
+      }));
 
-      await expect(smokeReleaseArtifact({
+      expect(runRelease(smokeReleaseArtifact({
         version: "1.2.3",
         outputDir,
         targetId: hostTargetId(process.platform, process.arch),
-      })).resolves.toBeUndefined();
+      }))).toBeUndefined();
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -480,12 +480,12 @@ describe("release target contract", () => {
       version: string;
       outputDir: string;
       binaries: Record<string, string>;
-    }) => Promise<void>;
+    }) => Effect.Effect<void, Error>;
     const smokeReleaseArtifact = release.smokeReleaseArtifact as (input: {
       version: string;
       outputDir: string;
       targetId: string;
-    }) => Promise<void>;
+    }) => Effect.Effect<void, Error>;
     const root = await makeReleaseTempDir();
 
     try {
@@ -496,17 +496,17 @@ describe("release target contract", () => {
         "#!/bin/sh\ncase \"$1\" in\n  --version) echo '{\"status\":\"ok\",\"data\":{\"version\":\"11.2.3\"}}' ;;\n  --help) echo 'Usage: akua' ;;\n  commands) echo 'commands[1]' ;;\n  *) exit 2 ;;\nesac\n",
       );
       await chmod(source, 0o755);
-      await packageExistingExecutables({
+      runRelease(packageExistingExecutables({
         version: "1.2.3",
         outputDir,
         binaries: Object.fromEntries(targets.map((target) => [target.id, source])),
-      });
+      }));
 
-      await expect(smokeReleaseArtifact({
+      expect(() => runRelease(smokeReleaseArtifact({
         version: "1.2.3",
         outputDir,
         targetId: hostTargetId(process.platform, process.arch),
-      })).rejects.toThrow("unexpected version");
+      }))).toThrow("unexpected version");
     } finally {
       await rm(root, { recursive: true, force: true });
     }

@@ -14,7 +14,7 @@ export function renderSuccess(envelope: RenderEnvelope, mode: OutputMode): strin
     return "";
   }
 
-  const payload = { status: "ok" as const, ...envelope };
+  const payload: RenderEnvelope = { status: "ok", ...envelope };
   if (mode === "json") {
     return `${JSON.stringify(payload, null, 2)}\n`;
   }
@@ -107,8 +107,10 @@ function renderValue(value: unknown, indent: number, key?: string): string[] {
   if (key) {
     lines.push(`${prefix}${key}:`);
   }
-  for (const [childKey, childValue] of Object.entries(value as Record<string, unknown>)) {
-    lines.push(...renderValue(childValue, key ? indent + 2 : indent, childKey));
+  if (isRecord(value)) {
+    for (const [childKey, childValue] of Object.entries(value)) {
+      lines.push(...renderValue(childValue, key ? indent + 2 : indent, childKey));
+    }
   }
   return lines;
 }
@@ -119,8 +121,8 @@ function renderArray(values: readonly unknown[], indent: number, key = "items"):
     return [`${prefix}${key}[0]:`];
   }
 
-  if (values.every(isRecord)) {
-    const rows = values as readonly Record<string, unknown>[];
+  const rows = values.filter(isRecord);
+  if (rows.length === values.length) {
     const keys = Object.keys(rows[0] ?? {}).filter((candidate) =>
       rows.every((row) => row[candidate] === undefined || row[candidate] === null || typeof row[candidate] !== "object"),
     );

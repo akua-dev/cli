@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { Effect } from "effect";
+import { Effect, Exit, Runtime } from "effect";
 
 import { authView } from "../commands/auth";
 import { agentOsView } from "../commands/agent-os";
@@ -17,23 +17,32 @@ import {
   runCli,
   type CliFailure,
 } from "../runtime/effect-runtime";
-import { CliLive, Console } from "../runtime/services";
+import { CliLive, Console, type CliServices } from "../runtime/services";
 
 const VERSION = "0.9.0"; // x-release-please-version
 
-export async function main(
+export function main(
   argv = process.argv.slice(2),
   env = process.env,
-): Promise<number> {
-  return Effect.runPromise(
-    Effect.provide(mainEffect(argv, env), CliLive) as Effect.Effect<number>,
-  );
+): void {
+  const runMain = Runtime.makeRunMain(({ fiber, teardown }) => {
+    fiber.addObserver((exit) => {
+      if (Exit.isSuccess(exit)) {
+        process.exitCode = typeof exit.value === "number" ? exit.value : 1;
+        return;
+      }
+      teardown(exit, (code) => {
+        process.exitCode = code;
+      });
+    });
+  });
+  runMain(Effect.provide(mainEffect(argv, env), CliLive));
 }
 
 function mainEffect(
   argv: readonly string[],
   env: Record<string, string | undefined>,
-) {
+): Effect.Effect<number, never, CliServices> {
   let mode = fallbackErrorMode(argv);
   return Effect.gen(function* () {
     const console = yield* Console;
@@ -95,10 +104,9 @@ function routeCommand(
   }
 
   if (argv[0] === "agent-os") {
-    return Effect.tryPromise({
-      try: () => agentOsView(argv.slice(1), env),
-      catch: (error) => new CommandFailure({ error: toCliError(error) }),
-    });
+    return agentOsView(argv.slice(1), env).pipe(
+      Effect.mapError((error) => new CommandFailure({ error })),
+    );
   }
 
   const unknownFlag = argv.find((arg) => arg.startsWith("-"));
@@ -289,5 +297,5 @@ function fallbackErrorMode(argv: readonly string[]): OutputMode {
 }
 
 if (import.meta.main) {
-  process.exit(await main());
+  main();
 }

@@ -36,7 +36,12 @@ const AUTOMATION_ENV_VARS = [
   "TF_BUILD",
 ];
 
-const EXPLICIT_OUTPUT_MODES = ["human", "agent", "json", "quiet"] as const;
+const EXPLICIT_OUTPUT_MODES: readonly OutputMode[] = [
+  "human",
+  "agent",
+  "json",
+  "quiet",
+];
 
 export function detectOutputMode(input: OutputModeInput): OutputMode {
   const explicit = readExplicitMode(input.argv, input.env);
@@ -108,10 +113,14 @@ function readEnvOutputMode(env: Record<string, string | undefined>): OutputMode 
 }
 
 function parseOutputMode(value: string, source = "--output"): OutputMode {
-  if (EXPLICIT_OUTPUT_MODES.includes(value as OutputMode)) {
-    return value as OutputMode;
+  if (isOutputMode(value)) {
+    return value;
   }
   throw usageError(`Invalid ${source} value: ${value}. Expected one of: ${EXPLICIT_OUTPUT_MODES.join(", ")}.`);
+}
+
+function isOutputMode(value: string): value is OutputMode {
+  return EXPLICIT_OUTPUT_MODES.some((mode) => mode === value);
 }
 
 function splitFlagAssignment(value: string): [string, string] {

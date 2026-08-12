@@ -2,13 +2,12 @@ import { constants } from "node:fs";
 import { lstat, open, type FileHandle } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 
+import { Effect } from "effect";
+
 import { AkuaCliError } from "./errors";
 
 export const MAX_PROVIDER_TOKEN_BYTES = 4096;
 
-// Bun's Node type declarations omit O_CLOEXEC although its Unix open syscall
-// accepts it. Linux uses 0x80000; Darwin and the supported BSD target use
-// 0x1000000. This command is intentionally Unix-only.
 const O_CLOEXEC = process.platform === "linux" ? 0x80000 : 0x1000000;
 export const SECURE_OPEN_FLAGS = constants.O_RDONLY | constants.O_NOFOLLOW | O_CLOEXEC;
 
@@ -23,138 +22,132 @@ export interface SecureTokenFileStat {
 }
 
 interface SecureTokenFileHandle {
-  stat(): Promise<SecureTokenFileStat>;
-  read(buffer: Uint8Array, offset?: number, length?: number, position?: number): Promise<{ bytesRead: number }>;
-  close(): Promise<void>;
+  stat(): Effect.Effect<SecureTokenFileStat, unknown>;
+  read(buffer: Uint8Array, offset?: number, length?: number, position?: number): Effect.Effect<{ bytesRead: number }, unknown>;
+  close(): Effect.Effect<void, unknown>;
 }
 
 export interface SecureTokenFileDependencies {
   getuid(): number;
-  lstat(path: string): Promise<SecureTokenFileStat>;
-  open(path: string, flags: number): Promise<SecureTokenFileHandle>;
+  lstat(path: string): Effect.Effect<SecureTokenFileStat, unknown>;
+  open(path: string, flags: number): Effect.Effect<SecureTokenFileHandle, unknown>;
 }
 
 const productionDependencies: SecureTokenFileDependencies = {
   getuid: () => {
-    if (typeof process.getuid !== "function") {
-      throw unsafeFileError();
-    }
+    if (typeof process.getuid !== "function") throw unsafeFileError();
     return process.getuid();
   },
-  lstat: async (path) => lstat(path),
-  open: async (path, flags) => open(path, flags),
+  lstat: (path) => Effect.tryPromise({ try: () => lstat(path), catch: (cause) => cause }),
+  open: (path, flags) =>
+    Effect.tryPromise({
+      try: () => open(path, flags),
+      catch: (cause) => cause,
+    }).pipe(Effect.map(adaptFileHandle)),
 };
 
-export async function readSecureTokenFile(
+export function readSecureTokenFile(
   path: string,
   dependencies: SecureTokenFileDependencies = productionDependencies,
-): Promise<Uint8Array> {
-  if (!isAbsolute(path)) {
-    throw new AkuaCliError({
-      type: "validation_error",
-      code: "AKUA_LOADER_TOKEN_PATH_INVALID",
-      message: "The provider token file must use an absolute path.",
-      exitCode: 2,
-    });
-  }
-
-  const preOpen = await safeLstat(path, dependencies);
-  validateStat(preOpen, dependencies.getuid());
-  validateSize(preOpen.size);
-
-  let handle: SecureTokenFileHandle | undefined;
-  try {
-    handle = await dependencies.open(path, SECURE_OPEN_FLAGS);
-    const opened = await safeFstat(handle);
-    validateStat(opened, dependencies.getuid());
-    if (!sameFile(preOpen, opened)) {
-      throw changedFileError();
-    }
-    validateSize(opened.size);
-
-    const bytes = new Uint8Array(opened.size);
-    try {
-      const { bytesRead } = await handle.read(bytes, 0, bytes.byteLength, 0);
-      if (bytesRead !== bytes.byteLength) {
-        clearBytes(bytes);
-        throw unsafeFileError();
-      }
-      return bytes;
-    } catch (error) {
-      clearBytes(bytes);
-      throw error;
-    }
-  } catch (error) {
-    if (error instanceof AkuaCliError) {
-      throw error;
-    }
-    throw unsafeFileError();
-  } finally {
-    await handle?.close().catch(() => undefined);
-  }
+): Effect.Effect<Uint8Array, AkuaCliError> {
+  if (!isAbsolute(path)) return Effect.fail(invalidPathError());
+  return safeLstat(path, dependencies).pipe(
+    Effect.flatMap((preOpen) =>
+      Effect.try({
+        try: () => {
+          validateStat(preOpen, dependencies.getuid());
+          validateSize(preOpen.size);
+        },
+        catch: (error) => error instanceof AkuaCliError ? error : unsafeFileError(),
+      }).pipe(
+        Effect.andThen(
+          Effect.acquireUseRelease(
+            safeOpen(path, dependencies),
+            (handle) => readOpenedFile(handle, preOpen, dependencies),
+            (handle) => handle.close().pipe(Effect.ignore),
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 export function clearBytes(bytes: Uint8Array): void {
   bytes.fill(0);
 }
 
-async function safeLstat(path: string, dependencies: SecureTokenFileDependencies): Promise<SecureTokenFileStat> {
-  try {
-    return await dependencies.lstat(path);
-  } catch {
-    throw unsafeFileError();
-  }
+function adaptFileHandle(handle: FileHandle): SecureTokenFileHandle {
+  return {
+    stat: () => Effect.tryPromise({ try: () => handle.stat(), catch: (cause) => cause }),
+    read: (buffer, offset, length, position) =>
+      Effect.tryPromise({
+        try: () => handle.read(buffer, offset, length, position),
+        catch: (cause) => cause,
+      }).pipe(Effect.map((result) => ({ bytesRead: result.bytesRead }))),
+    close: () => Effect.tryPromise({ try: () => handle.close(), catch: (cause) => cause }),
+  };
 }
 
-async function safeFstat(handle: SecureTokenFileHandle): Promise<SecureTokenFileStat> {
-  try {
-    return await handle.stat();
-  } catch {
-    throw unsafeFileError();
-  }
+function safeLstat(path: string, dependencies: SecureTokenFileDependencies): Effect.Effect<SecureTokenFileStat, AkuaCliError> {
+  return dependencies.lstat(path).pipe(Effect.mapError(unsafeFileError));
 }
 
-function validateStat(stat: SecureTokenFileStat, expectedUid: number): void {
-  if (stat.isSymbolicLink() || !stat.isFile() || stat.uid !== expectedUid || (stat.mode & 0o777) !== 0o600) {
-    throw unsafeFileError();
-  }
+function safeOpen(path: string, dependencies: SecureTokenFileDependencies): Effect.Effect<SecureTokenFileHandle, AkuaCliError> {
+  return dependencies.open(path, SECURE_OPEN_FLAGS).pipe(Effect.mapError(unsafeFileError));
 }
 
-function validateSize(size: number): void {
-  if (!Number.isSafeInteger(size) || size < 1 || size > MAX_PROVIDER_TOKEN_BYTES) {
-    throw new AkuaCliError({
-      type: "validation_error",
-      code: "AKUA_LOADER_TOKEN_FILE_SIZE_INVALID",
-      message: "The provider token file size is invalid.",
-      exitCode: 2,
-    });
-  }
-}
-
-function sameFile(before: SecureTokenFileStat, opened: SecureTokenFileStat): boolean {
-  return (
-    before.dev === opened.dev &&
-    before.ino === opened.ino &&
-    before.uid === opened.uid &&
-    before.mode === opened.mode &&
-    before.size === opened.size
+function readOpenedFile(
+  handle: SecureTokenFileHandle,
+  preOpen: SecureTokenFileStat,
+  dependencies: SecureTokenFileDependencies,
+): Effect.Effect<Uint8Array, AkuaCliError> {
+  return handle.stat().pipe(
+    Effect.mapError(unsafeFileError),
+    Effect.flatMap((opened) =>
+      Effect.try({
+        try: () => {
+          validateStat(opened, dependencies.getuid());
+          if (!sameFile(preOpen, opened)) throw changedFileError();
+          validateSize(opened.size);
+          return new Uint8Array(opened.size);
+        },
+        catch: (error) => error instanceof AkuaCliError ? error : unsafeFileError(),
+      }),
+    ),
+    Effect.flatMap((bytes) =>
+      handle.read(bytes, 0, bytes.byteLength, 0).pipe(
+        Effect.mapError(unsafeFileError),
+        Effect.flatMap(({ bytesRead }) =>
+          bytesRead === bytes.byteLength
+            ? Effect.succeed(bytes)
+            : Effect.sync(() => clearBytes(bytes)).pipe(Effect.andThen(Effect.fail(unsafeFileError()))),
+        ),
+        Effect.catch((error) => Effect.sync(() => clearBytes(bytes)).pipe(Effect.andThen(Effect.fail(error)))),
+      ),
+    ),
   );
 }
 
+function validateStat(stat: SecureTokenFileStat, expectedUid: number): void {
+  if (stat.isSymbolicLink() || !stat.isFile() || stat.uid !== expectedUid || (stat.mode & 0o777) !== 0o600) throw unsafeFileError();
+}
+
+function validateSize(size: number): void {
+  if (!Number.isSafeInteger(size) || size < 1 || size > MAX_PROVIDER_TOKEN_BYTES) throw new AkuaCliError({ type: "validation_error", code: "AKUA_LOADER_TOKEN_FILE_SIZE_INVALID", message: "The provider token file size is invalid.", exitCode: 2 });
+}
+
+function sameFile(before: SecureTokenFileStat, opened: SecureTokenFileStat): boolean {
+  return before.dev === opened.dev && before.ino === opened.ino && before.uid === opened.uid && before.mode === opened.mode && before.size === opened.size;
+}
+
+function invalidPathError(): AkuaCliError {
+  return new AkuaCliError({ type: "validation_error", code: "AKUA_LOADER_TOKEN_PATH_INVALID", message: "The provider token file must use an absolute path.", exitCode: 2 });
+}
+
 function unsafeFileError(): AkuaCliError {
-  return new AkuaCliError({
-    type: "validation_error",
-    code: "AKUA_LOADER_TOKEN_FILE_UNSAFE",
-    message: "The provider token file does not meet the required security checks.",
-    exitCode: 2,
-  });
+  return new AkuaCliError({ type: "validation_error", code: "AKUA_LOADER_TOKEN_FILE_UNSAFE", message: "The provider token file does not meet the required security checks.", exitCode: 2 });
 }
 
 function changedFileError(): AkuaCliError {
-  return new AkuaCliError({
-    type: "validation_error",
-    code: "AKUA_LOADER_TOKEN_FILE_CHANGED",
-    message: "The provider token file changed while it was being opened.",
-    exitCode: 2,
-  });
+  return new AkuaCliError({ type: "validation_error", code: "AKUA_LOADER_TOKEN_FILE_CHANGED", message: "The provider token file changed while it was being opened.", exitCode: 2 });
 }

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { Effect } from "effect";
 
 import { DEFAULT_OPENAPI_URL, fetchOpenApi, resolveSpecUrl, validateOpenApiDocument } from "../scripts/fetch-openapi";
 
@@ -25,9 +26,9 @@ describe("OpenAPI fetch guard", () => {
     const spec = { paths: { "/health": { get: { operationId: "health" } } }, openapi: "3.1.0" };
     globalThis.fetch = (async () => Response.json(spec)) as unknown as typeof fetch;
     try {
-      await fetchOpenApi(new URL(DEFAULT_OPENAPI_URL), output);
+      await Effect.runPromise(fetchOpenApi(new URL(DEFAULT_OPENAPI_URL), output));
       const first = await readFile(output, "utf8");
-      await fetchOpenApi(new URL(DEFAULT_OPENAPI_URL), output);
+      await Effect.runPromise(fetchOpenApi(new URL(DEFAULT_OPENAPI_URL), output));
       const second = await readFile(output, "utf8");
 
       expect(second).toBe(first);

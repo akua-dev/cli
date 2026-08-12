@@ -10,7 +10,7 @@ import {
 import { dirname, join } from "node:path";
 
 import { Context, Data, Effect, Layer } from "effect";
-import { Clock, Duration } from "effect";
+import { Duration } from "effect";
 
 import { encodeForm } from "./device-http";
 
@@ -88,6 +88,22 @@ export class SecureConfig extends Context.Service<
   }
 >()("platform/cli/SecureConfig") {}
 
+export class CliClock extends Context.Service<
+  CliClock,
+  {
+    readonly currentTimeMillis: Effect.Effect<number>;
+    readonly sleep: (duration: Duration.Duration) => Effect.Effect<void>;
+  }
+>()("platform/cli/Clock") {}
+
+export type CliServices =
+  | Http
+  | Browser
+  | Process
+  | Console
+  | SecureConfig
+  | CliClock;
+
 const CONFIG_FILE_MODE = 0o600;
 const CONFIG_DIR_MODE = 0o700;
 const MAX_DEVICE_RESPONSE_SIZE = 16_384;
@@ -95,22 +111,23 @@ const MAX_DEVICE_RESPONSE_SIZE = 16_384;
 export const HttpLive = Layer.succeed(Http, {
   postForm: (request) =>
     Effect.tryPromise({
-      try: async (signal) => {
-        const response = await fetch(request.url, {
+      try: (signal) =>
+        fetch(request.url, {
           method: "POST",
           headers: { "content-type": "application/x-www-form-urlencoded" },
           body: encodeForm(request.fields),
           signal,
-        });
-        const text = await response.text();
-        if (text.length > MAX_DEVICE_RESPONSE_SIZE) {
-          throw new Error("Device response is too large.");
-        }
-        return {
-          status: response.status,
-          body: text === "" ? {} : JSON.parse(text),
-        };
-      },
+        }).then((response) =>
+          response.text().then((text) => {
+            if (text.length > MAX_DEVICE_RESPONSE_SIZE) {
+              throw new Error("Device response is too large.");
+            }
+            return {
+              status: response.status,
+              body: text === "" ? {} : JSON.parse(text),
+            };
+          }),
+        ),
       catch: (cause) => new HttpFailure({ cause }),
     }),
 });
@@ -118,7 +135,7 @@ export const HttpLive = Layer.succeed(Http, {
 export const BrowserLive = Layer.succeed(Browser, {
   launch: (url) =>
     Effect.tryPromise({
-      try: async () => {
+      try: () => {
         const command =
           process.platform === "darwin"
             ? ["open", url]
@@ -130,9 +147,9 @@ export const BrowserLive = Layer.succeed(Browser, {
           stdout: "ignore",
           stderr: "ignore",
         });
-        if ((await processHandle.exited) !== 0) {
-          throw new Error("Browser launch failed.");
-        }
+        return processHandle.exited.then((exitCode) => {
+          if (exitCode !== 0) throw new Error("Browser launch failed.");
+        });
       },
       catch: (cause) => new BrowserFailure({ cause }),
     }),
@@ -156,13 +173,8 @@ export const ConsoleLive = Layer.succeed(Console, {
   writeStdout: (value) => Effect.sync(() => process.stdout.write(value)),
 });
 
-export const ClockLive = Layer.succeed(Clock.Clock, {
-  currentTimeMillisUnsafe: () => Date.now(),
+export const ClockLive = Layer.succeed(CliClock, {
   currentTimeMillis: Effect.sync(Date.now),
-  monotonicTimeNanosUnsafe: () => process.hrtime.bigint(),
-  monotonicTimeNanos: Effect.sync(() => process.hrtime.bigint()),
-  currentTimeNanosUnsafe: () => BigInt(Date.now()) * 1_000_000n,
-  currentTimeNanos: Effect.sync(() => BigInt(Date.now()) * 1_000_000n),
   sleep: (duration) =>
     Effect.tryPromise({
       try: () => Bun.sleep(Duration.toMillis(duration)),
@@ -172,50 +184,46 @@ export const ClockLive = Layer.succeed(Clock.Clock, {
 
 export const SecureConfigLive = Layer.succeed(SecureConfig, {
   readToken: (path) =>
-    Effect.tryPromise({
-      try: async () => {
-        const config = await readConfig(path);
+    readConfig(path).pipe(
+      Effect.map((config) => {
         return typeof config.token === "string" && config.token !== ""
           ? config.token
           : undefined;
-      },
-      catch: (cause) =>
-        new SecureConfigFailure({ operation: "read", path, cause }),
-    }),
+      }),
+      Effect.mapError(
+        (cause) => new SecureConfigFailure({ operation: "read", path, cause }),
+      ),
+    ),
   saveToken: (path, token) =>
-    Effect.tryPromise({
-      try: async () =>
-        writeConfig(path, { ...(await readConfig(path)), token }),
-      catch: (cause) =>
-        new SecureConfigFailure({ operation: "write", path, cause }),
-    }),
+    readConfig(path).pipe(
+      Effect.flatMap((config) => writeConfig(path, { ...config, token })),
+      Effect.mapError(
+        (cause) => new SecureConfigFailure({ operation: "write", path, cause }),
+      ),
+    ),
   removeToken: (path) =>
-    Effect.tryPromise({
-      try: async () => {
-        let config: Record<string, unknown>;
-        try {
-          config = await readConfig(path);
-        } catch (error) {
-          if (!isNotFound(error)) {
-            await rm(path, { force: true });
-            return true;
-          }
-          return false;
-        }
+    readConfig(path).pipe(
+      Effect.matchEffect({
+        onFailure: (cause) =>
+          isNotFound(cause)
+            ? Effect.succeed(false)
+            : removeConfig(path).pipe(Effect.as(true)),
+        onSuccess: (config) => {
         if (!Object.prototype.hasOwnProperty.call(config, "token"))
-          return false;
+          return Effect.succeed(false);
         const hadToken =
           typeof config.token === "string" && config.token !== "";
         const { token: _token, ...remaining } = config;
-        await writeConfig(path, remaining);
-        return hadToken;
-      },
-      catch: (cause) =>
-        new SecureConfigFailure({ operation: "remove", path, cause }),
-    }),
+        return writeConfig(path, remaining).pipe(Effect.as(hadToken));
+        },
+      }),
+      Effect.mapError(
+        (cause) => new SecureConfigFailure({ operation: "remove", path, cause }),
+      ),
+    ),
 });
 
-export const CliLive = Layer.mergeAll(
+export const CliLive: Layer.Layer<CliServices> = Layer.mergeAll(
   HttpLive,
   BrowserLive,
   ProcessLive,
@@ -224,38 +232,55 @@ export const CliLive = Layer.mergeAll(
   ClockLive,
 );
 
-async function readConfig(path: string): Promise<Record<string, unknown>> {
-  try {
-    const raw = await readFile(path, "utf8");
-    const value: unknown = JSON.parse(raw);
-    if (!isRecord(value)) throw new Error("Akua config must be a JSON object.");
-    return value;
-  } catch (error) {
-    if (isNotFound(error)) return {};
-    throw error;
-  }
+function readConfig(path: string): Effect.Effect<Record<string, unknown>, unknown> {
+  return Effect.tryPromise({
+    try: () => readFile(path, "utf8"),
+    catch: (cause) => cause,
+  }).pipe(
+    Effect.catch((cause) => (isNotFound(cause) ? Effect.succeed("{}") : Effect.fail(cause))),
+    Effect.flatMap((raw) =>
+      Effect.try({
+        try: () => {
+          const value: unknown = JSON.parse(raw);
+          if (!isRecord(value)) {
+            throw new Error("Akua config must be a JSON object.");
+          }
+          return value;
+        },
+        catch: (cause) => cause,
+      }),
+    ),
+  );
 }
 
-async function writeConfig(
+function writeConfig(
   path: string,
   config: Record<string, unknown>,
-): Promise<void> {
+): Effect.Effect<void, unknown> {
   const directory = dirname(path);
   const temporary = join(directory, `.config.json.${randomUUID()}.tmp`);
-  try {
-    await mkdir(directory, { recursive: true, mode: CONFIG_DIR_MODE });
-    await chmod(directory, CONFIG_DIR_MODE);
-    await writeFile(temporary, `${JSON.stringify(config, null, 2)}\n`, {
-      mode: CONFIG_FILE_MODE,
-      flag: "wx",
+  const cleanup = Effect.tryPromise({
+    try: () => rm(temporary, { force: true }),
+    catch: () => undefined,
+  }).pipe(Effect.ignore);
+  return Effect.gen(function* () {
+    yield* Effect.tryPromise({ try: () => mkdir(directory, { recursive: true, mode: CONFIG_DIR_MODE }), catch: (cause) => cause });
+    yield* Effect.tryPromise({ try: () => chmod(directory, CONFIG_DIR_MODE), catch: (cause) => cause });
+    yield* Effect.tryPromise({
+      try: () => writeFile(temporary, `${JSON.stringify(config, null, 2)}\n`, { mode: CONFIG_FILE_MODE, flag: "wx" }),
+      catch: (cause) => cause,
     });
-    await chmod(temporary, CONFIG_FILE_MODE);
-    await rename(temporary, path);
-    await chmod(path, CONFIG_FILE_MODE);
-  } catch (error) {
-    await rm(temporary, { force: true }).catch(() => undefined);
-    throw error;
-  }
+    yield* Effect.tryPromise({ try: () => chmod(temporary, CONFIG_FILE_MODE), catch: (cause) => cause });
+    yield* Effect.tryPromise({ try: () => rename(temporary, path), catch: (cause) => cause });
+    yield* Effect.tryPromise({ try: () => chmod(path, CONFIG_FILE_MODE), catch: (cause) => cause });
+  }).pipe(Effect.ensuring(cleanup));
+}
+
+function removeConfig(path: string): Effect.Effect<void, unknown> {
+  return Effect.tryPromise({
+    try: () => rm(path, { force: true }),
+    catch: (cause) => cause,
+  });
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

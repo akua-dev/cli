@@ -1,4 +1,4 @@
-import { Clock, Duration, Effect, Layer } from "effect";
+import { Duration, Effect, Layer } from "effect";
 
 import { authView } from "../src/commands/auth";
 import {
@@ -11,6 +11,7 @@ import type { RenderEnvelope } from "../src/runtime/render";
 import {
   Browser,
   BrowserFailure,
+  CliClock,
   Console,
   Http,
   HttpFailure,
@@ -92,13 +93,8 @@ function testServices(dependencies: AuthTestDependencies) {
         }),
       writeStdout: () => Effect.void,
     }),
-    Layer.succeed(Clock.Clock, {
-      currentTimeMillisUnsafe: now,
+    Layer.succeed(CliClock, {
       currentTimeMillis: Effect.sync(now),
-      monotonicTimeNanosUnsafe: () => BigInt(now()) * 1_000_000n,
-      monotonicTimeNanos: Effect.sync(() => BigInt(now()) * 1_000_000n),
-      currentTimeNanosUnsafe: () => BigInt(now()) * 1_000_000n,
-      currentTimeNanos: Effect.sync(() => BigInt(now()) * 1_000_000n),
       sleep: (duration) =>
         Effect.tryPromise({
           try: () => dependencies.sleep(Duration.toMillis(duration)),

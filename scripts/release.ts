@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
-import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, rm, stat, utimes, writeFile } from "node:fs/promises";
+import { chmodSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { Effect, Runtime } from "effect";
 
 export type ReleaseTargetId = "darwin-arm64" | "darwin-x64" | "linux-arm64" | "linux-x64" | "windows-x64";
 
@@ -69,7 +70,7 @@ export const RELEASE_TARGETS: readonly ReleaseTarget[] = [
     executable: "akua.exe",
     runner: "windows-2025",
   },
-] as const;
+];
 
 export function releaseMatrix(): { include: Array<{ target: ReleaseTargetId; runner: string }> } {
   return {
@@ -155,39 +156,27 @@ export function releaseAssetNames(version: string): string[] {
   ];
 }
 
-export async function planReleaseUploads(
+function planReleaseUploadsSync(
   candidateDirInput: string,
   existingDirInput: string,
   version: string,
-): Promise<string[]> {
+): string[] {
   const candidateDir = resolve(candidateDirInput);
   const existingDir = resolve(existingDirInput);
   const expectedNames = releaseAssetNames(version);
-  const candidateNames = (await readdir(candidateDir)).sort();
-  if (JSON.stringify(candidateNames) !== JSON.stringify([...expectedNames].sort())) {
-    throw new Error(`Unexpected release files: ${candidateNames.join(", ")}`);
-  }
-
-  const existingNames = await readdir(existingDir);
+  const candidateNames = readdirSync(candidateDir).sort();
+  if (JSON.stringify(candidateNames) !== JSON.stringify([...expectedNames].sort())) throw new Error(`Unexpected release files: ${candidateNames.join(", ")}`);
+  const existingNames = readdirSync(existingDir);
   const expectedNameSet = new Set(expectedNames);
   for (const name of existingNames) {
-    if (!expectedNameSet.has(name)) {
-      throw new Error(`Unexpected existing release asset: ${name}`);
-    }
-    const [candidateBytes, existingBytes] = await Promise.all([
-      readFile(join(candidateDir, name)),
-      readFile(join(existingDir, name)),
-    ]);
-    if (!candidateBytes.equals(existingBytes)) {
-      throw new Error(`Existing release asset does not match candidate: ${name}`);
-    }
+    if (!expectedNameSet.has(name)) throw new Error(`Unexpected existing release asset: ${name}`);
+    if (!readFileSync(join(candidateDir, name)).equals(readFileSync(join(existingDir, name)))) throw new Error(`Existing release asset does not match candidate: ${name}`);
   }
-
   const existingNameSet = new Set(existingNames);
   return expectedNames.filter((name) => !existingNameSet.has(name)).map((name) => join(candidateDir, name));
 }
 
-export async function assertSafeOutputDirectory(outputDirInput: string): Promise<void> {
+function assertSafeOutputDirectorySync(outputDirInput: string): void {
   const outputDir = resolve(outputDirInput);
   const workspace = resolve(process.cwd());
   const releaseOutputRoot = join(workspace, "dist", "release");
@@ -204,11 +193,11 @@ export async function assertSafeOutputDirectory(outputDirInput: string): Promise
   for (const segment of relative(workspace, outputDir).split(sep)) {
     currentPath = join(currentPath, segment);
     try {
-      if ((await lstat(currentPath)).isSymbolicLink()) {
+      if ((lstatSync(currentPath)).isSymbolicLink()) {
         throw new Error(`Unsafe release output directory contains a symlink: ${currentPath}`);
       }
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      if (isNotFoundError(error)) {
         break;
       }
       throw error;
@@ -216,13 +205,13 @@ export async function assertSafeOutputDirectory(outputDirInput: string): Promise
   }
 }
 
-export async function packageExistingExecutables(input: PackageExistingExecutablesInput): Promise<void> {
+function packageExistingExecutablesSync(input: PackageExistingExecutablesInput): void {
   validateVersion(input.version);
   const outputDir = resolve(input.outputDir);
-  await assertSafeOutputDirectory(outputDir);
+  assertSafeOutputDirectorySync(outputDir);
   const stagingRoot = join(outputDir, ".staging");
-  await rm(outputDir, { recursive: true, force: true });
-  await mkdir(stagingRoot, { recursive: true });
+  rmSync(outputDir, { recursive: true, force: true });
+  mkdirSync(stagingRoot, { recursive: true });
 
   const assets: ReleaseAsset[] = [];
   try {
@@ -236,20 +225,20 @@ export async function packageExistingExecutables(input: PackageExistingExecutabl
       const stagedExecutable = join(stagingDir, target.executable);
       const archive = artifactName(input.version, target);
       const archivePath = join(outputDir, archive);
-      await mkdir(stagingDir, { recursive: true });
+      mkdirSync(stagingDir, { recursive: true });
       // copyFile can use an in-kernel copy optimization across filesystems. In
       // a Kata guest, copying from its root filesystem into the virtiofs-backed
       // Actions work volume produced correctly sized but zero-filled binaries.
       // Materialize and verify the bytes so release archives cannot silently
       // contain corrupted executables.
-      const sourceBytes = await readFile(source);
-      await writeFile(stagedExecutable, sourceBytes);
-      const stagedBytes = await readFile(stagedExecutable);
+      const sourceBytes = readFileSync(source);
+      writeFileSync(stagedExecutable, sourceBytes);
+      const stagedBytes = readFileSync(stagedExecutable);
       if (!stagedBytes.equals(sourceBytes)) {
         throw new Error(`Staged executable does not match source for ${target.id}`);
       }
-      await chmod(stagedExecutable, target.os === "windows" ? 0o644 : 0o755);
-      await utimes(stagedExecutable, ARCHIVE_TIMESTAMP, ARCHIVE_TIMESTAMP);
+      chmodSync(stagedExecutable, target.os === "windows" ? 0o644 : 0o755);
+      utimesSync(stagedExecutable, ARCHIVE_TIMESTAMP, ARCHIVE_TIMESTAMP);
 
       if (target.archive === "tar.gz") {
         const metadataArguments = process.platform === "linux"
@@ -266,7 +255,7 @@ export async function packageExistingExecutables(input: PackageExistingExecutabl
               "--options",
               "gzip:!timestamp",
             ];
-        await run([
+        runSync([
           "tar",
           "--format=ustar",
           ...metadataArguments,
@@ -277,16 +266,16 @@ export async function packageExistingExecutables(input: PackageExistingExecutabl
           target.executable,
         ], { COPYFILE_DISABLE: "1" });
       } else {
-        await run(["zip", "-X", "-q", "-j", archivePath, stagedExecutable], {
+        runSync(["zip", "-X", "-q", "-j", archivePath, stagedExecutable], {
           COPYFILE_DISABLE: "1",
           TZ: "UTC",
         });
       }
 
-      const bytes = new Uint8Array(await readFile(archivePath));
+      const bytes = new Uint8Array(readFileSync(archivePath));
       const digest = sha256(bytes);
       const checksumFile = `${archive}.sha256`;
-      await writeFile(join(outputDir, checksumFile), checksumLine(archive, digest));
+      writeFileSync(join(outputDir, checksumFile), checksumLine(archive, digest));
       assets.push({
         target: target.id,
         bun_target: target.bunTarget,
@@ -309,31 +298,31 @@ export async function packageExistingExecutables(input: PackageExistingExecutabl
       homebrew_manifest: homebrewManifestName(input.version),
       assets,
     };
-    await writeFile(join(outputDir, "checksums.txt"), assets.map((asset) => checksumLine(asset.file, asset.sha256)).join(""));
-    await writeFile(join(outputDir, releaseManifestName(input.version)), stableJson(manifest));
-    await writeFile(join(outputDir, homebrewManifestName(input.version)), stableJson(createHomebrewManifest(input.version, assets)));
+    writeFileSync(join(outputDir, "checksums.txt"), assets.map((asset) => checksumLine(asset.file, asset.sha256)).join(""));
+    writeFileSync(join(outputDir, releaseManifestName(input.version)), stableJson(manifest));
+    writeFileSync(join(outputDir, homebrewManifestName(input.version)), stableJson(createHomebrewManifest(input.version, assets)));
   } finally {
-    await rm(stagingRoot, { recursive: true, force: true });
+    rmSync(stagingRoot, { recursive: true, force: true });
   }
 
-  await verifyReleaseDirectory(outputDir, input.version);
+  verifyReleaseDirectorySync(outputDir, input.version);
 }
 
-export async function packageRelease(input: PackageReleaseInput): Promise<void> {
+function packageReleaseSync(input: PackageReleaseInput): void {
   validateVersion(input.version);
   // Bun's compiled output is memory-mapped. Under Kata, output created on the
   // guest-local /tmp filesystem was observed as correctly sized but entirely
   // sparse/zero-filled. Keep compilation on the Actions workspace's virtiofs
   // volume, then validate the native executable header before packaging it.
   const binaryBuildParent = join(process.cwd(), "dist");
-  await mkdir(binaryBuildParent, { recursive: true });
-  const binaryRoot = await mkdtemp(join(binaryBuildParent, ".tmp-akua-release-build-"));
+  mkdirSync(binaryBuildParent, { recursive: true });
+  const binaryRoot = mkdtempSync(join(binaryBuildParent, ".tmp-akua-release-build-"));
   const binaries: Record<string, string> = {};
   try {
     for (const target of RELEASE_TARGETS) {
       const binaryPath = join(binaryRoot, target.id, target.executable);
-      await mkdir(join(binaryRoot, target.id), { recursive: true });
-      await run([
+      mkdirSync(join(binaryRoot, target.id), { recursive: true });
+      runSync([
         "bun",
         "build",
         input.entrypoint ?? "src/bin/akua.ts",
@@ -343,12 +332,12 @@ export async function packageRelease(input: PackageReleaseInput): Promise<void> 
         "--no-compile-autoload-bunfig",
         `--outfile=${binaryPath}`,
       ]);
-      assertCompiledExecutable(target, await readFile(binaryPath));
+      assertCompiledExecutable(target, readFileSync(binaryPath));
       binaries[target.id] = binaryPath;
     }
-    await packageExistingExecutables({ version: input.version, outputDir: input.outputDir, binaries });
+    packageExistingExecutablesSync({ version: input.version, outputDir: input.outputDir, binaries });
   } finally {
-    await rm(binaryRoot, { recursive: true, force: true });
+    rmSync(binaryRoot, { recursive: true, force: true });
   }
 }
 
@@ -397,53 +386,54 @@ export function archiveExtractCommand(
   return ["tar", "-xf", archivePath, "-C", installRoot];
 }
 
-export async function smokeReleaseArtifact(input: {
+function smokeReleaseArtifactSync(input: {
   version: string;
   outputDir: string;
   targetId: string;
-}): Promise<void> {
+}): void {
   validateVersion(input.version);
   const target = RELEASE_TARGETS.find((candidate) => candidate.id === input.targetId);
   if (!target) {
     throw new Error(`Unknown release target: ${input.targetId}`);
   }
-  const installRoot = await mkdtemp(join(tmpdir(), "akua-release-smoke-"));
+  const installRoot = mkdtempSync(join(tmpdir(), "akua-release-smoke-"));
   try {
     const archivePath = resolve(input.outputDir, artifactName(input.version, target));
-    await run(archiveExtractCommand(target.archive, archivePath, installRoot));
+    runSync(archiveExtractCommand(target.archive, archivePath, installRoot));
     const executable = join(installRoot, target.executable);
     if (target.os !== "windows") {
-      await chmod(executable, 0o755);
+      chmodSync(executable, 0o755);
     }
 
-    const versionOutput = await run([executable, "--version", "--json"]);
+    const versionOutput = runSync([executable, "--version", "--json"]);
     let reportedVersion: unknown;
     try {
-      const versionPayload = JSON.parse(versionOutput) as { data?: { version?: unknown } };
-      reportedVersion = versionPayload.data?.version;
+      reportedVersion = versionFromPayload(JSON.parse(versionOutput));
     } catch {
       reportedVersion = undefined;
     }
     if (reportedVersion !== input.version) {
       throw new Error(`Installed ${target.id} executable reported an unexpected version: ${versionOutput.trim()}`);
     }
-    const helpOutput = await run([executable, "--help"], { AKUA_OUTPUT: "agent" });
+    const helpOutput = runSync([executable, "--help"], { AKUA_OUTPUT: "agent" });
     if (helpOutput.trim() === "") {
       throw new Error(`Installed ${target.id} executable returned empty help output`);
     }
-    const commandsOutput = await run([executable, "commands", "--limit", "1"], { AKUA_OUTPUT: "agent" });
+    const commandsOutput = runSync([executable, "commands", "--limit", "1"], { AKUA_OUTPUT: "agent" });
     if (commandsOutput.trim() === "") {
       throw new Error(`Installed ${target.id} executable returned empty command output`);
     }
   } finally {
-    await rm(installRoot, { recursive: true, force: true });
+    rmSync(installRoot, { recursive: true, force: true });
   }
 }
 
-export async function verifyReleaseDirectory(outputDirInput: string, version: string): Promise<void> {
+function verifyReleaseDirectorySync(outputDirInput: string, version: string): void {
   validateVersion(version);
   const outputDir = resolve(outputDirInput);
-  const manifest = JSON.parse(await readFile(join(outputDir, releaseManifestName(version)), "utf8")) as ReleaseManifest;
+  const manifest = parseReleaseManifest(
+    JSON.parse(readFileSync(join(outputDir, releaseManifestName(version)), "utf8")),
+  );
   if (
     manifest.schema_version !== 1 ||
     manifest.version !== version ||
@@ -473,35 +463,35 @@ export async function verifyReleaseDirectory(outputDirInput: string, version: st
       throw new Error(`Release manifest target mismatch for ${target.id}`);
     }
 
-    const bytes = new Uint8Array(await readFile(join(outputDir, asset.file)));
+    const bytes = new Uint8Array(readFileSync(join(outputDir, asset.file)));
     const digest = sha256(bytes);
     if (digest !== asset.sha256) {
       throw new Error(`Release asset checksum mismatch: ${asset.file}`);
     }
     const expectedLine = checksumLine(asset.file, digest);
-    const adjacent = await readFile(join(outputDir, asset.checksum_file), "utf8");
+    const adjacent = readFileSync(join(outputDir, asset.checksum_file), "utf8");
     if (adjacent !== expectedLine) {
       throw new Error(`Release checksum file mismatch: ${asset.checksum_file}`);
     }
-    if ((await stat(join(outputDir, asset.file))).size !== asset.size) {
+    if ((statSync(join(outputDir, asset.file))).size !== asset.size) {
       throw new Error(`Release asset size mismatch: ${asset.file}`);
     }
     aggregateLines.push(expectedLine);
-    await verifyArchive(outputDir, target, asset.file);
+    verifyArchiveSync(outputDir, target, asset.file);
   }
 
-  const aggregate = await readFile(join(outputDir, manifest.checksums), "utf8");
+  const aggregate = readFileSync(join(outputDir, manifest.checksums), "utf8");
   if (aggregate !== aggregateLines.join("")) {
     throw new Error("Aggregate checksum file mismatch");
   }
 
-  const homebrewManifest = await readFile(join(outputDir, manifest.homebrew_manifest), "utf8");
+  const homebrewManifest = readFileSync(join(outputDir, manifest.homebrew_manifest), "utf8");
   const expectedHomebrewManifest = stableJson(createHomebrewManifest(version, manifest.assets));
   if (homebrewManifest !== expectedHomebrewManifest) {
     throw new Error("Homebrew manifest mismatch");
   }
 
-  const actualNames = (await readdir(outputDir)).sort();
+  const actualNames = (readdirSync(outputDir)).sort();
   const expectedNames = releaseAssetNames(version).sort();
   if (JSON.stringify(actualNames) !== JSON.stringify(expectedNames)) {
     throw new Error(`Unexpected release files: ${actualNames.join(", ")}`);
@@ -534,10 +524,10 @@ function createHomebrewManifest(version: string, assets: readonly ReleaseAsset[]
   };
 }
 
-async function verifyArchive(outputDir: string, target: ReleaseTarget, file: string): Promise<void> {
+function verifyArchiveSync(outputDir: string, target: ReleaseTarget, file: string): void {
   const archivePath = join(outputDir, file);
   const listCommand = target.archive === "zip" ? ["unzip", "-Z1", archivePath] : ["tar", "-tzf", archivePath];
-  const listed = (await run(listCommand)).trim().split("\n").filter(Boolean);
+  const listed = (runSync(listCommand)).trim().split("\n").filter(Boolean);
   if (listed.length !== 1 || listed[0] !== target.executable) {
     throw new Error(`Release archive ${file} must contain only ${target.executable}`);
   }
@@ -545,25 +535,24 @@ async function verifyArchive(outputDir: string, target: ReleaseTarget, file: str
   if (target.os === "windows") {
     return;
   }
-  const extractDir = await mkdtemp(join(tmpdir(), "akua-release-verify-"));
+  const extractDir = mkdtempSync(join(tmpdir(), "akua-release-verify-"));
   try {
-    await run(["tar", "-xzf", archivePath, "-C", extractDir]);
-    const mode = (await stat(join(extractDir, target.executable))).mode & 0o777;
+    runSync(["tar", "-xzf", archivePath, "-C", extractDir]);
+    const mode = (statSync(join(extractDir, target.executable))).mode & 0o777;
     if (mode !== 0o755) {
       throw new Error(`Release executable mode mismatch for ${target.id}: ${mode.toString(8)}`);
     }
   } finally {
-    await rm(extractDir, { recursive: true, force: true });
+    rmSync(extractDir, { recursive: true, force: true });
   }
 }
 
-async function run(command: string[], extraEnv: Record<string, string> = {}): Promise<string> {
-  const proc = Bun.spawn({ cmd: command, stdout: "pipe", stderr: "pipe", env: { ...process.env, ...extraEnv } });
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
+function runSync(command: string[], extraEnv: Record<string, string> = {}): string {
+  const proc = Bun.spawnSync({ cmd: command, stdout: "pipe", stderr: "pipe", env: { ...process.env, ...extraEnv } });
+  const decoder = new TextDecoder();
+  const stdout = decoder.decode(proc.stdout);
+  const stderr = decoder.decode(proc.stderr);
+  const exitCode = proc.exitCode;
   if (exitCode !== 0) {
     throw new Error(`${command[0]} failed (${exitCode}): ${stderr.trim()}`);
   }
@@ -572,6 +561,141 @@ async function run(command: string[], extraEnv: Record<string, string> = {}): Pr
 
 function stableJson(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;
+}
+
+function toError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
+}
+
+function isNotFoundError(error: unknown): boolean {
+  return error instanceof Error && "code" in error && error.code === "ENOENT";
+}
+
+function versionFromPayload(value: unknown): unknown {
+  if (!isRecord(value) || !isRecord(value.data)) return undefined;
+  return value.data.version;
+}
+
+function parseReleaseManifest(value: unknown): ReleaseManifest {
+  if (!isRecord(value) || !Array.isArray(value.assets)) {
+    throw new Error("Release manifest is invalid");
+  }
+  if (
+    value.schema_version !== 1 ||
+    value.executable !== "akua" ||
+    typeof value.version !== "string" ||
+    value.checksums !== "checksums.txt" ||
+    typeof value.homebrew_manifest !== "string"
+  ) {
+    throw new Error("Release manifest is invalid");
+  }
+  const assets = value.assets.map(parseReleaseAsset);
+  return {
+    schema_version: 1,
+    executable: "akua",
+    version: value.version,
+    checksums: "checksums.txt",
+    homebrew_manifest: value.homebrew_manifest,
+    assets,
+  };
+}
+
+function parseReleaseAsset(value: unknown): ReleaseAsset {
+  if (!isRecord(value)) throw new Error("Release manifest asset is invalid");
+  const stringFields = [
+    "target",
+    "bun_target",
+    "os",
+    "arch",
+    "archive",
+    "executable",
+    "file",
+    "checksum_file",
+    "sha256",
+  ];
+  if (stringFields.some((field) => typeof value[field] !== "string") || typeof value.size !== "number") {
+    throw new Error("Release manifest asset is invalid");
+  }
+  const target = releaseTargetId(value.target);
+  const os = releaseOs(value.os);
+  const arch = releaseArch(value.arch);
+  const archive = releaseArchive(value.archive);
+  const executable = releaseExecutable(value.executable);
+  return {
+    target,
+    bun_target: requiredString(value.bun_target),
+    os,
+    arch,
+    archive,
+    executable,
+    file: requiredString(value.file),
+    checksum_file: requiredString(value.checksum_file),
+    sha256: requiredString(value.sha256),
+    size: requiredNumber(value.size),
+  };
+}
+
+function releaseTargetId(value: unknown): ReleaseTargetId {
+  if (value === "darwin-arm64" || value === "darwin-x64" || value === "linux-arm64" || value === "linux-x64" || value === "windows-x64") return value;
+  throw new Error("Release manifest asset is invalid");
+}
+
+function releaseOs(value: unknown): ReleaseTarget["os"] {
+  if (value === "darwin" || value === "linux" || value === "windows") return value;
+  throw new Error("Release manifest asset is invalid");
+}
+
+function releaseArch(value: unknown): ReleaseTarget["arch"] {
+  if (value === "arm64" || value === "x64") return value;
+  throw new Error("Release manifest asset is invalid");
+}
+
+function releaseArchive(value: unknown): ReleaseTarget["archive"] {
+  if (value === "tar.gz" || value === "zip") return value;
+  throw new Error("Release manifest asset is invalid");
+}
+
+function releaseExecutable(value: unknown): ReleaseTarget["executable"] {
+  if (value === "akua" || value === "akua.exe") return value;
+  throw new Error("Release manifest asset is invalid");
+}
+
+function requiredString(value: unknown): string {
+  if (typeof value !== "string") throw new Error("Release manifest asset is invalid");
+  return value;
+}
+
+function requiredNumber(value: unknown): number {
+  if (typeof value !== "number") throw new Error("Release manifest asset is invalid");
+  return value;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+export function planReleaseUploads(candidateDir: string, existingDir: string, version: string): Effect.Effect<string[], Error> {
+  return Effect.try({ try: () => planReleaseUploadsSync(candidateDir, existingDir, version), catch: toError });
+}
+
+export function assertSafeOutputDirectory(outputDir: string): Effect.Effect<void, Error> {
+  return Effect.try({ try: () => assertSafeOutputDirectorySync(outputDir), catch: toError });
+}
+
+export function packageExistingExecutables(input: PackageExistingExecutablesInput): Effect.Effect<void, Error> {
+  return Effect.try({ try: () => packageExistingExecutablesSync(input), catch: toError });
+}
+
+export function packageRelease(input: PackageReleaseInput): Effect.Effect<void, Error> {
+  return Effect.try({ try: () => packageReleaseSync(input), catch: toError });
+}
+
+export function smokeReleaseArtifact(input: { version: string; outputDir: string; targetId: string }): Effect.Effect<void, Error> {
+  return Effect.try({ try: () => smokeReleaseArtifactSync(input), catch: toError });
+}
+
+export function verifyReleaseDirectory(outputDir: string, version: string): Effect.Effect<void, Error> {
+  return Effect.try({ try: () => verifyReleaseDirectorySync(outputDir, version), catch: toError });
 }
 
 function readCliFlags(argv: readonly string[]): {
@@ -616,28 +740,27 @@ function readCliFlags(argv: readonly string[]): {
 }
 
 if (import.meta.main) {
-  try {
-    const input = readCliFlags(process.argv.slice(2));
+  Runtime.makeRunMain(({ fiber, teardown }) => {
+    fiber.addObserver((exit) => teardown(exit, (code) => { process.exitCode = code; }));
+  })(Effect.try({
+    try: () => readCliFlags(process.argv.slice(2)),
+    catch: toError,
+  }).pipe(Effect.flatMap((input) => {
     if (input.command === "matrix") {
-      console.log(JSON.stringify(releaseMatrix()));
+      return Effect.sync(() => console.log(JSON.stringify(releaseMatrix())));
     } else if (input.command === "package") {
-      await packageRelease({ version: input.version, outputDir: input.outputDir });
+      return packageRelease({ version: input.version, outputDir: input.outputDir });
     } else if (input.command === "verify") {
-      await verifyReleaseDirectory(input.outputDir, input.version);
+      return verifyReleaseDirectory(input.outputDir, input.version);
     } else if (input.command === "upload-plan") {
-      console.log(JSON.stringify(await planReleaseUploads(input.outputDir, input.existingDir!, input.version)));
+      if (input.existingDir === undefined) return Effect.fail(new Error("--existing is required for upload-plan"));
+      return planReleaseUploads(input.outputDir, input.existingDir, input.version).pipe(Effect.tap((plan) => Effect.sync(() => console.log(JSON.stringify(plan)))));
     } else {
-      await smokeReleaseArtifact({
+      return smokeReleaseArtifact({
         version: input.version,
         outputDir: input.outputDir,
         targetId: input.targetId ?? hostTargetId(),
       });
     }
-    if (input.command !== "matrix" && input.command !== "upload-plan") {
-      console.error(`Release ${input.command} succeeded for v${input.version}.`);
-    }
-  } catch (error) {
-    console.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
-  }
+  })));
 }

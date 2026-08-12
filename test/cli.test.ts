@@ -13,9 +13,10 @@ import { Effect } from "effect";
 
 import {
   authView,
-  readProtectedCallerTokenForAgentOs,
+  readProtectedCallerToken,
 } from "../src/commands/auth";
 import { renderSuccess, type RenderEnvelope } from "../src/runtime/render";
+import { toCliError } from "../src/runtime/effect-runtime";
 import { CliLive } from "../src/runtime/services";
 import { runAuthView } from "./auth-test-layer";
 
@@ -884,11 +885,9 @@ describe("akua entrypoint", () => {
       await chmod(configDir, 0o700);
       await chmod(configPath, 0o600);
 
+      await expect(runProtectedCallerToken({ HOME: home })).resolves.toBe("caller-auth-fixture");
       await expect(
-        readProtectedCallerTokenForAgentOs({ HOME: home }),
-      ).resolves.toBe("caller-auth-fixture");
-      await expect(
-        readProtectedCallerTokenForAgentOs({
+        runProtectedCallerToken({
           HOME: home,
           AKUA_API_TOKEN: "environment-auth-fixture",
         }),
@@ -900,6 +899,15 @@ describe("akua entrypoint", () => {
     }
   });
 });
+
+function runProtectedCallerToken(env: Record<string, string | undefined>): Promise<string> {
+  return Effect.runPromise(
+    Effect.provide(
+      readProtectedCallerToken(env).pipe(Effect.mapError(toCliError)),
+      CliLive,
+    ) as Effect.Effect<string, never>,
+  );
+}
 
 async function runAkua(
   args: readonly string[],

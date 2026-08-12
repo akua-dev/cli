@@ -1,3 +1,5 @@
+import { Effect } from "effect";
+
 import { AkuaCliError } from "./errors";
 import { clearBytes } from "./secure-token-file";
 
@@ -24,7 +26,9 @@ interface HCloudProviderLoadResponse {
 }
 
 export interface HCloudProviderLoadDependencies {
-  send(request: HCloudProviderLoadRequest): Promise<HCloudProviderLoadResponse>;
+  send(
+    request: HCloudProviderLoadRequest,
+  ): Effect.Effect<HCloudProviderLoadResponse, unknown>;
 }
 
 export interface HCloudProviderLoadInput {
@@ -40,63 +44,83 @@ export type HCloudProviderLoadResult = Readonly<Record<string, unknown>>;
 
 export class HCloudProviderLoadError extends AkuaCliError {}
 
-const productionDependencies: HCloudProviderLoadDependencies = { send: sendHttpsRequest };
+const productionDependencies: HCloudProviderLoadDependencies = {
+  send: sendHttpsRequest,
+};
 
-export async function submitHcloudProviderLoad(
+export function submitHcloudProviderLoad(
   input: HCloudProviderLoadInput,
   dependencies: HCloudProviderLoadDependencies = productionDependencies,
-): Promise<HCloudProviderLoadResult> {
-  let body: Uint8Array | undefined;
-  try {
-    body = encodeProviderTokenBody(input.providerToken, input.expectedSshKeyFingerprint, input.expectedSshKeyName);
-    const response = await dependencies.send({
-      url: HCloudProviderLoadUrl,
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${input.callerToken}`,
-        "akua-context": input.workspace,
-        "idempotency-key": input.idempotencyKey,
-        "content-type": "application/json",
-      },
-      body,
-    });
-    if (response.status !== 201) {
-      throw serverRejectedError(response.status, response.body);
-    }
-    return allowlistedResult(response.body);
-  } catch (error) {
-    if (error instanceof HCloudProviderLoadError) {
-      throw error;
-    }
-    throw new HCloudProviderLoadError({
-      type: "transport_error",
-      code: "AKUA_LOADER_SUBMISSION_UNKNOWN",
-      message: "The provider-load submission outcome is unknown and was not retried.",
-      exitCode: 1,
-    });
-  } finally {
-    clearBytes(input.providerToken);
-    if (body) {
-      clearBytes(body);
-    }
-  }
+): Effect.Effect<HCloudProviderLoadResult, HCloudProviderLoadError> {
+  return Effect.try({
+    try: () =>
+      encodeProviderTokenBody(
+        input.providerToken,
+        input.expectedSshKeyFingerprint,
+        input.expectedSshKeyName,
+      ),
+    catch: () => unknownSubmissionError(),
+  }).pipe(
+    Effect.flatMap((body) =>
+      dependencies
+        .send({
+          url: HCloudProviderLoadUrl,
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${input.callerToken}`,
+            "akua-context": input.workspace,
+            "idempotency-key": input.idempotencyKey,
+            "content-type": "application/json",
+          },
+          body,
+        })
+        .pipe(
+          Effect.flatMap((response) => {
+            if (response.status !== 201) {
+              return Effect.fail(serverRejectedError(response.status, response.body));
+            }
+            return Effect.try({
+              try: () => allowlistedResult(response.body),
+              catch: (error) =>
+                error instanceof HCloudProviderLoadError
+                  ? error
+                  : invalidServerResponseError(),
+            });
+          }),
+          Effect.catch((error) =>
+            error instanceof HCloudProviderLoadError
+              ? Effect.fail(error)
+              : Effect.fail(unknownSubmissionError()),
+          ),
+          Effect.ensuring(Effect.sync(() => clearBytes(body))),
+        ),
+    ),
+    Effect.ensuring(Effect.sync(() => clearBytes(input.providerToken))),
+  );
 }
 
-async function sendHttpsRequest(request: HCloudProviderLoadRequest): Promise<HCloudProviderLoadResponse> {
-  const response = await fetch(request.url, {
-    method: request.method,
-    headers: request.headers,
-    body: request.body as unknown as BodyInit,
-  });
-  const text = await response.text();
-  if (text.length > 16_384) {
-    throw invalidServerResponseError();
-  }
-  try {
-    return { status: response.status, body: text === "" ? {} : JSON.parse(text) };
-  } catch {
-    throw invalidServerResponseError();
-  }
+function sendHttpsRequest(
+  request: HCloudProviderLoadRequest,
+): Effect.Effect<HCloudProviderLoadResponse, HCloudProviderLoadError> {
+  return Effect.tryPromise({
+    try: () =>
+      fetch(request.url, {
+        method: request.method,
+        headers: request.headers,
+        body: new Blob([new Uint8Array(request.body)]),
+      }).then((response) =>
+        response.text().then((text) => ({ status: response.status, text })),
+      ),
+    catch: () => unknownSubmissionError(),
+  }).pipe(
+    Effect.flatMap(({ status, text }) => {
+      if (text.length > 16_384) return Effect.fail(invalidServerResponseError());
+      return Effect.try({
+        try: () => ({ status, body: text === "" ? {} : JSON.parse(text) }),
+        catch: () => invalidServerResponseError(),
+      });
+    }),
+  );
 }
 
 function encodeProviderTokenBody(
@@ -105,29 +129,31 @@ function encodeProviderTokenBody(
   expectedSshKeyName: string | undefined,
 ): Uint8Array {
   const encoder = new TextEncoder();
-  const fields: Array<readonly [Uint8Array, Uint8Array]> = [
+  const fields: Array<[Uint8Array, Uint8Array]> = [
     [encoder.encode("provider_token"), providerToken],
-    ...(expectedSshKeyFingerprint === undefined
-      ? []
-      : [[encoder.encode("expected_ssh_key_fingerprint"), encoder.encode(expectedSshKeyFingerprint)] as const]),
-    ...(expectedSshKeyName === undefined
-      ? []
-      : [[encoder.encode("expected_ssh_key_name"), encoder.encode(expectedSshKeyName)] as const]),
   ];
+  if (expectedSshKeyFingerprint !== undefined) {
+    fields.push([
+      encoder.encode("expected_ssh_key_fingerprint"),
+      encoder.encode(expectedSshKeyFingerprint),
+    ]);
+  }
+  if (expectedSshKeyName !== undefined) {
+    fields.push([
+      encoder.encode("expected_ssh_key_name"),
+      encoder.encode(expectedSshKeyName),
+    ]);
+  }
   let encodedLength = 2 + Math.max(0, fields.length - 1);
   for (const [name, value] of fields) {
     encodedLength += name.byteLength + 5;
-    for (const byte of value) {
-      encodedLength += escapedLength(byte);
-    }
+    for (const byte of value) encodedLength += escapedLength(byte);
   }
   const body = new Uint8Array(encodedLength);
   let cursor = 0;
   body[cursor++] = 123;
   for (const [index, [name, value]] of fields.entries()) {
-    if (index > 0) {
-      body[cursor++] = 44;
-    }
+    if (index > 0) body[cursor++] = 44;
     body[cursor++] = 34;
     body.set(name, cursor);
     cursor += name.byteLength;
@@ -172,9 +198,7 @@ function writeEscapedBytes(body: Uint8Array, start: number, bytes: Uint8Array): 
 }
 
 function escapedLength(byte: number): number {
-  if (byte === 34 || byte === 92 || byte === 8 || byte === 9 || byte === 10 || byte === 12 || byte === 13) {
-    return 2;
-  }
+  if (byte === 34 || byte === 92 || byte === 8 || byte === 9 || byte === 10 || byte === 12 || byte === 13) return 2;
   return byte < 32 ? 6 : 1;
 }
 
@@ -183,17 +207,11 @@ function hex(value: number): number {
 }
 
 function allowlistedResult(body: unknown): HCloudProviderLoadResult {
-  if (!isRecord(body)) {
-    throw invalidServerResponseError();
-  }
+  if (!isRecord(body)) throw invalidServerResponseError();
   const result: Record<string, unknown> = {};
   for (const [field, value] of Object.entries(body)) {
-    if (!responseFields.has(field)) {
-      continue;
-    }
-    if (typeof value === "string" || (field === "expected_ssh_key_fingerprint" && value === null)) {
-      result[field] = value;
-    }
+    if (!responseFields.has(field)) continue;
+    if (typeof value === "string" || (field === "expected_ssh_key_fingerprint" && value === null)) result[field] = value;
   }
   if (
     typeof result.loader_id !== "string" ||
@@ -202,9 +220,7 @@ function allowlistedResult(body: unknown): HCloudProviderLoadResult {
     typeof result.secret_version_id !== "string" ||
     typeof result.compute_config_id !== "string" ||
     (typeof result.expected_ssh_key_fingerprint !== "string" && result.expected_ssh_key_fingerprint !== null)
-  ) {
-    throw invalidServerResponseError();
-  }
+  ) throw invalidServerResponseError();
   return result;
 }
 
@@ -222,12 +238,11 @@ function serverRejectedError(status: number, body: unknown): HCloudProviderLoadE
 }
 
 function invalidServerResponseError(): HCloudProviderLoadError {
-  return new HCloudProviderLoadError({
-    type: "api_error",
-    code: "AKUA_LOADER_SERVER_RESPONSE_INVALID",
-    message: "The provider-load server returned an invalid response.",
-    exitCode: 1,
-  });
+  return new HCloudProviderLoadError({ type: "api_error", code: "AKUA_LOADER_SERVER_RESPONSE_INVALID", message: "The provider-load server returned an invalid response.", exitCode: 1 });
+}
+
+function unknownSubmissionError(): HCloudProviderLoadError {
+  return new HCloudProviderLoadError({ type: "transport_error", code: "AKUA_LOADER_SUBMISSION_UNKNOWN", message: "The provider-load submission outcome is unknown and was not retried.", exitCode: 1 });
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

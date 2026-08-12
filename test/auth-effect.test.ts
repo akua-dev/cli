@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Effect, Fiber, Layer } from "effect";
+import { Clock, Effect, Fiber, Layer } from "effect";
 import { TestClock } from "effect/testing";
 
 import { authView } from "../src/commands/auth";
@@ -14,6 +14,7 @@ import {
 } from "../src/runtime/effect-runtime";
 import {
   Browser,
+  CliClock,
   Console,
   Http,
   Process,
@@ -27,6 +28,11 @@ authView(["status"], { HOME: "/test-home" }, {
   request: async () => ({ status: 200, body: {} }),
   sleep: async () => undefined,
   launchBrowser: async () => undefined,
+});
+
+const testClockLayer = Layer.succeed(CliClock, {
+  currentTimeMillis: Clock.currentTimeMillis,
+  sleep: (duration) => Effect.sleep(duration),
 });
 
 describe("Effect auth command", () => {
@@ -74,6 +80,7 @@ describe("Effect auth command", () => {
           Effect.sync(() => saved.push({ path, token })),
         removeToken: () => Effect.succeed(false),
       }),
+      testClockLayer,
       TestClock.layer(),
     );
     const program = Effect.gen(function* () {
@@ -139,6 +146,7 @@ describe("Effect auth command", () => {
           saveToken: () => Effect.void,
           removeToken: () => Effect.succeed(false),
         }),
+        testClockLayer,
         TestClock.layer(),
       );
 

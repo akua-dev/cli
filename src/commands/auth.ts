@@ -1,7 +1,6 @@
 import { join } from "node:path";
 
-import { Clock, Duration, Effect } from "effect";
-import type { Clock as ClockService } from "effect/Clock";
+import { Duration, Effect } from "effect";
 
 import { AkuaCliError, usageError } from "../runtime/errors";
 import {
@@ -11,17 +10,16 @@ import {
   DeviceCancelledFailure,
   DeviceRequestFailure,
   ProtectedCredentialFailure,
-  toCliError,
   type CliFailure,
   UsageFailure,
 } from "../runtime/effect-runtime";
 import {
   Browser,
+  CliClock,
   Console,
   Http,
   Process,
   SecureConfig,
-  SecureConfigLive,
   type SecureConfigFailure,
 } from "../runtime/services";
 import type { RenderEnvelope } from "../runtime/render";
@@ -78,7 +76,7 @@ interface DeviceLoginResult {
 }
 
 type AuthServices =
-  Http | Browser | Process | Console | SecureConfig | ClockService;
+  Http | Browser | Process | Console | SecureConfig | CliClock;
 
 export function authView(
   argv: readonly string[],
@@ -104,12 +102,12 @@ function authProgram(
         return logoutView(command.argv, env);
       },
     ),
-  ) as Effect.Effect<RenderEnvelope, CliFailure, AuthServices>;
+  );
 }
 
 export function readProtectedCallerToken(
   env: Record<string, string | undefined>,
-) {
+): Effect.Effect<string, CliFailure, SecureConfig> {
   return Effect.try({
     try: () => resolveConfigPath(env),
     catch: usageFailure,
@@ -140,17 +138,6 @@ export function readProtectedCallerToken(
         });
       },
     ),
-  ) as Effect.Effect<string, CliFailure, SecureConfig>;
-}
-
-/** Adapter retained until the Agent OS command is migrated to Effect. */
-export async function readProtectedCallerTokenForAgentOs(
-  env: Record<string, string | undefined>,
-): Promise<string> {
-  return Effect.runPromise(
-    Effect.provide(readProtectedCallerToken(env), SecureConfigLive).pipe(
-      Effect.mapError(toCliError),
-    ) as Effect.Effect<string, AkuaCliError>,
   );
 }
 
@@ -230,7 +217,7 @@ function completeDeviceLogin(noBrowser: boolean) {
     const observations = noBrowser
       ? []
       : yield* tryLaunchBrowser(verificationUriComplete);
-    const clock = yield* Clock.Clock;
+    const clock = yield* CliClock;
     const startedAt = yield* clock.currentTimeMillis;
     const token = yield* pollForDeviceToken(
       deviceCode,
@@ -255,10 +242,10 @@ function pollForDeviceToken(
 ): Effect.Effect<
   string,
   DeviceAuthorizationFailure | DeviceRequestFailure,
-  Http | ClockService
+  Http | CliClock
 > {
   return Effect.gen(function* () {
-    const clock = yield* Clock.Clock;
+    const clock = yield* CliClock;
     const now = yield* clock.currentTimeMillis;
     if (now >= deadline)
       return yield* Effect.fail(

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
+import { Effect, Layer } from "effect";
 
 import { agentOsView, type AgentOsDependencies } from "../src/commands/agent-os";
 import {
@@ -9,6 +10,7 @@ import {
   type HCloudProviderLoadRequest,
 } from "../src/runtime/platform-client";
 import { renderError, renderSuccess } from "../src/runtime/render";
+import { SecureConfig } from "../src/runtime/services";
 
 const SYNTHETIC_TOKEN = new Uint8Array([115, 121, 110, 116, 104, 101, 116, 105, 99]);
 const SYNTHETIC_ECHO = "synthetic-response-field";
@@ -20,7 +22,7 @@ describe("submitHcloudProviderLoad", () => {
     const requests: HCloudProviderLoadRequest[] = [];
     let bodyHasProviderField = false;
 
-    const result = await submitHcloudProviderLoad(
+    const result = runEffect(submitHcloudProviderLoad(
       {
         workspace: "ws_synthetic",
         callerToken: "caller-auth-fixture",
@@ -28,7 +30,7 @@ describe("submitHcloudProviderLoad", () => {
         idempotencyKey: "00000000-0000-4000-8000-000000000001",
       },
       {
-        send: async (request) => {
+        send: (request) => Effect.sync(() => {
           requests.push(request);
           const body = new TextDecoder().decode(request.body);
           bodyHasProviderField =
@@ -36,9 +38,9 @@ describe("submitHcloudProviderLoad", () => {
             !body.includes("expected_ssh_key_fingerprint") &&
             !body.includes("expected_ssh_key_name");
           return successResponse();
-        },
+        }),
       },
-    );
+    ));
 
     expect(requests).toHaveLength(1);
     expect(requests[0]?.url).toBe("https://api.akua.dev/v1/agent_os/hcloud_provider_loads");
@@ -63,7 +65,7 @@ describe("submitHcloudProviderLoad", () => {
   test("relays a predeclared optional SSH anchor without deriving identity from provider bytes", async () => {
     let bodyHasOptionalAnchor = false;
 
-    await submitHcloudProviderLoad(
+    runEffect(submitHcloudProviderLoad(
       {
         workspace: "ws_synthetic",
         callerToken: "caller-auth-fixture",
@@ -73,21 +75,21 @@ describe("submitHcloudProviderLoad", () => {
         idempotencyKey: "00000000-0000-4000-8000-000000000002",
       },
       {
-        send: async (request) => {
+        send: (request) => Effect.sync(() => {
           const body = new TextDecoder().decode(request.body);
           bodyHasOptionalAnchor =
             body.includes(`"expected_ssh_key_fingerprint":"${PROJECT_ANCHOR_FINGERPRINT}"`) &&
             body.includes(`"expected_ssh_key_name":"${PROJECT_ANCHOR_NAME}"`);
           return successResponse();
-        },
+        }),
       },
-    );
+    ));
 
     expect(bodyHasOptionalAnchor).toBe(true);
   });
 
   test("projects success through a strict response allowlist", async () => {
-    const result = await submitHcloudProviderLoad(
+    const result = runEffect(submitHcloudProviderLoad(
       {
         workspace: "ws_synthetic",
         callerToken: "caller-auth-fixture",
@@ -95,7 +97,7 @@ describe("submitHcloudProviderLoad", () => {
         idempotencyKey: "00000000-0000-4000-8000-000000000002",
       },
       {
-        send: async () => ({
+        send: () => Effect.succeed({
           status: 201,
           body: {
             ...successResponse().body,
@@ -106,7 +108,7 @@ describe("submitHcloudProviderLoad", () => {
           },
         }),
       },
-    );
+    ));
 
     expect(JSON.stringify(result)).not.toContain(SYNTHETIC_ECHO);
     expect(result).not.toHaveProperty("echoed_provider_token");
@@ -119,7 +121,7 @@ describe("submitHcloudProviderLoad", () => {
     const providerToken = SYNTHETIC_TOKEN.slice();
     let submittedBody: Uint8Array | undefined;
 
-    await submitHcloudProviderLoad(
+    runEffect(submitHcloudProviderLoad(
       {
         workspace: "ws_synthetic",
         callerToken: "caller-auth-fixture",
@@ -127,12 +129,12 @@ describe("submitHcloudProviderLoad", () => {
         idempotencyKey: "00000000-0000-4000-8000-000000000003",
       },
       {
-        send: async (request) => {
+        send: (request) => Effect.sync(() => {
           submittedBody = request.body;
           return successResponse();
-        },
+        }),
       },
-    );
+    ));
 
     expect([...providerToken].every((byte) => byte === 0)).toBe(true);
     expect([...(submittedBody ?? [])].every((byte) => byte === 0)).toBe(true);
@@ -142,8 +144,7 @@ describe("submitHcloudProviderLoad", () => {
     const providerToken = SYNTHETIC_TOKEN.slice();
     let attempts = 0;
 
-    await expect(
-      submitHcloudProviderLoad(
+    expect(() => runEffect(submitHcloudProviderLoad(
         {
           workspace: "ws_synthetic",
           callerToken: "caller-auth-fixture",
@@ -151,21 +152,19 @@ describe("submitHcloudProviderLoad", () => {
           idempotencyKey: "00000000-0000-4000-8000-000000000004",
         },
         {
-          send: async () => {
-            attempts += 1;
-            throw new Error("synthetic transport interruption");
-          },
+          send: () =>
+            Effect.sync(() => {
+              attempts += 1;
+            }).pipe(Effect.andThen(Effect.fail(new Error("synthetic transport interruption")))),
         },
-      ),
-    ).rejects.toMatchObject({ code: "AKUA_LOADER_SUBMISSION_UNKNOWN" });
+    ))).toThrow(expect.objectContaining({ code: "AKUA_LOADER_SUBMISSION_UNKNOWN" }));
 
     expect(attempts).toBe(1);
     expect([...providerToken].every((byte) => byte === 0)).toBe(true);
   });
 
   test("projects server failures to fixed safe fields", async () => {
-    await expect(
-      submitHcloudProviderLoad(
+    expect(() => runEffect(submitHcloudProviderLoad(
         {
           workspace: "ws_synthetic",
           callerToken: "caller-auth-fixture",
@@ -173,7 +172,7 @@ describe("submitHcloudProviderLoad", () => {
           idempotencyKey: "00000000-0000-4000-8000-000000000005",
         },
         {
-          send: async () => ({
+          send: () => Effect.succeed({
             status: 403,
             body: {
               error: {
@@ -185,12 +184,11 @@ describe("submitHcloudProviderLoad", () => {
             },
           }),
         },
-      ),
-    ).rejects.toMatchObject({
+    ))).toThrow(expect.objectContaining({
       code: "AKUA_LOADER_SERVER_REJECTED",
       status: 403,
       requestId: "req_synthetic_denied",
-    } satisfies Partial<HCloudProviderLoadError>);
+    } satisfies Partial<HCloudProviderLoadError>));
   });
 });
 
@@ -199,11 +197,10 @@ describe("agent-os load-hcloud-provider", () => {
     const dependencies = fakeCommandDependencies();
     const rejectedValue = "synthetic-argv-value";
 
-    await expect(agentOsView(commandArgs(), {}, dependencies.dependencies)).resolves.toMatchObject({
+    expect(runAgentOs(agentOsView(commandArgs(), {}, dependencies.dependencies))).toMatchObject({
       data: successResponse().body,
     });
-    await expect(
-      agentOsView(
+    expect(() => runAgentOs(agentOsView(
         [
           "load-hcloud-provider",
           "--workspace",
@@ -215,10 +212,8 @@ describe("agent-os load-hcloud-provider", () => {
         ],
         {},
         dependencies.dependencies,
-      ),
-    ).rejects.toMatchObject({ code: "AKUA_USAGE_ERROR" });
-    await expect(
-      agentOsView(
+      ))).toThrow(expect.objectContaining({ code: "AKUA_USAGE_ERROR" }));
+    expect(() => runAgentOs(agentOsView(
         [
           "load-hcloud-provider",
           "--workspace",
@@ -230,10 +225,9 @@ describe("agent-os load-hcloud-provider", () => {
         ],
         {},
         dependencies.dependencies,
-      ),
-    ).rejects.toMatchObject({ code: "AKUA_USAGE_ERROR" });
+      ))).toThrow(expect.objectContaining({ code: "AKUA_USAGE_ERROR" }));
 
-    const error = await captureError(() => agentOsView(["load-hcloud-provider", "--workspace", "ws_synthetic", "--token", rejectedValue], {}, dependencies.dependencies));
+    const error = captureError(agentOsView(["load-hcloud-provider", "--workspace", "ws_synthetic", "--token", rejectedValue], {}, dependencies.dependencies));
     expect(renderError(error, "json")).not.toContain(rejectedValue);
     expect(dependencies.fileReads).toBe(1);
     expect(dependencies.submissions).toBe(1);
@@ -242,16 +236,15 @@ describe("agent-os load-hcloud-provider", () => {
   test("rejects environment caller authentication before config, file, or network access", async () => {
     const dependencies = fakeCommandDependencies();
 
-    await expect(
-      agentOsView(commandArgs(), { AKUA_API_TOKEN: "synthetic-environment-auth" }, dependencies.dependencies),
-    ).rejects.toMatchObject({ code: "AKUA_LOADER_ENV_AUTH_FORBIDDEN" });
+    expect(() => runAgentOs(agentOsView(commandArgs(), { AKUA_API_TOKEN: "synthetic-environment-auth" }, dependencies.dependencies)))
+      .toThrow(expect.objectContaining({ code: "AKUA_LOADER_ENV_AUTH_FORBIDDEN" }));
     expect(dependencies.events).toEqual([]);
   });
 
   test("authenticates from protected config before reading the provider file and relays idempotency once", async () => {
     const dependencies = fakeCommandDependencies();
 
-    const view = await agentOsView(commandArgs(), {}, dependencies.dependencies);
+    const view = runAgentOs(agentOsView(commandArgs(), {}, dependencies.dependencies));
 
     expect(dependencies.events).toEqual(["auth", "file", "network"]);
     expect(dependencies.submissions).toBe(1);
@@ -267,19 +260,17 @@ describe("agent-os load-hcloud-provider", () => {
     const providerToken = new Uint8Array([112, 114, 111, 118, 105, 100, 101, 114, 45, 115, 101, 99, 114, 101, 116]);
     const providerMarker = "provider-secret";
     const dependencies = fakeCommandDependencies({
-      readSecureTokenFile: async () => providerToken,
-      submit: async () => {
-        throw new HCloudProviderLoadError({
+      readSecureTokenFile: () => Effect.succeed(providerToken),
+      submit: () => Effect.fail(new HCloudProviderLoadError({
           type: "api_error",
           code: "AKUA_LOADER_SERVER_REJECTED",
           status: 403,
           requestId: "req_synthetic_denied",
           message: "The provider-load server rejected the request.",
-        });
-      },
+        })),
     });
 
-    const error = await captureError(() => agentOsView(commandArgs(), {}, dependencies.dependencies));
+    const error = captureError(agentOsView(commandArgs(), {}, dependencies.dependencies));
 
     expect([...providerToken].every((byte) => byte === 0)).toBe(true);
     expect(renderError(error, "json")).not.toContain(providerMarker);
@@ -289,12 +280,12 @@ describe("agent-os load-hcloud-provider", () => {
   test("fails post-revocation against the fake HTTPS server without a retry or leaked prior result", async () => {
     const server = new FakeHttpsServer();
     const dependencies = fakeCommandDependencies({
-      submit: async (input) => server.submit(input),
+      submit: (input) => Effect.sync(() => server.submit(input)),
     });
 
-    const first = await agentOsView(commandArgs(), {}, dependencies.dependencies);
+    const first = runAgentOs(agentOsView(commandArgs(), {}, dependencies.dependencies));
     server.revoke();
-    const error = await captureError(() => agentOsView(commandArgs(), {}, dependencies.dependencies));
+    const error = captureError(agentOsView(commandArgs(), {}, dependencies.dependencies));
 
     expect(first.data).toEqual(successResponse().body);
     expect(error).toMatchObject({ code: "AKUA_LOADER_SERVER_REJECTED", status: 403 });
@@ -348,21 +339,21 @@ function fakeCommandDependencies(overrides: Partial<AgentOsDependencies> = {}) {
   let submissions = 0;
   let input: HCloudProviderLoadInput | undefined;
   const dependencies: AgentOsDependencies = {
-    readProtectedCallerToken: async () => {
+    readProtectedCallerToken: () => Effect.sync(() => {
       events.push("auth");
       return "caller-auth-fixture";
-    },
-    readSecureTokenFile: async () => {
+    }),
+    readSecureTokenFile: () => Effect.sync(() => {
       events.push("file");
       fileReads += 1;
       return SYNTHETIC_TOKEN.slice();
-    },
-    submit: async (submitted) => {
+    }),
+    submit: (submitted) => Effect.sync(() => {
       events.push("network");
       submissions += 1;
       input = submitted;
       return successResponse().body;
-    },
+    }),
     createIdempotencyKey: () => "00000000-0000-4000-8000-000000000006",
     ...overrides,
   };
@@ -381,9 +372,23 @@ function fakeCommandDependencies(overrides: Partial<AgentOsDependencies> = {}) {
   };
 }
 
-async function captureError(action: () => Promise<unknown>): Promise<HCloudProviderLoadError> {
+function runEffect<A, E>(program: Effect.Effect<A, E>): A {
+  return Effect.runSync(program);
+}
+
+function runAgentOs<A, E>(program: Effect.Effect<A, E, SecureConfig>): A {
+  return Effect.runSync(Effect.provide(program, testSecureConfig));
+}
+
+const testSecureConfig = Layer.succeed(SecureConfig, {
+  readToken: () => Effect.succeed(undefined),
+  saveToken: () => Effect.void,
+  removeToken: () => Effect.succeed(false),
+});
+
+function captureError(program: Effect.Effect<unknown, HCloudProviderLoadError, SecureConfig>): HCloudProviderLoadError {
   try {
-    await action();
+    runAgentOs(program);
   } catch (error) {
     return error as HCloudProviderLoadError;
   }
@@ -398,7 +403,7 @@ class FakeHttpsServer {
     this.#revoked = true;
   }
 
-  async submit(input: HCloudProviderLoadInput) {
+  submit(input: HCloudProviderLoadInput) {
     this.requests.push({ workspace: input.workspace, tokenLength: input.providerToken.byteLength });
     if (this.#revoked) {
       throw new HCloudProviderLoadError({
