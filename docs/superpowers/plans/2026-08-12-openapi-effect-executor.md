@@ -112,13 +112,13 @@ git add test/strict-effect-control-flow.test.ts src/runtime/mode.ts src/commands
 git commit -m "refactor(cli): remove throws from core command flow"
 ```
 
-### Task 2: Make OpenAPI scripts and release validation Effect-only
+### Task 2: Make OpenAPI scripts and release validation Effect-only (completed in `6722a51` and `35659a4`)
 
 **Files:**
 - Modify: `scripts/fetch-openapi.ts`, `scripts/generate-commands.ts`, `scripts/runtime/release-services.ts`, `scripts/runtime/release-host-live.ts`, `scripts/runtime/services-live.ts`, related existing tests
 - Modify: `test/strict-effect-control-flow.test.ts`, `test/fetch-openapi.test.ts`, `test/generate-commands.test.ts`, `test/release.test.ts`
 
-- [ ] **Step 1: Extend the failing invariant and regression tests.** Require no `ThrowStatement` in the five script files. Add focused tests for invalid HTTPS URL, malformed OpenAPI document, invalid release version, and unsafe release output; each must fail through an Effect error channel.
+- [x] **Step 1: Extend the failing invariant and regression tests.** Require no `ThrowStatement` in the five script files. Add focused tests for invalid HTTPS URL, malformed OpenAPI document, invalid release version, and unsafe release output; each must fail through an Effect error channel.
 
 ```ts
 test("script and release modules contain no throw statements", () => {
@@ -130,13 +130,13 @@ test("invalid OpenAPI URL is an Effect failure", () => {
 })
 ```
 
-- [ ] **Step 2: Run the focused tests and observe RED.**
+- [x] **Step 2: Run the focused tests and observe RED.**
 
 Run: `bun test test/strict-effect-control-flow.test.ts test/fetch-openapi.test.ts test/generate-commands.test.ts test/release.test.ts`
 
 Expected: FAIL solely on the new raw-throw invariant and typed failure assertions.
 
-- [ ] **Step 3: Replace script and release throw sites with typed Effects.** Give URL/document parsers and registry collection typed `Effect` return values. Make release validation helpers return `Effect` rather than throwing. Within `release-host-live.ts`, use `Effect.fail(new ScriptHostFailure({ cause }))` and composed validation Effects; do not put `throw` inside `Effect.try` callbacks.
+- [x] **Step 3: Replace script and release throw sites with typed Effects.** Give URL/document parsers and registry collection typed `Effect` return values. Make release validation helpers return `Effect` rather than throwing. Within `release-host-live.ts`, use `Effect.fail(new ScriptHostFailure({ cause }))` and composed validation Effects; do not put `throw` inside `Effect.try` callbacks.
 
 ```ts
 const validateReleaseVersion = (version: string): Effect.Effect<string, ScriptHostFailure> =>
@@ -145,13 +145,13 @@ const validateReleaseVersion = (version: string): Effect.Effect<string, ScriptHo
     : Effect.fail(new ScriptHostFailure({ cause: new Error("Invalid release version") }))
 ```
 
-- [ ] **Step 4: Run the focused suite and production scan.**
+- [x] **Step 4: Run the focused suite and production scan.**
 
 Run: `bun test test/strict-effect-control-flow.test.ts test/fetch-openapi.test.ts test/generate-commands.test.ts test/release.test.ts && rg -n '\\bthrow\\b' scripts`
 
 Expected: tests pass; `rg` prints no production rows.
 
-- [ ] **Step 5: Simplify and commit.** Extract one shared typed validation helper if repeated, then commit explicit files.
+- [x] **Step 5: Simplify and commit.** Extract one shared typed validation helper if repeated, then commit explicit files.
 
 ```bash
 git add scripts/fetch-openapi.ts scripts/generate-commands.ts scripts/runtime/release-services.ts scripts/runtime/release-host-live.ts scripts/runtime/services-live.ts test/strict-effect-control-flow.test.ts test/fetch-openapi.test.ts test/generate-commands.test.ts test/release.test.ts
