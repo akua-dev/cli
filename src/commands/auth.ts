@@ -14,22 +14,84 @@ type AkuaConfig = Record<string, unknown> & {
 
 type CredentialSource = "env" | "config" | "none";
 
+const AUTH_BASE_URL = "https://akua.dev/api/auth";
+const DEVICE_CLIENT_ID = "akua-cli";
+const DEVICE_SCOPE = "platform";
+const DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code";
+const MAX_DEVICE_RESPONSE_SIZE = 16_384;
+
 interface AuthStatus {
   authenticated: boolean;
   source: CredentialSource;
   config_path?: string;
 }
 
+interface DeviceLoginDetails {
+  verification_uri_complete: string;
+  user_code: string;
+}
+
+interface DeviceCodeResponse {
+  device_code: string;
+  user_code: string;
+  verification_uri: string;
+  verification_uri_complete: string;
+  expires_in: number;
+  interval: number;
+}
+
+interface DeviceTokenResponse {
+  access_token: string;
+}
+
+interface DeviceErrorResponse {
+  error?: string;
+}
+
+interface DeviceResponse {
+  status: number;
+  body: unknown;
+}
+
+interface DeviceRequest {
+  url: string;
+  body: unknown;
+  signal?: AbortSignal;
+}
+
+export interface AuthDependencies {
+  request(request: DeviceRequest): Promise<DeviceResponse>;
+  sleep(milliseconds: number): Promise<void>;
+  launchBrowser(url: string): Promise<void>;
+  displayDeviceAuthorization?(details: DeviceLoginDetails): void;
+  now?(): number;
+  signal?: AbortSignal;
+}
+
 class ConfigParseError extends AkuaCliError {}
 
-export async function authView(argv: readonly string[], env: Record<string, string | undefined>): Promise<RenderEnvelope> {
+const productionDependencies: AuthDependencies = {
+  request: sendDeviceRequest,
+  sleep: async (milliseconds) => Bun.sleep(milliseconds),
+  launchBrowser,
+  displayDeviceAuthorization: ({ verification_uri_complete, user_code }) => {
+    process.stderr.write(`Open ${verification_uri_complete}\nEnter code: ${user_code}\n`);
+  },
+  now: () => Date.now(),
+};
+
+export async function authView(
+  argv: readonly string[],
+  env: Record<string, string | undefined>,
+  dependencies: AuthDependencies = productionDependencies,
+): Promise<RenderEnvelope> {
   const subcommand = argv[0];
   if (subcommand === undefined) {
     throw usageError("Missing auth subcommand.");
   }
 
   if (subcommand === "login") {
-    return loginView(argv.slice(1), env);
+    return loginView(argv.slice(1), env, dependencies);
   }
   if (subcommand === "status") {
     return statusView(argv.slice(1), env);
@@ -63,21 +125,51 @@ export async function readProtectedCallerToken(env: Record<string, string | unde
   return token;
 }
 
-async function loginView(argv: readonly string[], env: Record<string, string | undefined>): Promise<RenderEnvelope> {
-  const token = parseLoginFlags(argv);
+async function loginView(
+  argv: readonly string[],
+  env: Record<string, string | undefined>,
+  dependencies: AuthDependencies,
+): Promise<RenderEnvelope> {
+  const login = parseLoginFlags(argv);
   const configPath = resolveConfigPath(env);
-  await saveStoredToken(configPath, token);
+  const result = login.token === undefined ? await runDeviceLogin(login.noBrowser, dependencies) : {
+    token: login.token,
+    details: undefined,
+    observations: [],
+  };
+  await saveStoredToken(configPath, result.token);
 
   return {
     command: "akua auth login",
-    observations: ["Authentication token saved."],
+    observations: [...result.observations, "Authentication token saved."],
     data: {
       authenticated: true,
       source: "config",
       config_path: configPath,
+      ...result.details,
     } satisfies AuthStatus,
     next_steps: [{ command: "akua auth status" }],
   };
+}
+
+async function runDeviceLogin(
+  noBrowser: boolean,
+  dependencies: AuthDependencies,
+): Promise<{ token: string; details: DeviceLoginDetails; observations: string[] }> {
+  if (dependencies.signal !== undefined) {
+    return completeDeviceLogin(noBrowser, dependencies);
+  }
+
+  const controller = new AbortController();
+  const cancel = () => controller.abort();
+  process.once("SIGINT", cancel);
+  process.once("SIGTERM", cancel);
+  try {
+    return await completeDeviceLogin(noBrowser, { ...dependencies, signal: controller.signal });
+  } finally {
+    process.removeListener("SIGINT", cancel);
+    process.removeListener("SIGTERM", cancel);
+  }
 }
 
 async function statusView(argv: readonly string[], env: Record<string, string | undefined>): Promise<RenderEnvelope> {
@@ -116,8 +208,9 @@ async function logoutView(argv: readonly string[], env: Record<string, string | 
   };
 }
 
-function parseLoginFlags(argv: readonly string[]): string {
+function parseLoginFlags(argv: readonly string[]): { token?: string; noBrowser: boolean } {
   let token: string | undefined;
+  let noBrowser = false;
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index];
     if (!value.startsWith("-")) {
@@ -125,6 +218,13 @@ function parseLoginFlags(argv: readonly string[]): string {
     }
 
     const name = flagName(value);
+    if (name === "--no-browser") {
+      if (value !== "--no-browser") {
+        throw usageError("--no-browser does not accept a value.");
+      }
+      noBrowser = true;
+      continue;
+    }
     if (name !== "--token") {
       throw usageError(`Unknown flag: ${name}`);
     }
@@ -139,10 +239,202 @@ function parseLoginFlags(argv: readonly string[]): string {
     }
   }
 
-  if (token === undefined) {
-    throw usageError("Missing required --token flag.");
+  return { token, noBrowser };
+}
+
+async function completeDeviceLogin(
+  noBrowser: boolean,
+  dependencies: AuthDependencies,
+): Promise<{ token: string; details: DeviceLoginDetails; observations: string[] }> {
+  throwIfAborted(dependencies.signal);
+  const deviceCode = parseDeviceCodeResponse(
+    await dependencies.request({
+      url: `${AUTH_BASE_URL}/device/code`,
+      body: { client_id: DEVICE_CLIENT_ID, scope: DEVICE_SCOPE },
+      signal: dependencies.signal,
+    }),
+  );
+  dependencies.displayDeviceAuthorization?.({
+    verification_uri_complete: deviceCode.verification_uri_complete,
+    user_code: deviceCode.user_code,
+  });
+  const observations = noBrowser ? [] : await tryLaunchBrowser(deviceCode.verification_uri_complete, dependencies);
+  const token = await pollForDeviceToken(deviceCode, dependencies);
+  return {
+    token,
+    details: {
+      verification_uri_complete: deviceCode.verification_uri_complete,
+      user_code: deviceCode.user_code,
+    },
+    observations,
+  };
+}
+
+async function pollForDeviceToken(deviceCode: DeviceCodeResponse, dependencies: AuthDependencies): Promise<string> {
+  const now = dependencies.now ?? Date.now;
+  const deadline = now() + deviceCode.expires_in * 1_000;
+  let interval = deviceCode.interval * 1_000;
+
+  while (now() < deadline) {
+    throwIfAborted(dependencies.signal);
+    const response = await dependencies.request({
+      url: `${AUTH_BASE_URL}/device/token`,
+      body: {
+        grant_type: DEVICE_GRANT_TYPE,
+        device_code: deviceCode.device_code,
+        client_id: DEVICE_CLIENT_ID,
+      },
+      signal: dependencies.signal,
+    });
+    const token = parseDeviceTokenResponse(response);
+    if (token !== undefined) {
+      return token;
+    }
+
+    const error = deviceError(response);
+    if (error === "access_denied" || error === "expired_token") {
+      throw deviceFlowError(error);
+    }
+    if (error !== "authorization_pending" && error !== "slow_down") {
+      throw deviceFlowError("request_failed");
+    }
+    if (error === "slow_down") {
+      interval += 5_000;
+    }
+    if (now() + interval >= deadline) {
+      break;
+    }
+    await sleepWithCancellation(interval, dependencies);
   }
-  return token;
+
+  throw deviceFlowError("expired_token");
+}
+
+function parseDeviceCodeResponse(response: DeviceResponse): DeviceCodeResponse {
+  if (response.status < 200 || response.status >= 300 || !isDeviceCodeResponse(response.body)) {
+    throw deviceFlowError("request_failed");
+  }
+  return response.body;
+}
+
+function parseDeviceTokenResponse(response: DeviceResponse): string | undefined {
+  if (response.status < 200 || response.status >= 300) {
+    return undefined;
+  }
+  if (!isDeviceTokenResponse(response.body)) {
+    throw deviceFlowError("request_failed");
+  }
+  return response.body.access_token;
+}
+
+function deviceError(response: DeviceResponse): string | undefined {
+  return isDeviceErrorResponse(response.body) ? response.body.error : undefined;
+}
+
+function isDeviceCodeResponse(value: unknown): value is DeviceCodeResponse {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return ["device_code", "user_code", "verification_uri", "verification_uri_complete"].every(
+    (field) => typeof value[field] === "string" && value[field] !== "",
+  ) && typeof value.expires_in === "number" && Number.isFinite(value.expires_in) && value.expires_in > 0 &&
+    typeof value.interval === "number" && Number.isFinite(value.interval) && value.interval > 0;
+}
+
+function isDeviceTokenResponse(value: unknown): value is DeviceTokenResponse {
+  return isRecord(value) && typeof value.access_token === "string" && value.access_token !== "";
+}
+
+function isDeviceErrorResponse(value: unknown): value is DeviceErrorResponse {
+  return isRecord(value) && (value.error === undefined || typeof value.error === "string");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+async function tryLaunchBrowser(url: string, dependencies: AuthDependencies): Promise<string[]> {
+  try {
+    await dependencies.launchBrowser(url);
+    return [];
+  } catch {
+    return ["Could not open a browser. Open the verification URL manually."];
+  }
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) {
+    throw deviceCancellationError();
+  }
+}
+
+async function sleepWithCancellation(milliseconds: number, dependencies: AuthDependencies): Promise<void> {
+  const signal = dependencies.signal;
+  if (signal === undefined) {
+    await dependencies.sleep(milliseconds);
+    return;
+  }
+  throwIfAborted(signal);
+  await Promise.race([
+    dependencies.sleep(milliseconds),
+    new Promise<never>((_, reject) => {
+      signal.addEventListener("abort", () => reject(deviceCancellationError()), { once: true });
+    }),
+  ]);
+  throwIfAborted(signal);
+}
+
+function deviceCancellationError(): AkuaCliError {
+  return new AkuaCliError({
+    type: "runtime_error",
+    code: "AKUA_DEVICE_CANCELLED",
+    message: "Device authorization was cancelled.",
+  });
+}
+
+function deviceFlowError(reason: "access_denied" | "expired_token" | "request_failed"): AkuaCliError {
+  const details = {
+    access_denied: { code: "AKUA_DEVICE_ACCESS_DENIED", message: "Device authorization was denied." },
+    expired_token: { code: "AKUA_DEVICE_EXPIRED_TOKEN", message: "Device authorization expired. Start login again." },
+    request_failed: { code: "AKUA_DEVICE_REQUEST_FAILED", message: "Device authorization could not be completed." },
+  }[reason];
+  return new AkuaCliError({ type: "authentication_error", ...details, exitCode: 3 });
+}
+
+async function sendDeviceRequest(request: DeviceRequest): Promise<DeviceResponse> {
+  let response: Response;
+  try {
+    response = await fetch(request.url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(request.body),
+      signal: request.signal,
+    });
+  } catch {
+    throwIfAborted(request.signal);
+    throw deviceFlowError("request_failed");
+  }
+  const text = await response.text();
+  if (text.length > MAX_DEVICE_RESPONSE_SIZE) {
+    throw deviceFlowError("request_failed");
+  }
+  try {
+    return { status: response.status, body: text === "" ? {} : JSON.parse(text) };
+  } catch {
+    throw deviceFlowError("request_failed");
+  }
+}
+
+async function launchBrowser(url: string): Promise<void> {
+  const command = process.platform === "darwin"
+    ? ["open", url]
+    : process.platform === "win32"
+      ? ["cmd", "/c", "start", "", url]
+      : ["xdg-open", url];
+  const processHandle = Bun.spawn({ cmd: command, stdout: "ignore", stderr: "ignore" });
+  if ((await processHandle.exited) !== 0) {
+    throw new Error("Browser launch failed.");
+  }
 }
 
 function rejectUnexpectedAuthArgs(subcommand: string, argv: readonly string[]): void {

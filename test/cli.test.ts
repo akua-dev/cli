@@ -192,6 +192,223 @@ describe("akua entrypoint", () => {
     }
   });
 
+  test("auth login completes device authorization, launches the browser, and saves only the access token", async () => {
+    const home = await makeTempHome();
+    try {
+      const requests: Array<{ url: string; body: unknown }> = [];
+      const sleeps: number[] = [];
+      const launched: string[] = [];
+      const displayed: Array<{ verification_uri_complete: string; user_code: string }> = [];
+      let tokenRequests = 0;
+      const deviceCode = "device-code-must-not-be-rendered";
+      const accessToken = "access-token-must-not-be-rendered";
+
+      const envelope = await authView(["login"], { HOME: home }, {
+        request: async ({ url, body }: { url: string; body: unknown }) => {
+          requests.push({ url, body });
+          if (url.endsWith("/device/code")) {
+            return {
+              status: 200,
+              body: {
+                device_code: deviceCode,
+                user_code: "ABCD-EFGH",
+                verification_uri: "https://akua.dev/device",
+                verification_uri_complete: "https://akua.dev/device?user_code=ABCD-EFGH",
+                expires_in: 60,
+                interval: 2,
+              },
+            };
+          }
+
+          tokenRequests += 1;
+          return tokenRequests === 1
+            ? { status: 400, body: { error: "authorization_pending" } }
+            : { status: 200, body: { access_token: accessToken } };
+        },
+        sleep: async (milliseconds: number) => {
+          sleeps.push(milliseconds);
+        },
+        launchBrowser: async (url: string) => {
+          launched.push(url);
+        },
+        displayDeviceAuthorization: (details) => {
+          displayed.push(details);
+        },
+      });
+
+      expect(requests).toEqual([
+        {
+          url: "https://akua.dev/api/auth/device/code",
+          body: { client_id: "akua-cli", scope: "platform" },
+        },
+        {
+          url: "https://akua.dev/api/auth/device/token",
+          body: {
+            grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+            device_code: deviceCode,
+            client_id: "akua-cli",
+          },
+        },
+        {
+          url: "https://akua.dev/api/auth/device/token",
+          body: {
+            grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+            device_code: deviceCode,
+            client_id: "akua-cli",
+          },
+        },
+      ]);
+      expect(sleeps).toEqual([2_000]);
+      expect(launched).toEqual(["https://akua.dev/device?user_code=ABCD-EFGH"]);
+      expect(displayed).toEqual([
+        { verification_uri_complete: "https://akua.dev/device?user_code=ABCD-EFGH", user_code: "ABCD-EFGH" },
+      ]);
+      expect(envelope).toMatchObject({
+        command: "akua auth login",
+        data: {
+          authenticated: true,
+          source: "config",
+          verification_uri_complete: "https://akua.dev/device?user_code=ABCD-EFGH",
+          user_code: "ABCD-EFGH",
+        },
+      });
+      const rendered = renderSuccess(envelope, "json");
+      expect(rendered).not.toContain(deviceCode);
+      expect(rendered).not.toContain(accessToken);
+      expect(JSON.parse(await readFile(join(home, ".config", "akua", "config.json"), "utf8"))).toEqual({ token: accessToken });
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
+  test("auth login honors slow_down and continues when the browser cannot be opened", async () => {
+    const home = await makeTempHome();
+    try {
+      const sleeps: number[] = [];
+      let tokenRequests = 0;
+
+      const envelope = await authView(["login"], { HOME: home }, {
+        request: async ({ url }: { url: string }) => {
+          if (url.endsWith("/device/code")) {
+            return {
+              status: 200,
+              body: {
+                device_code: "device-code-must-not-be-rendered",
+                user_code: "ABCD-EFGH",
+                verification_uri: "https://akua.dev/device",
+                verification_uri_complete: "https://akua.dev/device?user_code=ABCD-EFGH",
+                expires_in: 60,
+                interval: 2,
+              },
+            };
+          }
+
+          tokenRequests += 1;
+          return tokenRequests === 1
+            ? { status: 400, body: { error: "authorization_pending" } }
+            : tokenRequests === 2
+              ? { status: 400, body: { error: "slow_down" } }
+              : { status: 200, body: { access_token: "access-token-must-not-be-rendered" } };
+        },
+        sleep: async (milliseconds: number) => {
+          sleeps.push(milliseconds);
+        },
+        launchBrowser: async () => {
+          throw new Error("browser unavailable");
+        },
+      });
+
+      expect(sleeps).toEqual([2_000, 7_000]);
+      expect(envelope.observations).toContain("Could not open a browser. Open the verification URL manually.");
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
+  test("auth login reports terminal device-flow outcomes without disclosing the device code", async () => {
+    for (const error of ["access_denied", "expired_token"] as const) {
+      const home = await makeTempHome();
+      try {
+        const deviceCode = "device-code-must-not-be-rendered";
+        await expect(
+          authView(["login", "--no-browser"], { HOME: home }, {
+            request: async ({ url }: { url: string }) =>
+              url.endsWith("/device/code")
+                ? {
+                    status: 200,
+                    body: {
+                      device_code: deviceCode,
+                      user_code: "ABCD-EFGH",
+                      verification_uri: "https://akua.dev/device",
+                      verification_uri_complete: "https://akua.dev/device?user_code=ABCD-EFGH",
+                      expires_in: 60,
+                      interval: 1,
+                    },
+                  }
+                : { status: 400, body: { error } },
+            sleep: async () => undefined,
+            launchBrowser: async () => undefined,
+          }),
+        ).rejects.toMatchObject({ code: `AKUA_DEVICE_${error.toUpperCase()}` });
+      } finally {
+        await rm(home, { recursive: true, force: true });
+      }
+    }
+  });
+
+  test("auth login stops on cancellation or device-code expiry without saving a token", async () => {
+    const cancelledHome = await makeTempHome();
+    const controller = new AbortController();
+    controller.abort();
+    let cancelledRequested = false;
+    try {
+      await expect(
+        authView(["login", "--no-browser"], { HOME: cancelledHome }, {
+          request: async () => {
+            cancelledRequested = true;
+            return { status: 500, body: {} };
+          },
+          sleep: async () => undefined,
+          launchBrowser: async () => undefined,
+          signal: controller.signal,
+        }),
+      ).rejects.toMatchObject({ code: "AKUA_DEVICE_CANCELLED" });
+      expect(cancelledRequested).toBe(false);
+    } finally {
+      await rm(cancelledHome, { recursive: true, force: true });
+    }
+
+    const expiredHome = await makeTempHome();
+    let requests = 0;
+    let calls = 0;
+    try {
+      await expect(
+        authView(["login", "--no-browser"], { HOME: expiredHome }, {
+          request: async () => {
+            requests += 1;
+            return {
+              status: 200,
+              body: {
+                device_code: "device-code-must-not-be-rendered",
+                user_code: "ABCD-EFGH",
+                verification_uri: "https://akua.dev/device",
+                verification_uri_complete: "https://akua.dev/device?user_code=ABCD-EFGH",
+                expires_in: 1,
+                interval: 1,
+              },
+            };
+          },
+          sleep: async () => undefined,
+          launchBrowser: async () => undefined,
+          now: () => (calls++ === 0 ? 0 : 1_000),
+        }),
+      ).rejects.toMatchObject({ code: "AKUA_DEVICE_EXPIRED_TOKEN" });
+      expect(requests).toBe(1);
+    } finally {
+      await rm(expiredHome, { recursive: true, force: true });
+    }
+  });
+
   test("auth status gives AKUA_API_TOKEN precedence over stored tokens", async () => {
     const home = await makeTempHome();
     try {
@@ -360,17 +577,9 @@ describe("akua entrypoint", () => {
     }
   });
 
-  test("auth login requires an explicit token flag", async () => {
+  test("auth login validates explicit token flag values", async () => {
     const home = await makeTempHome();
     try {
-      const missingFlag = await runAkua(["auth", "login", "--json"], { HOME: home });
-      expect(missingFlag.exitCode).toBe(2);
-      expect(JSON.parse(missingFlag.stdout)).toMatchObject({
-        error: {
-          message: "Missing required --token flag.",
-        },
-      });
-
       const missingValue = await runAkua(["auth", "login", "--token", "--json"], { HOME: home });
       expect(missingValue.exitCode).toBe(2);
       expect(JSON.parse(missingValue.stdout)).toMatchObject({
