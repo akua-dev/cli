@@ -5,11 +5,9 @@ import { Duration, Effect } from "effect";
 import { AkuaCliError, usageError } from "../runtime/errors";
 import {
   ConfigFailure,
-  CommandFailure,
   DeviceAuthorizationFailure,
   DeviceCancelledFailure,
   DeviceRequestFailure,
-  ProtectedCredentialFailure,
   type CliFailure,
   UsageFailure,
 } from "../runtime/effect-runtime";
@@ -100,42 +98,6 @@ function authProgram(
         if (command.subcommand === "status")
           return statusView(command.argv, env);
         return logoutView(command.argv, env);
-      },
-    ),
-  );
-}
-
-export function readProtectedCallerToken(
-  env: Record<string, string | undefined>,
-): Effect.Effect<string, CliFailure, SecureConfig> {
-  return Effect.try({
-    try: () => resolveConfigPath(env),
-    catch: usageFailure,
-  }).pipe(
-    Effect.flatMap(
-      (configPath): Effect.Effect<string, CliFailure, SecureConfig> => {
-        if (hasEnvToken(env)) {
-          return Effect.fail(
-            new CommandFailure({
-              error: new AkuaCliError({
-                type: "usage_error",
-                code: "AKUA_LOADER_ENV_AUTH_FORBIDDEN",
-                message:
-                  "Environment authentication is not accepted for this provider loader.",
-                exitCode: 2,
-              }),
-            }),
-          );
-        }
-        return Effect.gen(function* () {
-          const config = yield* SecureConfig;
-          const token = yield* config
-            .readToken(configPath)
-            .pipe(Effect.mapError(configFailure));
-          return yield* token === undefined
-            ? Effect.fail(new ProtectedCredentialFailure())
-            : Effect.succeed(token);
-        });
       },
     ),
   );

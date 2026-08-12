@@ -1,8 +1,6 @@
 import { Context, Data, Effect } from "effect";
 import { Duration } from "effect";
 
-import type { SecureTokenFile } from "./secure-token-file-services";
-
 export interface HttpResponse {
   readonly status: number;
   readonly body: unknown;
@@ -11,13 +9,6 @@ export interface HttpResponse {
 export interface HttpRequest {
   readonly url: string;
   readonly fields: Readonly<Record<string, string>>;
-}
-
-export interface HttpBytesRequest {
-  readonly url: string;
-  readonly method: "POST";
-  readonly headers: Readonly<Record<string, string>>;
-  readonly body: Uint8Array;
 }
 
 export class HttpFailure extends Data.TaggedError("HttpFailure")<{
@@ -41,9 +32,6 @@ export class Http extends Context.Service<
   {
     readonly postForm: (
       request: HttpRequest,
-    ) => Effect.Effect<HttpResponse, HttpFailure>;
-    readonly postBytes?: (
-      request: HttpBytesRequest,
     ) => Effect.Effect<HttpResponse, HttpFailure>;
   }
 >()("platform/cli/Http") {}
@@ -95,19 +83,10 @@ export class CliClock extends Context.Service<
   }
 >()("platform/cli/Clock") {}
 
-export class IdGenerator extends Context.Service<
-  IdGenerator,
-  {
-    readonly generate: () => Effect.Effect<string>;
-  }
->()("platform/cli/IdGenerator") {}
-
 export type CliServices =
   | Http
   | Browser
   | Process
   | Console
   | SecureConfig
-  | CliClock
-  | IdGenerator
-  | SecureTokenFile;
+  | CliClock;

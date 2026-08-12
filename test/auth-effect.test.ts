@@ -8,7 +8,6 @@ import {
   DeviceAuthorizationFailure,
   DeviceCancelledFailure,
   DeviceRequestFailure,
-  ProtectedCredentialFailure,
   runCli,
   UsageFailure,
 } from "../src/runtime/effect-runtime";
@@ -179,8 +178,7 @@ describe("Effect auth command", () => {
         | ConfigFailure
         | DeviceRequestFailure
         | DeviceCancelledFailure
-        | DeviceAuthorizationFailure
-        | ProtectedCredentialFailure,
+        | DeviceAuthorizationFailure,
     ) => {
       const stdout: string[] = [];
       const exitCode = await Effect.runPromise(
@@ -251,16 +249,5 @@ describe("Effect auth command", () => {
         },
       },
     });
-    await expect(render(new ProtectedCredentialFailure())).resolves.toMatchObject(
-      {
-        exitCode: 3,
-        payload: {
-          error: {
-            type: "authentication_error",
-            code: "AKUA_LOADER_AUTH_REQUIRED",
-          },
-        },
-      },
-    );
   });
 });

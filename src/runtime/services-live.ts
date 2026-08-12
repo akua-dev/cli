@@ -16,7 +16,6 @@ import {
   HttpClientRequest,
 } from "effect/unstable/http";
 
-import { SecureTokenFileLive } from "./secure-token-file-live";
 import {
   Browser,
   BrowserFailure,
@@ -25,7 +24,6 @@ import {
   Console,
   Http,
   HttpFailure,
-  IdGenerator,
   Process,
   SecureConfig,
   SecureConfigFailure,
@@ -48,19 +46,6 @@ export const HttpLive = Layer.effect(
             ),
           ),
           "Device response is too large.",
-        ),
-      postBytes: (request) =>
-        readJsonResponse(
-          client.execute(
-            HttpClientRequest.post(request.url).pipe(
-              HttpClientRequest.setHeaders(request.headers),
-              HttpClientRequest.bodyUint8Array(
-                request.body,
-                request.headers["content-type"],
-              ),
-            ),
-          ),
-          "HTTP response is too large.",
         ),
     };
   }),
@@ -116,10 +101,6 @@ export const ClockLive = Layer.succeed(CliClock, {
     }).pipe(Effect.orDie),
 });
 
-export const IdGeneratorLive = Layer.succeed(IdGenerator, {
-  generate: () => Effect.sync(randomUUID),
-});
-
 export const SecureConfigLive = Layer.succeed(SecureConfig, {
   readToken: (path) =>
     readConfig(path).pipe(
@@ -170,8 +151,6 @@ export const CliLive: Layer.Layer<CliServices> = Layer.mergeAll(
   ConsoleLive,
   SecureConfigLive,
   ClockLive,
-  IdGeneratorLive,
-  SecureTokenFileLive,
 );
 
 function readJsonResponse(

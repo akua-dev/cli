@@ -28,10 +28,6 @@ export class DeviceAuthorizationFailure extends Data.TaggedError(
   readonly reason: "access_denied" | "expired_token";
 }> {}
 
-export class ProtectedCredentialFailure extends Data.TaggedError(
-  "ProtectedCredentialFailure",
-)<{}> {}
-
 /** Compatibility boundary for commands that have not migrated to Effect yet. */
 export class CommandFailure extends Data.TaggedError("CommandFailure")<{
   readonly error: AkuaCliError;
@@ -43,7 +39,6 @@ export type CliFailure =
   | DeviceRequestFailure
   | DeviceCancelledFailure
   | DeviceAuthorizationFailure
-  | ProtectedCredentialFailure
   | CommandFailure;
 
 export interface CliRenderer {
@@ -103,14 +98,6 @@ export function toCliError(failure: CliFailure): AkuaCliError {
             "AKUA_DEVICE_EXPIRED_TOKEN",
             "Device authorization expired. Start login again.",
           );
-    case "ProtectedCredentialFailure":
-      return new AkuaCliError({
-        type: "authentication_error",
-        code: "AKUA_LOADER_AUTH_REQUIRED",
-        message:
-          "A protected local Akua credential is required for this provider loader.",
-        exitCode: 3,
-      });
     case "CommandFailure":
       return failure.error;
   }

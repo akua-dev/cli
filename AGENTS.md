@@ -37,10 +37,6 @@ runtime/fiber handoff. Before handoff, run the skill's source scan, focused Bun
 tests, and `mise run check`; inspect each source scan hit rather than treating
 the command as a cosmetic check.
 
-The hand-written Agent OS provider-ingress command and its security suites are
-specified in `docs/architecture.md`, `test/secure-token-file.test.ts`, and
-`test/agent-os-loader.test.ts`.
-
 ## Maintaining this file
 
 Keep this file concise and durable. Add only repository-wide rules that are not

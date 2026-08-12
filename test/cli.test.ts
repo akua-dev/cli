@@ -11,10 +11,7 @@ import {
 import { join } from "node:path";
 import { Effect } from "effect";
 
-import {
-  authView,
-  readProtectedCallerToken,
-} from "../src/commands/auth";
+import { authView } from "../src/commands/auth";
 import { renderSuccess, type RenderEnvelope } from "../src/runtime/render";
 import { toCliError } from "../src/runtime/effect-runtime";
 import { CliLive } from "../src/runtime/services-live";
@@ -38,17 +35,27 @@ describe("akua entrypoint", () => {
     });
   });
 
-  test("documents the compiled Agent OS provider loader without exposing a credential input", async () => {
+  test("does not expose provider-specific commands in help or routing", async () => {
     const { stdout, exitCode } = await runAkua(["--help", "--json"]);
 
     expect(exitCode).toBe(0);
-    expect(stdout).toContain("akua agent-os load-hcloud-provider");
-    expect(stdout).toContain("--token-file");
-    expect(stdout).toContain("--expected-ssh-key-fingerprint");
-    expect(stdout).toContain("--expected-ssh-key-name");
-    expect(stdout).not.toContain("--project-identity-attestation");
-    expect(stdout).not.toContain("--project-anchor-ssh-key-fingerprint");
-    expect(stdout).not.toContain("--token <");
+    expect(stdout).not.toContain("agent-os");
+    expect(stdout).not.toContain("hcloud");
+    expect(stdout).not.toContain("token-file");
+
+    const unknown = await runAkua([
+      "agent-os",
+      "load-hcloud-provider",
+      "--json",
+    ]);
+    expect(unknown.exitCode).toBe(2);
+    expect(JSON.parse(unknown.stdout)).toMatchObject({
+      error: {
+        type: "usage_error",
+        code: "AKUA_USAGE_ERROR",
+        message: "Unknown command: agent-os load-hcloud-provider",
+      },
+    });
   });
 
   test("fails invalid explicit output modes before routing", async () => {
@@ -871,43 +878,7 @@ describe("akua entrypoint", () => {
     }
   });
 
-  test("loader caller authentication reads only the protected local config", async () => {
-    const home = await makeTempHome();
-    try {
-      const configDir = join(home, ".config", "akua");
-      const configPath = join(configDir, "config.json");
-      await mkdir(configDir, { recursive: true, mode: 0o700 });
-      await writeFile(
-        configPath,
-        JSON.stringify({ token: "caller-auth-fixture" }),
-        { mode: 0o600 },
-      );
-      await chmod(configDir, 0o700);
-      await chmod(configPath, 0o600);
-
-      await expect(runProtectedCallerToken({ HOME: home })).resolves.toBe("caller-auth-fixture");
-      await expect(
-        runProtectedCallerToken({
-          HOME: home,
-          AKUA_API_TOKEN: "environment-auth-fixture",
-        }),
-      ).rejects.toMatchObject({
-        code: "AKUA_LOADER_ENV_AUTH_FORBIDDEN",
-      });
-    } finally {
-      await rm(home, { recursive: true, force: true });
-    }
-  });
 });
-
-function runProtectedCallerToken(env: Record<string, string | undefined>): Promise<string> {
-  return Effect.runPromise(
-    Effect.provide(
-      readProtectedCallerToken(env).pipe(Effect.mapError(toCliError)),
-      CliLive,
-    ) as Effect.Effect<string, never>,
-  );
-}
 
 async function runAkua(
   args: readonly string[],

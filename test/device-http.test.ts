@@ -39,37 +39,6 @@ describe("device authorization HTTP", () => {
     );
   });
 
-  test("preserves status and byte bodies through the Effect HTTP adapter", async () => {
-    let received: Request | undefined;
-    const fetch = (input: RequestInfo | URL, init?: RequestInit) => {
-      received = new Request(input, init);
-      return Promise.resolve(Response.json({ accepted: true }, { status: 202 }));
-    };
-    const program = Effect.gen(function* () {
-      const http = yield* Http;
-      const postBytes = http.postBytes;
-      if (postBytes === undefined) return yield* Effect.die("postBytes missing");
-      return yield* postBytes({
-        url: "https://api.example.test/provider",
-        method: "POST",
-        headers: { authorization: "Bearer caller", "content-type": "application/json" },
-        body: new TextEncoder().encode('{"provider":"token"}'),
-      });
-    });
-
-    const response = await Effect.runPromise(
-      program.pipe(
-        Effect.provide(HttpLive),
-        Effect.provideService(FetchHttpClient.Fetch, fetch),
-      ),
-    );
-
-    expect(response).toEqual({ status: 202, body: { accepted: true } });
-    expect(received?.headers.get("authorization")).toBe("Bearer caller");
-    expect(received?.headers.get("content-type")).toContain("application/json");
-    expect(await received?.text()).toBe('{"provider":"token"}');
-  });
-
   test("maps invalid and oversized response bodies to HttpFailure", async () => {
     const invalidJson = (input: RequestInfo | URL, init?: RequestInit) => {
       return Promise.resolve(
