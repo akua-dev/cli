@@ -1,0 +1,125 @@
+diff --git a/dist/HttpApiTransformer.js b/dist/HttpApiTransformer.js
+index aad332ba5abf58db21178942761dee147b382235..49c363e2070a2e8ab21b42f83706fc6241e5c683 100644
+--- a/dist/HttpApiTransformer.js
++++ b/dist/HttpApiTransformer.js
+@@ -165,11 +165,11 @@ const renderResponseSet = (responses, target) => {
+       continue;
+     }
+     if (response.isEmpty) {
+-      rendered.push(`HttpApiSchema.Empty(${status})`);
++      rendered.push(withResponseHeaders(`HttpApiSchema.Empty(${status})`, response.headersSchema));
+       continue;
+     }
+     for (const media of response.representable) {
+-      rendered.push(applyStatus(renderMediaSchema(media), status, target));
++      rendered.push(withResponseHeaders(applyStatus(renderMediaSchema(media), status, target), response.headersSchema));
+     }
+   }
+   if (rendered.length === 0) {
+@@ -178,9 +178,11 @@ const renderResponseSet = (responses, target) => {
+   return joinSchemas(rendered);
+ };
+ const joinSchemas = schemas => schemas.length === 1 ? schemas[0] : `[${schemas.join(", ")}]`;
++const withResponseHeaders = (response, headersSchema) => headersSchema === undefined ? response : `HttpApiSchema.WithHeaders(${response}, ${headersSchema})`;
+ const renderMediaSchema = media => {
+   if (media.effectStream === "sse") {
+-    const options = media.contentType === "text/event-stream" ? `{ events: ${media.schema}, error: ${media.errorSchema} }` : `{ contentType: ${JSON.stringify(media.contentType)}, events: ${media.schema}, error: ${media.errorSchema} }`;
++    const error = media.errorSchema === undefined ? "" : `, error: ${media.errorSchema}`;
++    const options = media.contentType === "text/event-stream" ? `{ events: ${media.schema}${error} }` : `{ contentType: ${JSON.stringify(media.contentType)}, events: ${media.schema}${error} }`;
+     return `HttpApiSchema.StreamSse(${options})`;
+   }
+   if (media.effectStream === "uint8array") {
+diff --git a/dist/OpenApiGenerator.js b/dist/OpenApiGenerator.js
+index a1c2dce0a23131373824e1a0f11fdfb361faabb5..4207d1022f8b6741ddcd47ed95b875dc20ec3529 100644
+--- a/dist/OpenApiGenerator.js
++++ b/dist/OpenApiGenerator.js
+@@ -242,12 +242,6 @@ const parseOpenApi = (spec, generator, resolveRef, format, emitWarning, multipar
+           required: requestBody.required === true,
+           contentTypes: Object.keys(content)
+         };
+-        if (isHttpApi && requestBody.required === false) {
+-          warnForOperation(emitWarning, op, {
+-            code: "optional-request-body-approximated",
+-            message: "Optional request body was approximated by adding a no-content payload alternative."
+-          });
+-        }
+         if (Predicate.isNotUndefined(content["application/json"]?.schema)) {
+           op.payload = addSchema(`${schemaId}RequestJson`, content["application/json"].schema, op);
+           requestSchemaNames.set("application/json", op.payload);
+@@ -300,12 +294,9 @@ const parseOpenApi = (spec, generator, resolveRef, format, emitWarning, multipar
+           });
+         }
+         const content = Predicate.isObject(response.content) ? response.content : undefined;
+-        if (isHttpApi && Predicate.isNotUndefined(response.headers)) {
+-          warnForOperation(emitWarning, op, {
+-            code: "response-headers-ignored",
+-            message: `Response headers on status ${status} were ignored in HttpApi generation.`
+-          });
+-        }
++        const responseHeaders = parseResponseHeaders(response.headers, resolveRef);
++        const responseHeadersSchema = isHttpApi ? buildParameterSchema(responseHeaders) : undefined;
++        const headersSchema = responseHeadersSchema === undefined ? undefined : addSchema(`${schemaId}${status}Headers`, responseHeadersSchema.schema, op);
+         const representable = [];
+         let jsonSchemaName;
+         const jsonResponseSchema = content?.["application/json"]?.schema;
+@@ -339,7 +330,7 @@ const parseOpenApi = (spec, generator, resolveRef, format, emitWarning, multipar
+             }
+             if (streamEncoding === "sse") {
+               const errorSchema = getEffectStreamErrorSchema(mediaType);
+-              if (Predicate.isUndefined(mediaType.schema) || Predicate.isUndefined(errorSchema)) {
++              if (Predicate.isUndefined(mediaType.schema)) {
+                 continue;
+               }
+               representable.push({
+@@ -347,7 +338,7 @@ const parseOpenApi = (spec, generator, resolveRef, format, emitWarning, multipar
+                 encoding: "text",
+                 effectStream: "sse",
+                 schema: addSchema(`${schemaId}${status}Sse`, mediaType.schema, op),
+-                errorSchema: addSchema(`${schemaId}${status}SseError`, errorSchema, op)
++                errorSchema: Predicate.isUndefined(errorSchema) ? undefined : addSchema(`${schemaId}${status}SseError`, errorSchema, op)
+               });
+               continue;
+             }
+@@ -371,7 +362,7 @@ const parseOpenApi = (spec, generator, resolveRef, format, emitWarning, multipar
+           status: parsedStatus,
+           description: Utils.nonEmptyString(response.description),
+           contentTypes: Predicate.isNotUndefined(content) ? Object.keys(content) : [],
+-          hasHeaders: Predicate.isNotUndefined(response.headers),
++          headersSchema,
+           isEmpty: isEmptyResponse,
+           representable
+         };
+@@ -510,6 +501,24 @@ const buildParameterSchema = (parameters, onAdded) => {
+     optional: schema.required.length === 0
+   };
+ };
++const parseResponseHeaders = (headers, resolveRef) => {
++  if (!Predicate.isObject(headers)) {
++    return [];
++  }
++  const parsed = [];
++  for (const [name, header] of Object.entries(headers)) {
++    const resolvedHeader = resolveReference(header, resolveRef);
++    if (!Predicate.isObject(resolvedHeader) || !Predicate.isObject(resolvedHeader.schema)) {
++      continue;
++    }
++    parsed.push({
++      name,
++      required: resolvedHeader.required === true,
++      schema: resolvedHeader.schema
++    });
++  }
++  return parsed;
++};
+ const mediaTypeToSuffix = contentType => {
+   const normalized = contentType.toLowerCase();
+   switch (normalized) {
+@@ -825,7 +834,7 @@ const hasUnsupportedSuccessfulSseResponse = (responses, hasExplicitSuccessRespon
+       }
+       const streamEncoding = getEffectStreamEncoding(mediaType);
+       if (streamEncoding === "sse") {
+-        if (Predicate.isUndefined(mediaType.schema) || Predicate.isUndefined(getEffectStreamErrorSchema(mediaType))) {
++        if (Predicate.isUndefined(mediaType.schema)) {
+           return true;
+         }
+         continue;
