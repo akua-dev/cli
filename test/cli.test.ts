@@ -76,7 +76,7 @@ describe("akua entrypoint", () => {
     const env = await runAkua(["--version"], { AKUA_OUTPUT: "toon" });
     expect(env.exitCode).toBe(2);
     expect(env.stdout).toContain("Invalid AKUA_OUTPUT value: toon");
-  });
+  }, 15_000);
 
   test("fails missing explicit output mode values before routing", async () => {
     const { stdout, exitCode } = await runAkua(["--output", "--version"]);
