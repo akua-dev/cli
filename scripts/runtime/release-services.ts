@@ -1,7 +1,16 @@
-import { Context, Effect } from "effect";
+import { Context, Data, Effect } from "effect";
+
+export class ReleaseFailure extends Data.TaggedError("ReleaseFailure")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type ReleaseTargetId =
-  "darwin-arm64" | "darwin-x64" | "linux-arm64" | "linux-x64" | "windows-x64";
+  | "darwin-arm64"
+  | "darwin-x64"
+  | "linux-arm64"
+  | "linux-x64"
+  | "windows-x64";
 
 export interface ReleaseTarget {
   id: ReleaseTargetId;
@@ -125,42 +134,54 @@ export function checksumLine(name: string, digest: string): string {
   return `${digest}  ${name}\n`;
 }
 
-export function validateVersion(version: string): void {
+export function validateVersion(
+  version: string,
+): Effect.Effect<void, ReleaseFailure> {
   if (
     !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(version)
   ) {
-    throw new Error(`Invalid release version: ${version}`);
+    return releaseFailure(`Invalid release version: ${version}`);
   }
+  return Effect.void;
 }
 
-export function releaseManifestName(version: string): string {
-  validateVersion(version);
-  return `akua-v${version}-manifest.json`;
-}
-
-export function homebrewManifestName(version: string): string {
-  validateVersion(version);
-  return `akua-v${version}-homebrew.json`;
-}
-
-export function releaseAssetNames(version: string): string[] {
-  validateVersion(version);
-  const archives = RELEASE_TARGETS.map((target) =>
-    artifactName(version, target),
+export function releaseManifestName(
+  version: string,
+): Effect.Effect<string, ReleaseFailure> {
+  return validateVersion(version).pipe(
+    Effect.map(() => `akua-v${version}-manifest.json`),
   );
-  return [
-    ...archives,
-    ...archives.map((archive) => `${archive}.sha256`),
-    "checksums.txt",
-    releaseManifestName(version),
-    homebrewManifestName(version),
-  ];
+}
+
+export function homebrewManifestName(
+  version: string,
+): Effect.Effect<string, ReleaseFailure> {
+  return validateVersion(version).pipe(
+    Effect.map(() => `akua-v${version}-homebrew.json`),
+  );
+}
+
+export function releaseAssetNames(
+  version: string,
+): Effect.Effect<string[], ReleaseFailure> {
+  return Effect.gen(function* () {
+    const archives = RELEASE_TARGETS.map((target) =>
+      artifactName(version, target),
+    );
+    return [
+      ...archives,
+      ...archives.map((archive) => `${archive}.sha256`),
+      "checksums.txt",
+      yield* releaseManifestName(version),
+      yield* homebrewManifestName(version),
+    ];
+  });
 }
 
 export function assertCompiledExecutable(
   target: Pick<ReleaseTarget, "id" | "os">,
   bytes: Uint8Array,
-): void {
+): Effect.Effect<void, ReleaseFailure> {
   const expectedMagic =
     target.os === "darwin"
       ? [0xcf, 0xfa, 0xed, 0xfe]
@@ -171,23 +192,24 @@ export function assertCompiledExecutable(
     bytes.length < expectedMagic.length ||
     expectedMagic.some((byte, index) => bytes[index] !== byte)
   ) {
-    throw new Error(
+    return releaseFailure(
       `Compiled executable has an invalid ${target.os} header for ${target.id}`,
     );
   }
+  return Effect.void;
 }
 
 export function releaseTargetIdForHost(
   platform: string,
   arch: string,
-): ReleaseTargetId {
+): Effect.Effect<ReleaseTargetId, ReleaseFailure> {
   const normalizedPlatform = platform === "win32" ? "windows" : platform;
   const id = `${normalizedPlatform}-${arch}`;
   const target = RELEASE_TARGETS.find((candidate) => candidate.id === id);
   if (!target) {
-    throw new Error(`Unsupported release host: ${platform}-${arch}`);
+    return releaseFailure(`Unsupported release host: ${platform}-${arch}`);
   }
-  return target.id;
+  return Effect.succeed(target.id);
 }
 
 export function archiveExtractCommand(
@@ -217,30 +239,39 @@ export function archiveExtractCommand(
 export class ReleaseHost extends Context.Service<
   ReleaseHost,
   {
-    readonly sha256: (bytes: Uint8Array) => Effect.Effect<string, Error>;
-    readonly hostTargetId: Effect.Effect<ReleaseTargetId, Error>;
+    readonly sha256: (
+      bytes: Uint8Array,
+    ) => Effect.Effect<string, ReleaseFailure>;
+    readonly hostTargetId: Effect.Effect<ReleaseTargetId, ReleaseFailure>;
     readonly planUploads: (
       candidateDir: string,
       existingDir: string,
       version: string,
-    ) => Effect.Effect<string[], Error>;
+    ) => Effect.Effect<string[], ReleaseFailure>;
     readonly assertSafeOutputDirectory: (
       outputDir: string,
-    ) => Effect.Effect<void, Error>;
+    ) => Effect.Effect<void, ReleaseFailure>;
     readonly packageExistingExecutables: (
       input: PackageExistingExecutablesInput,
-    ) => Effect.Effect<void, Error>;
+    ) => Effect.Effect<void, ReleaseFailure>;
     readonly packageRelease: (
       input: PackageReleaseInput,
-    ) => Effect.Effect<void, Error>;
+    ) => Effect.Effect<void, ReleaseFailure>;
     readonly smokeReleaseArtifact: (input: {
       version: string;
       outputDir: string;
       targetId: string;
-    }) => Effect.Effect<void, Error>;
+    }) => Effect.Effect<void, ReleaseFailure>;
     readonly verifyReleaseDirectory: (
       outputDir: string,
       version: string,
-    ) => Effect.Effect<void, Error>;
+    ) => Effect.Effect<void, ReleaseFailure>;
   }
 >()("platform/scripts/ReleaseHost") {}
+
+export function releaseFailure(
+  message: string,
+  cause?: unknown,
+): Effect.Effect<never, ReleaseFailure> {
+  return Effect.fail(new ReleaseFailure({ message, cause }));
+}

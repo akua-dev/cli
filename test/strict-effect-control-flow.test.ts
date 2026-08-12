@@ -7,9 +7,14 @@ const coreFiles = [
   "src/runtime/mode.ts",
   "src/commands/auth.ts",
   "src/bin/akua.ts",
+  "scripts/fetch-openapi.ts",
+  "scripts/generate-commands.ts",
+  "scripts/runtime/release-services.ts",
+  "scripts/runtime/release-host-live.ts",
+  "scripts/runtime/services-live.ts",
 ];
 
-test("core CLI modules contain no throw statements", () => {
+test("core CLI modules and script runtimes contain no throw statements", () => {
   expect(findThrowStatements(coreFiles)).toEqual([]);
 });
 

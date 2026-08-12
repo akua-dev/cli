@@ -34,26 +34,28 @@ describe("collectPublicCommands", () => {
   });
 
   test("includes public operations and excludes non-public operations", () => {
-    const commands = collectPublicCommands({
-      paths: {
-        "/v1/workspaces": {
-          get: {
-            "x-platform-visibility": "PUBLIC",
-            operationId: "workspaces.list",
-            tags: ["Workspaces"],
-            summary: "List workspaces",
-            security: [{ BearerAuth: [] }],
-            parameters: [{ name: "limit", in: "query", required: false }],
+    const commands = Effect.runSync(
+      collectPublicCommands({
+        paths: {
+          "/v1/workspaces": {
+            get: {
+              "x-platform-visibility": "PUBLIC",
+              operationId: "workspaces.list",
+              tags: ["Workspaces"],
+              summary: "List workspaces",
+              security: [{ BearerAuth: [] }],
+              parameters: [{ name: "limit", in: "query", required: false }],
+            },
+          },
+          "/v1/admin/users": {
+            get: {
+              "x-platform-visibility": "ADMIN",
+              operationId: "adminAccess.listUsers",
+            },
           },
         },
-        "/v1/admin/users": {
-          get: {
-            "x-platform-visibility": "ADMIN",
-            operationId: "adminAccess.listUsers",
-          },
-        },
-      },
-    });
+      }),
+    );
 
     expect(commands).toHaveLength(1);
     expect(commands[0]).toMatchObject({
@@ -65,22 +67,24 @@ describe("collectPublicCommands", () => {
   });
 
   test("sorts generated commands deterministically by operationId", () => {
-    const commands = collectPublicCommands({
-      paths: {
-        "/z": {
-          get: {
-            "x-platform-visibility": "PUBLIC",
-            operationId: "zebras.list",
+    const commands = Effect.runSync(
+      collectPublicCommands({
+        paths: {
+          "/z": {
+            get: {
+              "x-platform-visibility": "PUBLIC",
+              operationId: "zebras.list",
+            },
+          },
+          "/a": {
+            get: {
+              "x-platform-visibility": "PUBLIC",
+              operationId: "agents.list",
+            },
           },
         },
-        "/a": {
-          get: {
-            "x-platform-visibility": "PUBLIC",
-            operationId: "agents.list",
-          },
-        },
-      },
-    });
+      }),
+    );
 
     expect(commands.map((command) => command.operation_id)).toEqual([
       "agents.list",

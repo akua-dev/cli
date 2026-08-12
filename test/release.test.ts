@@ -227,18 +227,22 @@ describe("release target contract", () => {
     const assertCompiledExecutable = release.assertCompiledExecutable as (
       target: { id: string; os: "darwin" | "linux" | "windows" },
       bytes: Uint8Array,
-    ) => void;
+    ) => Effect.Effect<void, Error>;
 
     expect(() =>
-      assertCompiledExecutable(
-        { id: "linux-x64", os: "linux" },
-        new Uint8Array(64),
+      Effect.runSync(
+        assertCompiledExecutable(
+          { id: "linux-x64", os: "linux" },
+          new Uint8Array(64),
+        ),
       ),
     ).toThrow("invalid linux header");
     expect(() =>
-      assertCompiledExecutable(
-        { id: "linux-x64", os: "linux" },
-        new Uint8Array([0x7f, 0x45, 0x4c, 0x46]),
+      Effect.runSync(
+        assertCompiledExecutable(
+          { id: "linux-x64", os: "linux" },
+          new Uint8Array([0x7f, 0x45, 0x4c, 0x46]),
+        ),
       ),
     ).not.toThrow();
   });
@@ -259,13 +263,13 @@ describe("release target contract", () => {
     ) => Effect.Effect<string[], Error>;
     const releaseAssetNames = release.releaseAssetNames as (
       version: string,
-    ) => string[];
+    ) => Effect.Effect<string[], Error>;
     const root = await makeReleaseTempDir();
 
     try {
       const candidateDir = join(root, "candidate");
       const existingDir = join(root, "existing");
-      const assetNames = releaseAssetNames("1.2.3");
+      const assetNames = Effect.runSync(releaseAssetNames("1.2.3"));
       await mkdir(candidateDir);
       await mkdir(existingDir);
       for (const name of assetNames) {
@@ -308,13 +312,13 @@ describe("release target contract", () => {
     ) => Effect.Effect<string[], Error>;
     const releaseAssetNames = release.releaseAssetNames as (
       version: string,
-    ) => string[];
+    ) => Effect.Effect<string[], Error>;
     const root = await makeReleaseTempDir();
 
     try {
       const candidateDir = join(root, "candidate");
       const existingDir = join(root, "existing");
-      const assetNames = releaseAssetNames("1.2.3");
+      const assetNames = Effect.runSync(releaseAssetNames("1.2.3"));
       await mkdir(candidateDir);
       await mkdir(existingDir);
       for (const name of assetNames) {
@@ -437,7 +441,7 @@ describe("release target contract", () => {
     const targets = release.RELEASE_TARGETS as Array<{ id: string }>;
     const releaseAssetNames = release.releaseAssetNames as (
       version: string,
-    ) => string[];
+    ) => Effect.Effect<string[], Error>;
     const packageExistingExecutables =
       release.packageExistingExecutables as (input: {
         version: string;
@@ -472,7 +476,7 @@ describe("release target contract", () => {
         }),
       );
 
-      for (const name of releaseAssetNames("1.2.3")) {
+      for (const name of Effect.runSync(releaseAssetNames("1.2.3"))) {
         const [first, second] = await Promise.all([
           readFile(join(firstOutputDir, name)),
           readFile(join(secondOutputDir, name)),
@@ -640,16 +644,26 @@ describe("release target contract", () => {
     const releaseTargetIdForHost = release.releaseTargetIdForHost as (
       platform: string,
       arch: string,
-    ) => string;
+    ) => Effect.Effect<string, Error>;
 
-    expect(releaseTargetIdForHost("darwin", "arm64")).toBe("darwin-arm64");
-    expect(releaseTargetIdForHost("darwin", "x64")).toBe("darwin-x64");
-    expect(releaseTargetIdForHost("linux", "arm64")).toBe("linux-arm64");
-    expect(releaseTargetIdForHost("linux", "x64")).toBe("linux-x64");
-    expect(releaseTargetIdForHost("win32", "x64")).toBe("windows-x64");
-    expect(() => releaseTargetIdForHost("win32", "arm64")).toThrow(
-      "Unsupported release host",
+    expect(Effect.runSync(releaseTargetIdForHost("darwin", "arm64"))).toBe(
+      "darwin-arm64",
     );
+    expect(Effect.runSync(releaseTargetIdForHost("darwin", "x64"))).toBe(
+      "darwin-x64",
+    );
+    expect(Effect.runSync(releaseTargetIdForHost("linux", "arm64"))).toBe(
+      "linux-arm64",
+    );
+    expect(Effect.runSync(releaseTargetIdForHost("linux", "x64"))).toBe(
+      "linux-x64",
+    );
+    expect(Effect.runSync(releaseTargetIdForHost("win32", "x64"))).toBe(
+      "windows-x64",
+    );
+    expect(() =>
+      Effect.runSync(releaseTargetIdForHost("win32", "arm64")),
+    ).toThrow("Unsupported release host");
   });
 
   test("extracts Windows zip archives with native PowerShell", async () => {

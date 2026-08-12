@@ -4,6 +4,12 @@ export class ScriptHostFailure extends Data.TaggedError("ScriptHostFailure")<{
   readonly cause: unknown;
 }> {}
 
+export class ScriptValidationFailure extends Data.TaggedError(
+  "ScriptValidationFailure",
+)<{
+  readonly message: string;
+}> {}
+
 export class ScriptHttp extends Context.Service<
   ScriptHttp,
   {

@@ -2,7 +2,11 @@ import { Effect, Runtime } from "effect";
 import { Command, Flag } from "effect/unstable/cli";
 
 import type { CommandDefinition } from "../src/runtime/registry";
-import { ScriptFiles } from "./runtime/services";
+import {
+  ScriptFiles,
+  ScriptHostFailure,
+  ScriptValidationFailure,
+} from "./runtime/services";
 import { ScriptCliLive } from "./runtime/cli-live";
 import { ScriptLive } from "./runtime/services-live";
 
@@ -26,17 +30,22 @@ interface OpenApiParameter {
 
 export function generateCommandRegistry(
   specPath = SPEC_PATH,
-): Effect.Effect<string, Error, ScriptFiles> {
+): Effect.Effect<
+  string,
+  ScriptHostFailure | ScriptValidationFailure,
+  ScriptFiles
+> {
   return Effect.gen(function* () {
     const files = yield* ScriptFiles;
-    const contents = yield* files
-      .readText(specPath)
-      .pipe(Effect.mapError(toError));
-    return yield* Effect.try({
-      try: () =>
-        renderCommandRegistry(collectPublicCommands(JSON.parse(contents))),
-      catch: toError,
+    const contents = yield* files.readText(specPath);
+    const spec = yield* Effect.try({
+      try: () => JSON.parse(contents),
+      catch: (cause) =>
+        new ScriptValidationFailure({
+          message: `OpenAPI spec is not valid JSON: ${errorMessage(cause)}`,
+        }),
     });
+    return renderCommandRegistry(yield* collectPublicCommands(spec));
   });
 }
 
@@ -56,8 +65,8 @@ export const generateCommandsCommand = Command.make(
           .readText(OUTPUT_PATH)
           .pipe(Effect.catch(() => Effect.succeed("")));
         if (current !== generated)
-          return yield* Effect.fail(
-            new Error(`${OUTPUT_PATH} is out of date. Run: mise run generate`),
+          return yield* invalidSpec(
+            `${OUTPUT_PATH} is out of date. Run: mise run generate`,
           );
         return;
       }
@@ -65,45 +74,51 @@ export const generateCommandsCommand = Command.make(
     }),
 ).pipe(Command.withDescription("Generate the public command registry"));
 
-export function collectPublicCommands(spec: unknown): CommandDefinition[] {
-  if (!isRecord(spec)) throw new Error("OpenAPI spec must be an object");
-  if (!isRecord(spec.paths)) throw new Error("OpenAPI spec is missing paths");
-  const commands: CommandDefinition[] = [];
-  for (const [path, methods] of Object.entries(spec.paths)) {
-    if (!isRecord(methods)) continue;
-    for (const [method, rawOperation] of Object.entries(methods)) {
-      if (
-        !HTTP_METHODS.has(method) ||
-        !isOpenApiOperation(rawOperation) ||
-        rawOperation["x-platform-visibility"] !== "PUBLIC"
-      )
-        continue;
-      if (
-        rawOperation.operationId === undefined ||
-        rawOperation.operationId === ""
-      )
-        throw new Error(
-          `Public operation at ${method.toUpperCase()} ${path} is missing operationId`,
-        );
-      commands.push(toCommandDefinition(method, path, rawOperation));
+export function collectPublicCommands(
+  spec: unknown,
+): Effect.Effect<CommandDefinition[], ScriptValidationFailure> {
+  if (!isRecord(spec)) return invalidSpec("OpenAPI spec must be an object");
+  const paths = spec.paths;
+  if (!isRecord(paths)) return invalidSpec("OpenAPI spec is missing paths");
+  return Effect.gen(function* () {
+    const commands: CommandDefinition[] = [];
+    for (const [path, methods] of Object.entries(paths)) {
+      if (!isRecord(methods)) continue;
+      for (const [method, rawOperation] of Object.entries(methods)) {
+        if (
+          !HTTP_METHODS.has(method) ||
+          !isOpenApiOperation(rawOperation) ||
+          rawOperation["x-platform-visibility"] !== "PUBLIC"
+        )
+          continue;
+        if (
+          rawOperation.operationId === undefined ||
+          rawOperation.operationId === ""
+        ) {
+          return yield* invalidSpec(
+            `Public operation at ${method.toUpperCase()} ${path} is missing operationId`,
+          );
+        }
+        commands.push(yield* toCommandDefinition(method, path, rawOperation));
+      }
     }
-  }
-  return commands.sort((left, right) =>
-    left.operation_id.localeCompare(right.operation_id),
-  );
+    return commands.sort((left, right) =>
+      left.operation_id.localeCompare(right.operation_id),
+    );
+  });
 }
 
 function toCommandDefinition(
   method: string,
   path: string,
   operation: OpenApiOperation,
-): CommandDefinition {
+): Effect.Effect<CommandDefinition, ScriptValidationFailure> {
   const operationId = operation.operationId;
   if (operationId === undefined || operationId === "")
-    throw new Error("Operation ID is required");
+    return invalidSpec("Operation ID is required");
   const [resource, rawAction = method] = operationId.split(".");
   const action = kebab(rawAction);
-  return {
+  return Effect.succeed({
     operation_id: operationId,
     command: `${kebab(resource)} ${action}`,
     resource: kebab(resource),
@@ -125,7 +140,7 @@ function toCommandDefinition(
         in: parameter.in ?? "query",
         required: parameter.required === true,
       })),
-  };
+  });
 }
 function renderCommandRegistry(commands: readonly CommandDefinition[]): string {
   return (
@@ -178,8 +193,13 @@ function isOpenApiParameter(value: unknown): value is OpenApiParameter {
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
-function toError(error: unknown): Error {
-  return error instanceof Error ? error : new Error(String(error));
+function invalidSpec(
+  message: string,
+): Effect.Effect<never, ScriptValidationFailure> {
+  return Effect.fail(new ScriptValidationFailure({ message }));
+}
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 function kebab(value: string): string {
   return value
