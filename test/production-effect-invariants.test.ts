@@ -40,8 +40,6 @@ const forbiddenPatterns: readonly ForbiddenPattern[] = [
     rule: "native Promise type or API",
     pattern: /\b(?:Promise\s*[<.]|new\s+Promise\b)/,
   },
-  { rule: "async function", pattern: /\basync\b/ },
-  { rule: "await expression", pattern: /\bawait\b/ },
   { rule: "Effect.runPromise", pattern: /\bEffect\.runPromise\b/ },
 ];
 
@@ -230,9 +228,28 @@ function inspectProductionFile(file: string): Violation[] {
     if (ts.isAsExpression(node) || ts.isTypeAssertionExpression(node)) {
       violations.push({ file, rule: "TypeScript assertion" });
     }
+    if (ts.isThrowStatement(node)) {
+      violations.push({ file, rule: "raw throw statement" });
+    }
+    if (ts.isAwaitExpression(node)) {
+      violations.push({ file, rule: "await expression" });
+    }
+    if (isAsyncFunction(node)) {
+      violations.push({ file, rule: "async function" });
+    }
   });
 
   return violations;
+}
+
+function isAsyncFunction(node: ts.Node): boolean {
+  return (
+    ts.isFunctionLike(node) &&
+    ts.canHaveModifiers(node) &&
+    ts.getModifiers(node)?.some(
+      (modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword,
+    ) === true
+  );
 }
 
 function inspectHostIo(
@@ -320,7 +337,9 @@ function isApprovedLiveServiceModule(file: string): boolean {
 function isExecutableTerminal(file: string, node: ts.Node): boolean {
   if (
     file !== "src/bin/akua.ts" &&
-    !/^scripts\/(?:fetch-openapi|generate-commands|release)\.ts$/.test(file)
+    !/^scripts\/(?:fetch-openapi|generate-commands|generate-effect-api|release)\.ts$/.test(
+      file,
+    )
   )
     return false;
   let current: ts.Node | undefined = node;
@@ -411,7 +430,8 @@ function collectRuntimeBindings(sourceFile: ts.SourceFile): RuntimeBindings {
 
 function isEffectImport(node: ts.ImportDeclaration): boolean {
   return (
-    ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "effect"
+    ts.isStringLiteral(node.moduleSpecifier) &&
+    node.moduleSpecifier.text === "effect"
   );
 }
 
@@ -468,7 +488,9 @@ function isMakeRunMainBinding(element: ts.BindingElement): boolean {
 function isRuntimeTerminalBody(file: string, node: ts.Node): boolean {
   if (
     file !== "src/bin/akua.ts" &&
-    !/^scripts\/(?:fetch-openapi|generate-commands|release)\.ts$/.test(file)
+    !/^scripts\/(?:fetch-openapi|generate-commands|generate-effect-api|release)\.ts$/.test(
+      file,
+    )
   )
     return false;
   let current: ts.Node | undefined = node;

@@ -35,6 +35,7 @@ test("patched Effect generator preserves headers and SSE contracts without warni
     expect(output).toContain("WidgetsCreate201Headers");
     expect(output).toContain("HttpApiSchema.StreamSse({ events:");
     expect(output).toContain("payload: [HttpApiSchema.NoContent");
+    expect(output).toContain("readonly [x: string]: Schema.Json | undefined");
   } finally {
     rmSync(directory, { force: true, recursive: true });
   }
@@ -88,6 +89,26 @@ function specification() {
                     required: ["event", "data"],
                   },
                   "x-effect-stream": { encoding: "sse" },
+                },
+              },
+            },
+          },
+        },
+      },
+      "/metadata": {
+        get: {
+          operationId: "metadata.get",
+          tags: ["Metadata"],
+          responses: {
+            200: {
+              description: "Metadata",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: { label: { type: "string" } },
+                    additionalProperties: true,
+                  },
                 },
               },
             },
