@@ -173,14 +173,16 @@ Agent mode follows AXI patterns studied from `https://axi.md/` and the public
 - no spinners or prompts in agent, JSON, quiet, CI, or non-TTY modes;
 - unknown routed commands and flags must fail loudly.
 
-Human mode can use tables and prose, but should stay content-first. A no-args
-`akua` invocation currently shows registry state and next-step commands; it does
-not fetch live API state.
+Human mode uses Effect CLI's generated command tree and content-first help. A
+no-args `akua` invocation lists authentication, discovery, and every generated
+public resource group; `akua <resource> --help` lists that resource's actions
+and `akua <resource> <action> --help` documents `--input`. It does not fetch
+live API state.
 
 The implemented command surface includes generated public operations:
 
 ```sh
-akua                                      # registry status home view
+akua                                      # complete Effect CLI command tree
 akua auth login                           # browser/device login
 akua auth login --no-browser              # do not launch a browser
 akua auth login --token <token>           # save a local API token

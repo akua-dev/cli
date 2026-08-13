@@ -18,6 +18,32 @@ import { CliLive } from "../src/runtime/services-live";
 import { runAuthView } from "./auth-test-layer";
 
 describe("akua entrypoint", () => {
+  test("uses Effect CLI to describe the interactive command tree", async () => {
+    const root = await runAkua([]);
+    const auth = await runAkua(["auth", "--help"]);
+
+    expect(root.exitCode).toBe(0);
+    expect(root.stdout).toContain("SUBCOMMANDS");
+    expect(root.stdout).toContain("auth");
+    expect(root.stdout).toContain("commands");
+    expect(root.stdout).toContain("machines");
+    expect(root.stdout).toContain(
+      "agent-provider-exchanges  Run generated agent-provider-exchanges API commands",
+    );
+
+    expect(auth.exitCode).toBe(0);
+    expect(auth.stdout).toContain("login");
+    expect(auth.stdout).toContain("browser/device flow");
+  });
+
+  test("returns a usage exit code when Effect CLI rejects interactive input", async () => {
+    const invalid = await runAkua(["commands", "--not-a-real-flag"]);
+
+    expect(invalid.exitCode).toBe(2);
+    expect(invalid.stdout).toContain("USAGE");
+    expect(invalid.stderr).toContain("Unrecognized flag: --not-a-real-flag");
+  });
+
   test("home and help describe executable generated commands", async () => {
     const home = await runAkua(["--json"]);
     const help = await runAkua(["--help", "--json"]);

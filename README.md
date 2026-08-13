@@ -3,9 +3,10 @@
 `akua` is the public Akua Cloud command-line interface. It is a self-contained
 Bun/TypeScript executable for humans, automation, and coding agents. The current
 MVP implements local token authentication, browser/device login, adaptive
-structured output, and executable public operationId-driven commands. The
-generated typed Effect API and its static executor are derived from OpenAPI for
-every public operation.
+structured output, and executable public operationId-driven commands. Effect
+CLI renders the interactive command tree and validates its documented flags;
+the generated typed Effect API and its static executor are derived from OpenAPI
+for every public operation.
 
 The canonical executable is `akua`; there is no `cnap` compatibility binary.
 
@@ -120,8 +121,9 @@ requires a new version.
 Inspect the installed surface first:
 
 ```sh
-akua --version
-akua --help
+akua                         # complete interactive command tree
+akua auth --help              # authentication subcommands and options
+akua workspaces --help        # generated resource commands
 akua commands --limit 5
 ```
 
