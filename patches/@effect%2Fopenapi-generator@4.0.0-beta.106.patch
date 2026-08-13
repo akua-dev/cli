@@ -123,3 +123,23 @@ index a1c2dce0a23131373824e1a0f11fdfb361faabb5..4207d1022f8b6741ddcd47ed95b875dc
            return true;
          }
          continue;
+diff --git a/dist/HttpApiTransformer.js b/dist/HttpApiTransformer.js
+--- a/dist/HttpApiTransformer.js
++++ b/dist/HttpApiTransformer.js
+@@ -149,7 +149,7 @@ const renderPayload = operation => {
+     return;
+   }
+   if (operation.requestBody?.required === false) {
+-    payloads.unshift("HttpApiSchema.NoContent");
++    payloads.push("HttpApiSchema.NoContent");
+   }
+   return joinSchemas(payloads);
+ };
+diff --git a/src/HttpApiTransformer.ts b/src/HttpApiTransformer.ts
+--- a/src/HttpApiTransformer.ts
++++ b/src/HttpApiTransformer.ts
+@@ -252,3 +252,3 @@ const renderPayload = (operation: ParsedOperation): string | undefined => {
+   if (operation.requestBody?.required === false) {
+-    payloads.unshift("HttpApiSchema.NoContent")
++    payloads.push("HttpApiSchema.NoContent")
+   }

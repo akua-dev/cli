@@ -28,6 +28,8 @@ import {
   Http,
   HttpFailure,
   Process,
+  PublicInput,
+  PublicInputFailure,
   SecureConfig,
   SecureConfigFailure,
 } from "./services";
@@ -164,12 +166,21 @@ export const SecureConfigLive = Layer.succeed(SecureConfig, {
     ),
 });
 
+export const PublicInputLive = Layer.succeed(PublicInput, {
+  read: (source) =>
+    Effect.tryPromise({
+      try: () => (source === "-" ? Bun.stdin.text() : readFile(source, "utf8")),
+      catch: () => new PublicInputFailure(),
+    }),
+});
+
 export const CliLive: Layer.Layer<CliServices> = Layer.mergeAll(
   HttpLive,
   BrowserLive,
   ProcessLive,
   ConsoleLive,
   SecureConfigLive,
+  PublicInputLive,
   ClockLive,
 );
 

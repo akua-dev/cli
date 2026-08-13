@@ -66,6 +66,99 @@ describe("collectPublicCommands", () => {
     });
   });
 
+  test("inherits root security when operation security is absent", () => {
+    const commands = Effect.runSync(
+      collectPublicCommands({
+        security: [{ BearerAuth: [] }],
+        paths: {
+          "/v1/workspaces": {
+            get: {
+              "x-platform-visibility": "PUBLIC",
+              operationId: "workspaces.list",
+            },
+          },
+        },
+      }),
+    );
+
+    expect(commands[0]?.requires_auth).toBe(true);
+  });
+
+  test("uses operation security instead of root security", () => {
+    const commands = Effect.runSync(
+      collectPublicCommands({
+        security: [],
+        paths: {
+          "/v1/workspaces": {
+            get: {
+              "x-platform-visibility": "PUBLIC",
+              operationId: "workspaces.list",
+              security: [{ BearerAuth: [] }],
+            },
+          },
+        },
+      }),
+    );
+
+    expect(commands[0]?.requires_auth).toBe(true);
+  });
+
+  test("treats explicit empty operation security as anonymous", () => {
+    const commands = Effect.runSync(
+      collectPublicCommands({
+        security: [{ BearerAuth: [] }],
+        paths: {
+          "/v1/offers/resolve": {
+            get: {
+              "x-platform-visibility": "PUBLIC",
+              operationId: "offers.resolve",
+              security: [],
+            },
+          },
+        },
+      }),
+    );
+
+    expect(commands[0]?.requires_auth).toBe(false);
+  });
+
+  test("treats an anonymous root security alternative as anonymous", () => {
+    const commands = Effect.runSync(
+      collectPublicCommands({
+        security: [{ BearerAuth: [] }, {}],
+        paths: {
+          "/v1/offers/resolve": {
+            get: {
+              "x-platform-visibility": "PUBLIC",
+              operationId: "offers.resolve",
+            },
+          },
+        },
+      }),
+    );
+
+    expect(commands[0]?.requires_auth).toBe(false);
+  });
+
+  test("treats an anonymous operation security alternative as anonymous", () => {
+    const commands = Effect.runSync(
+      collectPublicCommands({
+        security: [{ BearerAuth: [] }],
+        paths: {
+          "/v1/offers/resolve": {
+            get: {
+              "x-platform-visibility": "PUBLIC",
+              operationId: "offers.resolve",
+              security: [{ BearerAuth: [] }, {}],
+            },
+          },
+        },
+      }),
+    );
+
+    expect(commands[0]?.requires_auth).toBe(false);
+  });
+
   test("sorts generated commands deterministically by operationId", () => {
     const commands = Effect.runSync(
       collectPublicCommands({

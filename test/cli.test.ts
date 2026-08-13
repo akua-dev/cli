@@ -18,6 +18,50 @@ import { CliLive } from "../src/runtime/services-live";
 import { runAuthView } from "./auth-test-layer";
 
 describe("akua entrypoint", () => {
+  test("home and help describe executable generated commands", async () => {
+    const home = await runAkua(["--json"]);
+    const help = await runAkua(["--help", "--json"]);
+
+    expect(home.exitCode).toBe(0);
+    expect(home.stdout).not.toContain("stubbed");
+    expect(home.stdout).not.toContain("mise run");
+    expect(home.stdout).toContain("executable public OpenAPI operations");
+    expect(help.stdout).toContain(
+      "akua <resource> <action> [--input -|<file>]",
+    );
+    expect(help.stdout).toContain(
+      "akua auth login       Sign in with a browser/device flow",
+    );
+    expect(help.stdout).not.toContain("Save a local API token");
+  });
+
+  test("shows command-specific help before parsing commands filters", async () => {
+    const { stdout, exitCode } = await runAkua([
+      "commands",
+      "--help",
+      "--json",
+    ]);
+
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("Usage: akua commands [filters]");
+    expect(stdout).toContain("--operation-id <id>");
+    expect(stdout).not.toContain("akua auth login");
+  });
+
+  test("shows browser/device login options in auth help", async () => {
+    const { stdout, exitCode } = await runAkua([
+      "auth",
+      "login",
+      "--help",
+      "--json",
+    ]);
+
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("Usage: akua auth login");
+    expect(stdout).toContain("--no-browser");
+    expect(stdout).toContain("browser/device flow");
+  });
+
   test("fails loudly on unknown flags", async () => {
     const { stdout, exitCode } = await runAkua([
       "commands",
@@ -165,6 +209,43 @@ describe("akua entrypoint", () => {
         message: "Unexpected argument for commands: extra",
       },
     });
+  });
+
+  test("routes normal generated commands and redacts invalid request input", async () => {
+    const home = await makeTempHome();
+    const inputPath = join(home, "machine-input.json");
+    const sentinel = "request-value-must-not-be-rendered";
+    try {
+      await writeFile(
+        inputPath,
+        JSON.stringify({
+          body: {
+            cluster_id: "clu_123",
+            instance_type: "cx23",
+            compute_config_id: "ccfg_123",
+            undeclared: sentinel,
+          },
+        }),
+      );
+
+      const result = await runAkua(
+        ["machines", "create", "--input", inputPath, "--json"],
+        { HOME: home, AKUA_API_TOKEN: "test-token" },
+      );
+
+      expect(result.exitCode).toBe(2);
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        error: {
+          code: "AKUA_INPUT_INVALID",
+          message:
+            "Input for machines.create does not match the public API contract.",
+        },
+      });
+      expect(result.stdout).not.toContain(sentinel);
+      expect(result.stderr).not.toContain(sentinel);
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
   });
 
   test("auth login stores a token with user-only permissions", async () => {

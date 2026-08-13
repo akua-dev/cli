@@ -1,5 +1,5 @@
-export interface CommandDefinition {
-  operation_id: string;
+export interface CommandDefinition<OperationId extends string = string> {
+  operation_id: OperationId;
   command: string;
   resource: string;
   action: string;

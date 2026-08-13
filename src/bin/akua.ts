@@ -1,10 +1,14 @@
 #!/usr/bin/env bun
-import { Effect, Exit, Runtime } from "effect";
+import { Effect, Exit, Runtime, Stream } from "effect";
 
 import { authView } from "../commands/auth";
+import {
+  generatedCommandView,
+  GeneratedCommandFailure,
+} from "../commands/generated";
 import { buildHomeView } from "../commands/home";
 import { commandRegistry } from "../generated/commands.gen";
-import { commandNotImplemented } from "../runtime/errors";
+import { generatedCommandError } from "../runtime/errors";
 import { detectOutputMode, type OutputMode } from "../runtime/mode";
 import type { RenderEnvelope } from "../runtime/render";
 import {
@@ -15,6 +19,10 @@ import {
 } from "../runtime/effect-runtime";
 import { CliLive } from "../runtime/services-live";
 import { Console, type CliServices } from "../runtime/services";
+import {
+  PublicApiAuthenticationFailure,
+  PublicApiClientLive,
+} from "../runtime/public-api";
 
 const VERSION = "0.9.0"; // x-release-please-version
 
@@ -63,7 +71,7 @@ function mainEffect(
 function route(
   argv: readonly string[],
   env: Record<string, string | undefined>,
-): Effect.Effect<RenderEnvelope, CliFailure, CliServices> {
+): Effect.Effect<RenderEnvelope<CliFailure>, CliFailure, CliServices> {
   return stripGlobalFlags(argv).pipe(
     Effect.flatMap((stripped) => routeCommand(stripped, env)),
   );
@@ -72,8 +80,16 @@ function route(
 function routeCommand(
   argv: readonly string[],
   env: Record<string, string | undefined>,
-): Effect.Effect<RenderEnvelope, CliFailure, CliServices> {
+): Effect.Effect<RenderEnvelope<CliFailure>, CliFailure, CliServices> {
   if (argv.length === 0) return Effect.succeed(buildHomeView());
+
+  if (argv[0] === "commands" && hasHelpFlag(argv.slice(1))) {
+    return Effect.succeed(commandsHelpView());
+  }
+
+  if (argv[0] === "auth" && hasHelpFlag(argv.slice(1))) {
+    return Effect.succeed(authHelpView(argv.slice(1)));
+  }
 
   if (argv.includes("--help") || argv.includes("-h")) {
     return Effect.succeed(helpView());
@@ -99,25 +115,49 @@ function routeCommand(
     return authView(argv.slice(1), env);
   }
 
+  const maybeGenerated = commandRegistry.find(
+    (definition) =>
+      definition.command === argv.slice(0, 2).join(" "),
+  );
+  if (maybeGenerated) {
+    return generatedCommandView(maybeGenerated, argv.slice(2)).pipe(
+      Effect.provide(PublicApiClientLive(env, maybeGenerated.requires_auth)),
+      Effect.map(
+        (envelope): RenderEnvelope<CliFailure> => ({
+          ...envelope,
+          stream: envelope.stream?.pipe(
+            Stream.mapError(generatedCliFailure),
+          ),
+        }),
+      ),
+      Effect.mapError((failure) =>
+        generatedCliFailure(
+          failure instanceof GeneratedCommandFailure
+            ? failure
+            : new GeneratedCommandFailure({
+                operationId: maybeGenerated.operation_id,
+                reason:
+                  failure instanceof PublicApiAuthenticationFailure
+                    ? "auth"
+                    : "transport",
+              }),
+        ),
+      ),
+    );
+  }
+
   const unknownFlag = argv.find((arg) => arg.startsWith("-"));
   if (unknownFlag) {
     return invalidCommandsUsage(`Unknown flag: ${flagName(unknownFlag)}`);
   }
 
-  const maybeGenerated = commandRegistry.find(
-    (definition) => definition.command === argv.join(" "),
-  );
-  if (maybeGenerated) {
-    return Effect.fail(
-      new CommandFailure({
-        error: commandNotImplemented(maybeGenerated.operation_id),
-      }),
-    );
-  }
-
   return Effect.fail(
     new UsageFailure({ message: `Unknown command: ${argv.join(" ")}` }),
   );
+}
+
+function generatedCliFailure(failure: GeneratedCommandFailure): CommandFailure {
+  return new CommandFailure({ error: generatedCommandError(failure) });
 }
 
 function helpView(): RenderEnvelope {
@@ -127,10 +167,12 @@ function helpView(): RenderEnvelope {
       "Usage: akua [--output human|agent|json|quiet] <command>",
       "Commands:",
       "  akua                  Show compact home view",
-      "  akua auth login       Save a local API token",
+      "  akua auth login       Sign in with a browser/device flow",
       "  akua auth status      Show local authentication status",
       "  akua auth logout      Remove the saved local API token",
       "  akua commands         List generated public OpenAPI command registry",
+      "  akua <resource> <action> [--input -|<file>]",
+      "                         Execute a generated public API operation",
       "  akua --help           Show help",
       "  akua --version        Show version",
     ],
@@ -139,6 +181,55 @@ function helpView(): RenderEnvelope {
       { command: "akua commands --json" },
     ],
   };
+}
+
+function commandsHelpView(): RenderEnvelope {
+  return {
+    command: "akua commands --help",
+    observations: [
+      "Usage: akua commands [filters]",
+      "List generated public OpenAPI operations before executing one.",
+      "Filters:",
+      "  --operation-id <id>  Show one operation by its OpenAPI operation ID",
+      "  --resource <name>    Show operations for one resource",
+      "  --limit <n>          Limit the number of displayed operations (default: 20)",
+    ],
+    next_steps: [
+      { command: "akua commands --resource workspaces" },
+      { command: "akua commands --operation-id workspaces.list" },
+    ],
+  };
+}
+
+function authHelpView(argv: readonly string[]): RenderEnvelope {
+  const subcommand = argv.find((value) => !value.startsWith("-"));
+  if (subcommand === "login") {
+    return {
+      command: "akua auth login --help",
+      observations: [
+        "Usage: akua auth login [--no-browser] [--token <token>]",
+        "Sign in with a browser/device flow and save only the resulting access token.",
+        "  --no-browser      Do not open the verification URL automatically",
+        "  --token <token>   Save an explicit API token for noninteractive automation",
+      ],
+      next_steps: [{ command: "akua auth login" }],
+    };
+  }
+
+  return {
+    command: "akua auth --help",
+    observations: [
+      "Usage: akua auth <login|status|logout>",
+      "  login   Sign in with a browser/device flow",
+      "  status  Show the active credential source",
+      "  logout  Remove the stored credential",
+    ],
+    next_steps: [{ command: "akua auth login" }],
+  };
+}
+
+function hasHelpFlag(argv: readonly string[]): boolean {
+  return argv.includes("--help") || argv.includes("-h");
 }
 
 function stripGlobalFlags(

@@ -1,7 +1,6 @@
 # Akua Cloud CLI Architecture
 
-Status: local authentication, generated public API contracts, and command
-discovery. The generic public API executor is not yet wired.
+Status: local authentication and executable generated public API commands.
 
 ## Decisions And Non-Goals
 
@@ -34,6 +33,8 @@ src/commands/auth.ts             local auth/config command implementation
 src/runtime/                     output, errors, exit codes, command contracts
 src/generated/commands.gen.ts    generated public command registry
 src/generated/openapi-api.gen.ts generated typed public Effect API
+src/generated/public-operation-executor.gen.ts
+                                 generated static public operation executor
 .github/workflows/update-openapi.yml
                                  idempotent public OpenAPI update automation
 .github/workflows/release-please.yml
@@ -80,22 +81,23 @@ unique; it does not currently enforce uniqueness itself.
 the same public contract, including routes, request/response schemas, and typed
 errors. Neither artifact is hand-written API coverage.
 
-The generic executor is not yet wired to the generated API. A generated command
-therefore remains discoverable but reports that execution is not implemented.
-Do not add resource- or provider-specific overlays to close this gap. The future
-executor must consume only generated path, query, header, and body input.
+The generated static executor connects every command to its exact Effect client
+method. Commands accept only a JSON object with generated `path`, `query`,
+`headers`, and `body` partitions via `--input -` or `--input <file>`. Each
+partition is decoded strictly before transport, and request values are never
+included in diagnostics. Do not add resource- or provider-specific overlays.
 
 Generation tasks:
 
 ```sh
 mise run spec:fetch      # writes openapi/public.json
-mise run generate        # writes both generated public API artifacts
-mise run generate:check  # fails on drift in either generated artifact
+mise run generate        # writes all generated public API artifacts
+mise run generate:check  # fails on drift in any generated artifact
 ```
 
 `mise run spec:fetch` defaults to `AKUA_OPENAPI_URL`, which is set to the
 production source in `mise.toml`, and `scripts/fetch-openapi.ts` also accepts an
-explicit URL argument. Any OpenAPI update must regenerate and review both
+explicit URL argument. Any OpenAPI update must regenerate and review all
 artifacts with `mise run generate:check` before it is accepted.
 
 ## API, Auth, And Config Model
@@ -175,7 +177,7 @@ Human mode can use tables and prose, but should stay content-first. A no-args
 `akua` invocation currently shows registry state and next-step commands; it does
 not fetch live API state.
 
-The implemented command surface is intentionally small:
+The implemented command surface includes generated public operations:
 
 ```sh
 akua                                      # registry status home view
@@ -188,6 +190,8 @@ akua commands                            # first 20 generated public commands
 akua commands --resource workspaces      # resource filter
 akua commands --operation-id workspaces.list
 akua commands --limit 5                  # positive integer limit
+akua workspaces list --input -           # stdin JSON request
+akua machines create --input request.json # file JSON request
 akua --help                              # also -h
 akua --version                           # also -v or -V
 ```
@@ -236,7 +240,7 @@ The public command registry and typed Effect API contain only operations marked
 private operations must be absent unless a separate build target is deliberately
 added later. The CLI has no provider-specific command, flag, credential loader,
 or environment variable. Provider-specific values belong to a generated public
-API request input once the generic executor is implemented.
+API request body.
 
 ## Mutations And Safety
 
@@ -315,7 +319,7 @@ Current tests cover:
 - native install-smoke and workflow ordering/permission contracts;
 - public install/auth/output/codegen documentation and source-skill ownership.
 
-Current validation also runs `mise run generate:check` to catch drift in both
+Current validation also runs `mise run generate:check` to catch drift in all
 generated API artifacts.
 
 Future execution slices should add:
@@ -323,7 +327,7 @@ Future execution slices should add:
 - golden command output by mode;
 - mocked API calls for workspace, list/get, and operation flows;
 - destructive command refusal tests in CI/non-TTY/agent modes;
-- API-backed generated command integration tests.
+- broader API-backed generated command integration tests.
 
 ## Migration Boundary
 

@@ -12,3 +12,48 @@ index 59399d367e3b0755e2394e384e3b1586e5032363..c3d282057f7d7d4c788b5495b7f96d41
            return makeCode(`Schema.StructWithRest(Schema.Struct({ ${propertyRuntimes} }), [${indexRuntimes}])`, `{ ${propertyTypes}${properties.length > 0 ? ", " : ""}${indexTypes} }`);
          }
       case "Union":
+diff --git a/dist/unstable/httpapi/HttpApiEndpoint.d.ts b/dist/unstable/httpapi/HttpApiEndpoint.d.ts
+--- a/dist/unstable/httpapi/HttpApiEndpoint.d.ts
++++ b/dist/unstable/httpapi/HttpApiEndpoint.d.ts
+@@ -283,12 +283,10 @@ export type ClientRequest<Params extends Schema.Constraint, Query extends Schema
+     readonly query: Query["Type"];
+ }) & ([Headers["Type"]] extends [never] ? {} : {
+     readonly headers: Headers["Type"];
+-}) & ([Payload["Type"]] extends [never] ? {} : Payload["Type"] extends infer P ? P extends Brand<HttpApiSchema.MultipartTypeId> | Brand<HttpApiSchema.MultipartStreamTypeId> ? {
+-    readonly payload: FormData;
+-} : {
++}) & ([Payload["Type"]] extends [never] ? {} : [Extract<Payload["Type"], Brand<HttpApiSchema.MultipartTypeId> | Brand<HttpApiSchema.MultipartStreamTypeId>>] extends [never] ? {
+     readonly payload: Payload["Type"];
+ } : {
+-    readonly payload: Payload["Type"];
++    readonly payload: FormData | Exclude<Payload["Type"], Brand<HttpApiSchema.MultipartTypeId> | Brand<HttpApiSchema.MultipartStreamTypeId>>;
+ })) extends infer Req ? keyof Req extends never ? (void | {
+     readonly responseMode?: ResponseMode;
+ }) : Req & {
+diff --git a/src/unstable/httpapi/HttpApiEndpoint.ts b/src/unstable/httpapi/HttpApiEndpoint.ts
+--- a/src/unstable/httpapi/HttpApiEndpoint.ts
++++ b/src/unstable/httpapi/HttpApiEndpoint.ts
+@@ -502,11 +502,18 @@ export type ClientRequest<
+   & ([Query["Type"]] extends [never] ? {} : { readonly query: Query["Type"] })
+   & ([Headers["Type"]] extends [never] ? {} : { readonly headers: Headers["Type"] })
+   & ([Payload["Type"]] extends [never] ? {}
+-    : Payload["Type"] extends infer P ?
+-      P extends Brand<HttpApiSchema.MultipartTypeId> | Brand<HttpApiSchema.MultipartStreamTypeId>
+-        ? { readonly payload: FormData }
+-      : { readonly payload: Payload["Type"] }
+-    : { readonly payload: Payload["Type"] })
++    : [Extract<
++      Payload["Type"],
++      Brand<HttpApiSchema.MultipartTypeId> | Brand<HttpApiSchema.MultipartStreamTypeId>
++    >] extends [never] ? { readonly payload: Payload["Type"] }
++    : {
++      readonly payload:
++        | FormData
++        | Exclude<
++          Payload["Type"],
++          Brand<HttpApiSchema.MultipartTypeId> | Brand<HttpApiSchema.MultipartStreamTypeId>
++        >
++    })
+ ) extends infer Req ? keyof Req extends never ? (void | { readonly responseMode?: ResponseMode }) :
+   Req & { readonly responseMode?: ResponseMode } :
+   void

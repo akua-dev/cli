@@ -40,7 +40,8 @@ describe("distribution documentation", () => {
       "mise run generate:check",
       "operationId",
       "generated typed Effect API",
-      "generic executor is not yet wired",
+      "akua workspaces list --input -",
+      "akua machines create --input -",
       "provider-specific commands",
       "brew upgrade akua",
     ]) {
@@ -48,23 +49,22 @@ describe("distribution documentation", () => {
     }
     expect(readme).not.toContain("skills/akua/");
     expect(readme).not.toContain("akua-dev/skills");
-    expect(readme).toMatch(
-      /API commands still report that execution\s+is not implemented\./,
-    );
-    expect(readme).not.toContain("Generated API commands execute");
+    expect(readme).toContain("Generated API commands execute");
+    expect(readme).not.toContain("generic executor is not yet wired");
     expect(readme).not.toContain("agent-skills-standard-following");
     expect(readme).not.toContain("skills add akua-dev/skills");
   });
 
-  test("architecture records device authentication and both generated API artifacts without claiming execution", async () => {
+  test("architecture records device authentication and all generated API artifacts", async () => {
     const architecture = await text("docs/architecture.md");
 
     for (const value of [
       "src/generated/commands.gen.ts",
       "src/generated/openapi-api.gen.ts",
+      "src/generated/public-operation-executor.gen.ts",
       "Browser/device login",
       "akua auth login --no-browser",
-      "generic executor is not yet wired",
+      "--input -",
       "provider-specific command",
     ]) {
       expect(architecture).toContain(value);

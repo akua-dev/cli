@@ -12,14 +12,17 @@ import { ScriptFiles, ScriptHostFailure } from "../scripts/runtime/services";
 
 const sourcePath = "openapi/public.json";
 const outputPath = "src/generated/openapi-api.gen.ts";
+const executorPath = "src/generated/public-operation-executor.gen.ts";
 
 test("generates a typed HttpApi module from the public OpenAPI contract", async () => {
-  let written = "";
+  let writtenApi = "";
+  let writtenExecutor = "";
   const layer = Layer.succeed(ScriptFiles, {
     readText: () => Effect.succeed(JSON.stringify(publicSpec())),
-    writeText: (_, contents) =>
+    writeText: (path, contents) =>
       Effect.sync(() => {
-        written = contents;
+        if (path === outputPath) writtenApi = contents;
+        if (path === executorPath) writtenExecutor = contents;
       }),
   });
 
@@ -27,7 +30,8 @@ test("generates a typed HttpApi module from the public OpenAPI contract", async 
     generateEffectApi(sourcePath, outputPath).pipe(Effect.provide(layer)),
   );
 
-  expect(written).toBe(generated);
+  expect(writtenApi).toBe(generated);
+  expect(writtenExecutor).toContain('case "secrets.create":');
   expect(generated).toContain(
     'HttpApiEndpoint.post("secretsCreate", "/v1/secrets"',
   );
@@ -120,8 +124,16 @@ test("propagates generated artifact read failures instead of treating them as dr
 test("checked-in public contract produces the committed strict Effect API artifact", async () => {
   const source = readFileSync(sourcePath, "utf8");
   const artifact = readFileSync(outputPath, "utf8");
+  const executor = readFileSync(executorPath, "utf8");
   const layer = Layer.succeed(ScriptFiles, {
-    readText: (path) => Effect.succeed(path === sourcePath ? source : artifact),
+    readText: (path) =>
+      Effect.succeed(
+        path === sourcePath
+          ? source
+          : path === outputPath
+            ? artifact
+            : executor,
+      ),
     writeText: () => Effect.void,
   });
 
@@ -132,6 +144,7 @@ test("checked-in public contract produces the committed strict Effect API artifa
   expect(artifact).toContain('annotate(OpenApi.Identifier, "secrets.create")');
   expect(typeAssertions(artifact)).toEqual([]);
   expect(artifact).not.toMatch(/[ \t]+$/m);
+  expect(executor).toContain('case "machines.create":');
 });
 
 function publicSpec() {

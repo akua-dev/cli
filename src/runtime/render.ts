@@ -1,20 +1,47 @@
 import type { AkuaCliError, NextStep } from "./errors";
 import type { OutputMode } from "./mode";
+import type * as Stream from "effect/Stream";
 
-export interface RenderEnvelope {
+export interface RenderEnvelope<StreamFailure = never> {
   command: string;
   status?: "ok";
   observations?: readonly string[];
   data?: unknown;
+  stream?: Stream.Stream<unknown, StreamFailure, never>;
   next_steps?: readonly NextStep[];
 }
 
-export function renderSuccess(envelope: RenderEnvelope, mode: OutputMode): string {
+export function renderStreamSuccess(
+  envelope: RenderEnvelope<unknown>,
+  data: unknown,
+  mode: OutputMode,
+): string {
+  if (mode === "quiet") return "";
+  const item: RenderEnvelope = {
+    status: "ok",
+    command: envelope.command,
+    data,
+  };
+  return mode === "json"
+    ? `${JSON.stringify(item)}\n`
+    : renderSuccess(item, mode);
+}
+
+export function renderSuccess(
+  envelope: RenderEnvelope<unknown>,
+  mode: OutputMode,
+): string {
   if (mode === "quiet") {
     return "";
   }
 
-  const payload: RenderEnvelope = { status: "ok", ...envelope };
+  const payload: RenderEnvelope = {
+    status: "ok",
+    command: envelope.command,
+    observations: envelope.observations,
+    data: envelope.data,
+    next_steps: envelope.next_steps,
+  };
   if (mode === "json") {
     return `${JSON.stringify(payload, null, 2)}\n`;
   }
@@ -54,7 +81,7 @@ export function renderToon(value: unknown): string {
   return `${renderValue(value, 0).join("\n")}\n`;
 }
 
-function renderHuman(envelope: RenderEnvelope): string {
+function renderHuman(envelope: RenderEnvelope<unknown>): string {
   const lines: string[] = [];
   if (envelope.observations) {
     lines.push(...envelope.observations);
