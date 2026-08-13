@@ -83,6 +83,14 @@ function routeCommand(
 ): Effect.Effect<RenderEnvelope<CliFailure>, CliFailure, CliServices> {
   if (argv.length === 0) return Effect.succeed(buildHomeView());
 
+  if (argv[0] === "commands" && hasHelpFlag(argv.slice(1))) {
+    return Effect.succeed(commandsHelpView());
+  }
+
+  if (argv[0] === "auth" && hasHelpFlag(argv.slice(1))) {
+    return Effect.succeed(authHelpView(argv.slice(1)));
+  }
+
   if (argv.includes("--help") || argv.includes("-h")) {
     return Effect.succeed(helpView());
   }
@@ -173,6 +181,55 @@ function helpView(): RenderEnvelope {
       { command: "akua commands --json" },
     ],
   };
+}
+
+function commandsHelpView(): RenderEnvelope {
+  return {
+    command: "akua commands --help",
+    observations: [
+      "Usage: akua commands [filters]",
+      "List generated public OpenAPI operations before executing one.",
+      "Filters:",
+      "  --operation-id <id>  Show one operation by its OpenAPI operation ID",
+      "  --resource <name>    Show operations for one resource",
+      "  --limit <n>          Limit the number of displayed operations (default: 20)",
+    ],
+    next_steps: [
+      { command: "akua commands --resource workspaces" },
+      { command: "akua commands --operation-id workspaces.list" },
+    ],
+  };
+}
+
+function authHelpView(argv: readonly string[]): RenderEnvelope {
+  const subcommand = argv.find((value) => !value.startsWith("-"));
+  if (subcommand === "login") {
+    return {
+      command: "akua auth login --help",
+      observations: [
+        "Usage: akua auth login [--no-browser] [--token <token>]",
+        "Sign in with a browser/device flow and save only the resulting access token.",
+        "  --no-browser      Do not open the verification URL automatically",
+        "  --token <token>   Save an explicit API token for noninteractive automation",
+      ],
+      next_steps: [{ command: "akua auth login" }],
+    };
+  }
+
+  return {
+    command: "akua auth --help",
+    observations: [
+      "Usage: akua auth <login|status|logout>",
+      "  login   Sign in with a browser/device flow",
+      "  status  Show the active credential source",
+      "  logout  Remove the stored credential",
+    ],
+    next_steps: [{ command: "akua auth login" }],
+  };
+}
+
+function hasHelpFlag(argv: readonly string[]): boolean {
+  return argv.includes("--help") || argv.includes("-h");
 }
 
 function stripGlobalFlags(

@@ -35,6 +35,33 @@ describe("akua entrypoint", () => {
     expect(help.stdout).not.toContain("Save a local API token");
   });
 
+  test("shows command-specific help before parsing commands filters", async () => {
+    const { stdout, exitCode } = await runAkua([
+      "commands",
+      "--help",
+      "--json",
+    ]);
+
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("Usage: akua commands [filters]");
+    expect(stdout).toContain("--operation-id <id>");
+    expect(stdout).not.toContain("akua auth login");
+  });
+
+  test("shows browser/device login options in auth help", async () => {
+    const { stdout, exitCode } = await runAkua([
+      "auth",
+      "login",
+      "--help",
+      "--json",
+    ]);
+
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("Usage: akua auth login");
+    expect(stdout).toContain("--no-browser");
+    expect(stdout).toContain("browser/device flow");
+  });
+
   test("fails loudly on unknown flags", async () => {
     const { stdout, exitCode } = await runAkua([
       "commands",
