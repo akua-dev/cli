@@ -37,7 +37,7 @@ export class PublicApiAuthenticationFailure extends Data.TaggedError(
 
 export function PublicApiClientLive(
   env: Record<string, string | undefined>,
-  requiresAuth = true,
+  requiresAuth: boolean,
 ): Layer.Layer<
   PublicApiClient,
   PublicApiAuthenticationFailure,
@@ -46,7 +46,9 @@ export function PublicApiClientLive(
   return Layer.effect(
     PublicApiClient,
     Effect.gen(function* () {
-      const token = yield* resolvePublicApiToken(env, requiresAuth);
+      const token = requiresAuth
+        ? yield* resolvePublicApiToken(env)
+        : undefined;
       const responseStatus = yield* Ref.make<number | undefined>(undefined);
       const semaphore = yield* Semaphore.make(1);
       const client = yield* HttpApiClient.make(PublicApi, {
@@ -74,9 +76,8 @@ export function PublicApiClientLive(
 
 function resolvePublicApiToken(
   env: Record<string, string | undefined>,
-  requiresAuth: boolean,
 ): Effect.Effect<
-  string | undefined,
+  string,
   PublicApiAuthenticationFailure,
   SecureConfig
 > {
@@ -86,11 +87,9 @@ function resolvePublicApiToken(
   }
   const home = env.HOME;
   if (home === undefined || home === "") {
-    return requiresAuth
-      ? Effect.fail(
-          new PublicApiAuthenticationFailure({ reason: "missing" }),
-        )
-      : Effect.succeed(undefined);
+    return Effect.fail(
+      new PublicApiAuthenticationFailure({ reason: "missing" }),
+    );
   }
   return Effect.gen(function* () {
     const config = yield* SecureConfig;
@@ -101,7 +100,7 @@ function resolvePublicApiToken(
           () => new PublicApiAuthenticationFailure({ reason: "config" }),
         ),
       );
-    return token === undefined && requiresAuth
+    return token === undefined
       ? yield* Effect.fail(
           new PublicApiAuthenticationFailure({ reason: "missing" }),
         )

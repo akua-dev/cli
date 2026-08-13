@@ -8,7 +8,11 @@ import { commandRegistry } from "../src/generated/commands.gen";
 import * as Api from "../src/generated/openapi-api.gen";
 import { generatedCommandError } from "../src/runtime/errors";
 import { PublicApiClientLive } from "../src/runtime/public-api";
-import { PublicInput, SecureConfig } from "../src/runtime/services";
+import {
+  PublicInput,
+  SecureConfig,
+  SecureConfigFailure,
+} from "../src/runtime/services";
 
 describe("generated public commands", () => {
   test("workspaces.list sends the decoded query and bearer token", async () => {
@@ -170,33 +174,68 @@ describe("generated public commands", () => {
   });
 
   test("offers.resolve executes anonymously without a bearer token", async () => {
-    let received: Request | undefined;
-    await expect(
-      runGenerated(
-        "offers.resolve",
-        ["--input", "-"],
-        '{"query":{"short_hash":"offer123"}}',
-        (input, init) => {
-          received = new Request(input, init);
-          return Promise.resolve(
-            Response.json(
-              {
-                success: false,
-                errors: [{ code: 7002, message: "Offer not found." }],
-                result: {},
-              },
-              { status: 404 },
-            ),
-          );
-        },
-        { env: {}, requiresAuth: false },
-      ),
-    ).rejects.toMatchObject({
+    const execution = runAnonymousOffer({ env: {} });
+    await expect(execution.result).rejects.toMatchObject({
       _tag: "GeneratedCommandFailure",
       reason: "api",
       status: 404,
     });
-    expect(received?.headers.has("authorization")).toBe(false);
+    expect(execution.request()?.headers.has("authorization")).toBe(false);
+  });
+
+  test("anonymous operations ignore environment credentials", async () => {
+    const execution = runAnonymousOffer({
+      env: { AKUA_API_TOKEN: "environment-token", HOME: "/users/test" },
+    });
+    await expect(execution.result).rejects.toMatchObject({
+      reason: "api",
+      status: 404,
+    });
+
+    expect(execution.request()?.headers.has("authorization")).toBe(false);
+  });
+
+  test("anonymous operations do not read stored credentials", async () => {
+    let configReads = 0;
+    const execution = runAnonymousOffer({
+      env: { HOME: "/users/test" },
+      readToken: () =>
+        Effect.sync(() => {
+          configReads += 1;
+          return "stored-token";
+        }),
+    });
+    await expect(execution.result).rejects.toMatchObject({
+      reason: "api",
+      status: 404,
+    });
+
+    expect(configReads).toBe(0);
+    expect(execution.request()?.headers.has("authorization")).toBe(false);
+  });
+
+  test("anonymous operations do not read malformed credential config", async () => {
+    let configReads = 0;
+    const execution = runAnonymousOffer({
+      env: { HOME: "/users/test" },
+      readToken: () => {
+        configReads += 1;
+        return Effect.fail(
+          new SecureConfigFailure({
+            operation: "read",
+            path: "/users/test/.config/akua/config.json",
+            cause: "malformed JSON",
+          }),
+        );
+      },
+    });
+    await expect(execution.result).rejects.toMatchObject({
+      reason: "api",
+      status: 404,
+    });
+
+    expect(configReads).toBe(0);
+    expect(execution.request()?.headers.has("authorization")).toBe(false);
   });
 
   test("installs.getLogs exposes decoded SSE events as a stream", async () => {
@@ -257,6 +296,14 @@ describe("generated public commands", () => {
   });
 });
 
+interface RunGeneratedOptions {
+  readonly env?: Record<string, string | undefined>;
+  readonly readToken?: () => Effect.Effect<
+    string | undefined,
+    SecureConfigFailure
+  >;
+}
+
 function runGenerated(
   operationId: string,
   argv: readonly string[],
@@ -265,10 +312,7 @@ function runGenerated(
     input: RequestInfo | URL,
     init?: RequestInit,
   ) => Promise<Response>,
-  options: {
-    readonly env?: Record<string, string | undefined>;
-    readonly requiresAuth?: boolean;
-  } = {},
+  options: RunGeneratedOptions = {},
 ) {
   const definition = commandRegistry.find(
     (candidate) => candidate.operation_id === operationId,
@@ -279,7 +323,7 @@ function runGenerated(
   const services = Layer.mergeAll(
     Layer.succeed(PublicInput, { read: () => Effect.succeed(input) }),
     Layer.succeed(SecureConfig, {
-      readToken: () => Effect.succeed(undefined),
+      readToken: options.readToken ?? (() => Effect.succeed(undefined)),
       saveToken: () => Effect.void,
       removeToken: () => Effect.succeed(false),
     }),
@@ -290,7 +334,7 @@ function runGenerated(
       Effect.provide(
         PublicApiClientLive(
           options.env ?? { AKUA_API_TOKEN: "test-token" },
-          options.requiresAuth ?? true,
+          definition.requires_auth,
         ),
       ),
       Effect.provide(services),
@@ -300,6 +344,32 @@ function runGenerated(
       ),
     ),
   );
+}
+
+function runAnonymousOffer(options: RunGeneratedOptions) {
+  let received: Request | undefined;
+  return {
+    request: () => received,
+    result: runGenerated(
+      "offers.resolve",
+      ["--input", "-"],
+      '{"query":{"short_hash":"offer123"}}',
+      (input, init) => {
+        received = new Request(input, init);
+        return Promise.resolve(
+          Response.json(
+            {
+              success: false,
+              errors: [{ code: 7002, message: "Offer not found." }],
+              result: {},
+            },
+            { status: 404 },
+          ),
+        );
+      },
+      options,
+    ),
+  };
 }
 
 function machineOperation() {
