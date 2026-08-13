@@ -104,10 +104,21 @@ describe("distribution workflows", () => {
   test("OpenAPI automation remains idempotent and restricted to generated inputs", async () => {
     const workflow = await readFile(".github/workflows/update-openapi.yml", "utf8");
 
-    expect(workflow).toContain('path != "openapi/public.json" && path != "src/generated/commands.gen.ts"');
-    expect(workflow).toContain("git diff --quiet -- openapi/public.json src/generated/commands.gen.ts");
+    for (const path of [
+      "openapi/public.json",
+      "src/generated/commands.gen.ts",
+      "src/generated/openapi-api.gen.ts",
+      "src/generated/public-operation-executor.gen.ts",
+    ]) {
+      expect(workflow).toContain(path);
+    }
+    expect(workflow).toContain(
+      "git diff --quiet -- openapi/public.json src/generated/commands.gen.ts src/generated/openapi-api.gen.ts src/generated/public-operation-executor.gen.ts",
+    );
     expect(workflow).toContain("if: steps.openapi-diff.outputs.changed == 'true'");
     expect(workflow).toContain("add-paths: |");
-    expect(workflow).toContain("openapi/public.json\n            src/generated/commands.gen.ts");
+    expect(workflow).toContain(
+      "openapi/public.json\n            src/generated/commands.gen.ts\n            src/generated/openapi-api.gen.ts\n            src/generated/public-operation-executor.gen.ts",
+    );
   });
 });

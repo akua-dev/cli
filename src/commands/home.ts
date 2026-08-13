@@ -15,15 +15,14 @@ export function buildHomeView(): RenderEnvelope {
   return {
     command: "akua",
     observations: [
-      "Akua Cloud CLI scaffold.",
-      `${commandRegistry.length} public OpenAPI operations are registered for generated commands.`,
-      "API execution is intentionally stubbed in this prototype.",
+      "Akua Cloud CLI.",
+      `${commandRegistry.length} executable public OpenAPI operations are available as generated commands.`,
     ],
     data: topTags,
     next_steps: [
       { command: "akua commands" },
       { command: "akua commands --json" },
-      { command: "mise run spec:fetch && mise run generate" },
+      { command: "akua workspaces list --input -" },
     ],
   };
 }

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { Clock, Effect, Layer } from "effect";
+import { Clock, Effect, Layer, Stream } from "effect";
 import { TestClock } from "effect/testing";
 
 import { runCli } from "../src/runtime/effect-runtime";
@@ -46,6 +46,43 @@ describe("Effect CLI runtime", () => {
       command: "akua test",
       data: { runtime: "effect-v4" },
     });
+  });
+
+  test("renders streaming command results incrementally", async () => {
+    const stdout: string[] = [];
+    const exitCode = await Effect.runPromise(
+      Effect.provide(
+        runCli(
+          Effect.succeed({
+            command: "akua installs get-logs",
+            stream: Stream.make(
+              { event: "message", data: "first" },
+              { event: "end", data: "{}" },
+            ),
+          }),
+          { mode: "json" },
+        ),
+        Layer.succeed(Console, {
+          stdoutIsTTY: false,
+          writeStderr: () => Effect.void,
+          writeStdout: (value) => Effect.sync(() => stdout.push(value)),
+        }),
+      ),
+    );
+
+    expect(exitCode).toBe(0);
+    expect(stdout.map((value) => JSON.parse(value))).toEqual([
+      {
+        status: "ok",
+        command: "akua installs get-logs",
+        data: { event: "message", data: "first" },
+      },
+      {
+        status: "ok",
+        command: "akua installs get-logs",
+        data: { event: "end", data: "{}" },
+      },
+    ]);
   });
 
   test("uses service tags and TestClock layers without host dependencies", async () => {

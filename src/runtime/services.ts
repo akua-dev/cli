@@ -27,6 +27,10 @@ export class SecureConfigFailure extends Data.TaggedError(
   readonly cause: unknown;
 }> {}
 
+export class PublicInputFailure extends Data.TaggedError(
+  "PublicInputFailure",
+)<{}> {}
+
 export class Http extends Context.Service<
   Http,
   {
@@ -75,6 +79,15 @@ export class SecureConfig extends Context.Service<
   }
 >()("platform/cli/SecureConfig") {}
 
+export class PublicInput extends Context.Service<
+  PublicInput,
+  {
+    readonly read: (
+      source: "-" | string,
+    ) => Effect.Effect<string, PublicInputFailure>;
+  }
+>()("platform/cli/PublicInput") {}
+
 export class CliClock extends Context.Service<
   CliClock,
   {
@@ -89,4 +102,5 @@ export type CliServices =
   | Process
   | Console
   | SecureConfig
+  | PublicInput
   | CliClock;

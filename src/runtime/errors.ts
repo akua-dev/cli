@@ -1,4 +1,5 @@
 import { ExitCodes, type ExitCode } from "./exit-codes";
+import type { GeneratedCommandFailure } from "../commands/generated";
 
 export interface NextStep {
   command: string;
@@ -13,6 +14,7 @@ export interface CliErrorOptions {
   path?: readonly string[];
   requestId?: string;
   retryAfter?: string | number | null;
+  response?: unknown;
   nextSteps?: readonly NextStep[];
   exitCode?: ExitCode;
 }
@@ -25,6 +27,7 @@ export class AkuaCliError extends Error {
   readonly requestId?: string;
   readonly retryAfter?: string | number | null;
   readonly nextSteps: readonly NextStep[];
+  readonly response?: unknown;
   readonly exitCode: ExitCode;
 
   constructor(options: CliErrorOptions) {
@@ -37,6 +40,7 @@ export class AkuaCliError extends Error {
     this.requestId = options.requestId;
     this.retryAfter = options.retryAfter;
     this.nextSteps = options.nextSteps ?? [];
+    this.response = options.response;
     this.exitCode = options.exitCode ?? exitCodeForStatus(options.status);
   }
 
@@ -50,6 +54,7 @@ export class AkuaCliError extends Error {
         path: this.path.length > 0 ? this.path : undefined,
         request_id: this.requestId,
         retry_after: this.retryAfter ?? undefined,
+        response: this.response,
         next_steps: this.nextSteps.length > 0 ? this.nextSteps : undefined,
       },
     };
@@ -66,16 +71,64 @@ export function usageError(message: string): AkuaCliError {
   });
 }
 
-export function commandNotImplemented(operationId: string): AkuaCliError {
+export function generatedCommandError(
+  failure: GeneratedCommandFailure,
+): AkuaCliError {
+  if (failure.reason === "usage") {
+    return usageError(
+      `Operation ${failure.operationId} accepts only --input - or --input <file>.`,
+    );
+  }
+  if (failure.reason === "input") {
+    return new AkuaCliError({
+      type: "input_error",
+      code: "AKUA_INPUT_INVALID",
+      message: `Input for ${failure.operationId} does not match the public API contract.`,
+      exitCode: ExitCodes.Usage,
+    });
+  }
+  if (failure.reason === "source") {
+    return new AkuaCliError({
+      type: "input_error",
+      code: "AKUA_INPUT_UNREADABLE",
+      message: `Input for ${failure.operationId} could not be read.`,
+      exitCode: ExitCodes.Usage,
+    });
+  }
+  if (failure.reason === "auth") {
+    return new AkuaCliError({
+      type: "authentication_error",
+      code: "AKUA_AUTH_REQUIRED",
+      message: "Authenticate with akua auth login before calling the public API.",
+      exitCode: ExitCodes.AuthRequired,
+      nextSteps: [{ command: "akua auth login" }],
+    });
+  }
+  if (failure.reason === "api") {
+    const first = failure.apiError?.errors[0];
+    return new AkuaCliError({
+      type: "api_error",
+      code:
+        first === undefined ? "AKUA_API_ERROR" : `AKUA_API_${first.code}`,
+      message: first?.message ?? "The public API rejected the request.",
+      status: failure.status,
+      response: failure.apiError,
+    });
+  }
+  if (failure.reason === "response") {
+    return new AkuaCliError({
+      type: "response_error",
+      code: "AKUA_API_CONTRACT_ERROR",
+      message: "The public API response did not match its generated contract.",
+      status: failure.status,
+      exitCode: ExitCodes.Retryable,
+    });
+  }
   return new AkuaCliError({
-    type: "not_implemented",
-    code: "AKUA_COMMAND_NOT_IMPLEMENTED",
-    message: `Operation ${operationId} is registered but command execution is not implemented yet.`,
-    exitCode: ExitCodes.Usage,
-    nextSteps: [
-      { command: "akua commands" },
-      { command: `akua commands --operation-id ${operationId}` },
-    ],
+    type: "transport_error",
+    code: "AKUA_API_UNAVAILABLE",
+    message: "The public API request could not be completed.",
+    exitCode: ExitCodes.Retryable,
   });
 }
 

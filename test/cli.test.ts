@@ -18,6 +18,19 @@ import { CliLive } from "../src/runtime/services-live";
 import { runAuthView } from "./auth-test-layer";
 
 describe("akua entrypoint", () => {
+  test("home and help describe executable generated commands", async () => {
+    const home = await runAkua(["--json"]);
+    const help = await runAkua(["--help", "--json"]);
+
+    expect(home.exitCode).toBe(0);
+    expect(home.stdout).not.toContain("stubbed");
+    expect(home.stdout).not.toContain("mise run");
+    expect(home.stdout).toContain("executable public OpenAPI operations");
+    expect(help.stdout).toContain(
+      "akua <resource> <action> [--input -|<file>]",
+    );
+  });
+
   test("fails loudly on unknown flags", async () => {
     const { stdout, exitCode } = await runAkua([
       "commands",
@@ -165,6 +178,43 @@ describe("akua entrypoint", () => {
         message: "Unexpected argument for commands: extra",
       },
     });
+  });
+
+  test("routes normal generated commands and redacts invalid request input", async () => {
+    const home = await makeTempHome();
+    const inputPath = join(home, "machine-input.json");
+    const sentinel = "request-value-must-not-be-rendered";
+    try {
+      await writeFile(
+        inputPath,
+        JSON.stringify({
+          body: {
+            cluster_id: "clu_123",
+            instance_type: "cx23",
+            compute_config_id: "ccfg_123",
+            undeclared: sentinel,
+          },
+        }),
+      );
+
+      const result = await runAkua(
+        ["machines", "create", "--input", inputPath, "--json"],
+        { HOME: home, AKUA_API_TOKEN: "test-token" },
+      );
+
+      expect(result.exitCode).toBe(2);
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        error: {
+          code: "AKUA_INPUT_INVALID",
+          message:
+            "Input for machines.create does not match the public API contract.",
+        },
+      });
+      expect(result.stdout).not.toContain(sentinel);
+      expect(result.stderr).not.toContain(sentinel);
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
   });
 
   test("auth login stores a token with user-only permissions", async () => {

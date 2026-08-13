@@ -1,8 +1,13 @@
-import { Data, Effect } from "effect";
+import { Data, Effect, Stream } from "effect";
 
 import { AkuaCliError, usageError } from "./errors";
 import type { OutputMode } from "./mode";
-import { renderError, renderSuccess, type RenderEnvelope } from "./render";
+import {
+  renderError,
+  renderStreamSuccess,
+  renderSuccess,
+  type RenderEnvelope,
+} from "./render";
 import { Console } from "./services";
 
 export class UsageFailure extends Data.TaggedError("UsageFailure")<{
@@ -46,24 +51,43 @@ export interface CliRenderer {
 }
 
 export function runCli<R>(
-  command: Effect.Effect<RenderEnvelope, CliFailure, R>,
+  command: Effect.Effect<RenderEnvelope<CliFailure>, CliFailure, R>,
   renderer: CliRenderer,
 ): Effect.Effect<number, never, R | Console> {
   return Effect.gen(function* () {
     const console = yield* Console;
     return yield* Effect.matchEffect(command, {
       onSuccess: (envelope) =>
-        console
-          .writeStdout(renderSuccess(envelope, renderer.mode))
-          .pipe(Effect.as(0)),
-      onFailure: (failure) => {
-        const error = toCliError(failure);
-        return console
-          .writeStdout(renderError(error, renderer.mode))
-          .pipe(Effect.as(error.exitCode));
-      },
+        envelope.stream === undefined
+          ? console
+              .writeStdout(renderSuccess(envelope, renderer.mode))
+              .pipe(Effect.as(0))
+          : Stream.runForEach(envelope.stream, (value) =>
+              console.writeStdout(
+                renderStreamSuccess(envelope, value, renderer.mode),
+              ),
+            ).pipe(
+              Effect.matchEffect({
+                onFailure: (failure) =>
+                  writeCliFailure(console, failure, renderer.mode),
+                onSuccess: () => Effect.succeed(0),
+              }),
+            ),
+      onFailure: (failure) =>
+        writeCliFailure(console, failure, renderer.mode),
     });
   });
+}
+
+function writeCliFailure(
+  console: {
+    readonly writeStdout: (value: string) => Effect.Effect<void>;
+  },
+  failure: CliFailure,
+  mode: OutputMode,
+): Effect.Effect<number> {
+  const error = toCliError(failure);
+  return console.writeStdout(renderError(error, mode)).pipe(Effect.as(error.exitCode));
 }
 
 export function toCliError(failure: CliFailure): AkuaCliError {

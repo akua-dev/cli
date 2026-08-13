@@ -28,7 +28,7 @@ jobs:
                 split(path, parts, " -> ")
                 path = parts[2]
               }
-              if (path != "openapi/public.json" && path != "src/generated/commands.gen.ts") {
+              if (path != "openapi/public.json" && path != "src/generated/commands.gen.ts" && path != "src/generated/openapi-api.gen.ts" && path != "src/generated/public-operation-executor.gen.ts") {
                 print path
               }
             }
@@ -41,13 +41,13 @@ jobs:
       - name: Detect OpenAPI changes
         id: openapi-diff
         run: |
-          if git diff --quiet -- openapi/public.json src/generated/commands.gen.ts; then
+          if git diff --quiet -- openapi/public.json src/generated/commands.gen.ts src/generated/openapi-api.gen.ts src/generated/public-operation-executor.gen.ts; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "OpenAPI snapshot and generated command registry are unchanged."
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
             echo "OpenAPI changes detected:"
-            git diff --stat -- openapi/public.json src/generated/commands.gen.ts
+            git diff --stat -- openapi/public.json src/generated/commands.gen.ts src/generated/openapi-api.gen.ts src/generated/public-operation-executor.gen.ts
           fi
       - run: mise run check
         if: steps.openapi-diff.outputs.changed == 'true'
@@ -58,12 +58,14 @@ jobs:
           add-paths: |
             openapi/public.json
             src/generated/commands.gen.ts
-          commit-message: "chore: update OpenAPI spec and command registry"
-          title: "chore: update OpenAPI spec and command registry"
+            src/generated/openapi-api.gen.ts
+            src/generated/public-operation-executor.gen.ts
+          commit-message: "chore: update OpenAPI spec and generated client"
+          title: "chore: update OpenAPI spec and generated client"
           body: |
             Automated weekly update of the public Akua OpenAPI snapshot.
 
             - Fetched `https://api.akua.dev/v1/openapi.json`
-            - Regenerated the public operation command registry
+            - Regenerated the public operation command registry, Effect API, and executor
             - Verified `mise run check`
           delete-branch: true

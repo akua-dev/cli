@@ -3,11 +3,9 @@
 `akua` is the public Akua Cloud command-line interface. It is a self-contained
 Bun/TypeScript executable for humans, automation, and coding agents. The current
 MVP implements local token authentication, browser/device login, adaptive
-structured output, and discovery of the public operationId-driven command
-registry. It also checks in a generated typed Effect API for every public
-OpenAPI operation. The generated command entries are discoverable, but the
-generic executor is not yet wired, so API commands still report that execution
-is not implemented.
+structured output, and executable public operationId-driven commands. The
+generated typed Effect API and its static executor are derived from OpenAPI for
+every public operation.
 
 The canonical executable is `akua`; there is no `cnap` compatibility binary.
 
@@ -205,14 +203,22 @@ Generation is deterministic and operationId-driven. Only operations marked
 `x-platform-visibility: PUBLIC` are included. For example,
 `operationId: workspaces.list` becomes `akua workspaces list`; registry rows are
 sorted by operationId. The generated outputs are
-`src/generated/commands.gen.ts` and `src/generated/openapi-api.gen.ts`; the
-latter is the typed Effect API contract, not a hand-written HTTP client.
+`src/generated/commands.gen.ts`, `src/generated/openapi-api.gen.ts`, and
+`src/generated/public-operation-executor.gen.ts`.
 
-The generic executor is not yet wired to this generated API, so registry
-presence does not prove that an API command can run. The CLI remains
-provider-neutral: it has no provider-specific commands, flags, environment
-variables, or credential loaders. When execution is added, provider-specific
-data belongs only in the generated public API request input.
+Generated API commands execute through the typed Effect client and accept one
+JSON object from stdin or a named file. Its only keys are `path`, `query`,
+`headers`, and `body`:
+
+```sh
+printf '{"query":{"limit":5}}' | akua workspaces list --input -
+akua machines create --input - < ./machine.json
+```
+
+Request input is schema-validated before transport and never included in
+diagnostics. The CLI remains provider-neutral: it has no provider-specific commands,
+flags, environment variables, or credential loaders. Provider-specific values
+belong only in the generated public API request body.
 
 ## Development and release validation
 

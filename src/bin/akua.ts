@@ -1,10 +1,14 @@
 #!/usr/bin/env bun
-import { Effect, Exit, Runtime } from "effect";
+import { Effect, Exit, Runtime, Stream } from "effect";
 
 import { authView } from "../commands/auth";
+import {
+  generatedCommandView,
+  GeneratedCommandFailure,
+} from "../commands/generated";
 import { buildHomeView } from "../commands/home";
 import { commandRegistry } from "../generated/commands.gen";
-import { commandNotImplemented } from "../runtime/errors";
+import { generatedCommandError } from "../runtime/errors";
 import { detectOutputMode, type OutputMode } from "../runtime/mode";
 import type { RenderEnvelope } from "../runtime/render";
 import {
@@ -15,6 +19,10 @@ import {
 } from "../runtime/effect-runtime";
 import { CliLive } from "../runtime/services-live";
 import { Console, type CliServices } from "../runtime/services";
+import {
+  PublicApiAuthenticationFailure,
+  PublicApiClientLive,
+} from "../runtime/public-api";
 
 const VERSION = "0.9.0"; // x-release-please-version
 
@@ -63,7 +71,7 @@ function mainEffect(
 function route(
   argv: readonly string[],
   env: Record<string, string | undefined>,
-): Effect.Effect<RenderEnvelope, CliFailure, CliServices> {
+): Effect.Effect<RenderEnvelope<CliFailure>, CliFailure, CliServices> {
   return stripGlobalFlags(argv).pipe(
     Effect.flatMap((stripped) => routeCommand(stripped, env)),
   );
@@ -72,7 +80,7 @@ function route(
 function routeCommand(
   argv: readonly string[],
   env: Record<string, string | undefined>,
-): Effect.Effect<RenderEnvelope, CliFailure, CliServices> {
+): Effect.Effect<RenderEnvelope<CliFailure>, CliFailure, CliServices> {
   if (argv.length === 0) return Effect.succeed(buildHomeView());
 
   if (argv.includes("--help") || argv.includes("-h")) {
@@ -99,25 +107,49 @@ function routeCommand(
     return authView(argv.slice(1), env);
   }
 
+  const maybeGenerated = commandRegistry.find(
+    (definition) =>
+      definition.command === argv.slice(0, 2).join(" "),
+  );
+  if (maybeGenerated) {
+    return generatedCommandView(maybeGenerated, argv.slice(2)).pipe(
+      Effect.provide(PublicApiClientLive(env, maybeGenerated.requires_auth)),
+      Effect.map(
+        (envelope): RenderEnvelope<CliFailure> => ({
+          ...envelope,
+          stream: envelope.stream?.pipe(
+            Stream.mapError(generatedCliFailure),
+          ),
+        }),
+      ),
+      Effect.mapError((failure) =>
+        generatedCliFailure(
+          failure instanceof GeneratedCommandFailure
+            ? failure
+            : new GeneratedCommandFailure({
+                operationId: maybeGenerated.operation_id,
+                reason:
+                  failure instanceof PublicApiAuthenticationFailure
+                    ? "auth"
+                    : "transport",
+              }),
+        ),
+      ),
+    );
+  }
+
   const unknownFlag = argv.find((arg) => arg.startsWith("-"));
   if (unknownFlag) {
     return invalidCommandsUsage(`Unknown flag: ${flagName(unknownFlag)}`);
   }
 
-  const maybeGenerated = commandRegistry.find(
-    (definition) => definition.command === argv.join(" "),
-  );
-  if (maybeGenerated) {
-    return Effect.fail(
-      new CommandFailure({
-        error: commandNotImplemented(maybeGenerated.operation_id),
-      }),
-    );
-  }
-
   return Effect.fail(
     new UsageFailure({ message: `Unknown command: ${argv.join(" ")}` }),
   );
+}
+
+function generatedCliFailure(failure: GeneratedCommandFailure): CommandFailure {
+  return new CommandFailure({ error: generatedCommandError(failure) });
 }
 
 function helpView(): RenderEnvelope {
@@ -131,6 +163,8 @@ function helpView(): RenderEnvelope {
       "  akua auth status      Show local authentication status",
       "  akua auth logout      Remove the saved local API token",
       "  akua commands         List generated public OpenAPI command registry",
+      "  akua <resource> <action> [--input -|<file>]",
+      "                         Execute a generated public API operation",
       "  akua --help           Show help",
       "  akua --version        Show version",
     ],
