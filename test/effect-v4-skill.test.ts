@@ -1,15 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 const EFFECT_SKILL_PATH = "skills/effect-v4/SKILL.md";
 const AGENTS_PATH = "AGENTS.md";
-const REQUIRED_DEVELOPMENT_SKILLS = [
-  "test-driven-development",
-  "systematic-debugging",
-  "simplify",
-  "verification-before-completion",
-  "writing-skills",
-] as const;
 
 const BASELINE_PRESSURE_RESPONSE = `
 I will add an async inspectDevice(): Promise<Device> command, await fetch(),
@@ -90,24 +83,8 @@ describe("Effect v4 CLI quality guidance", () => {
     expect(skill).toContain("typed `Data.TaggedError`");
   });
 
-  test("keeps the required development skills and their referenced source material local", () => {
-    for (const skill of REQUIRED_DEVELOPMENT_SKILLS) {
-      expect(readFileSync(`.agents/skills/${skill}/SKILL.md`, "utf8")).not.toBe("");
-    }
-
-    for (const sourceDocument of [
-      ".agents/skills/test-driven-development/testing-anti-patterns.md",
-      ".agents/skills/systematic-debugging/root-cause-tracing.md",
-      ".agents/skills/systematic-debugging/defense-in-depth.md",
-      ".agents/skills/systematic-debugging/condition-based-waiting.md",
-      ".agents/skills/systematic-debugging/condition-based-waiting-example.ts",
-      ".agents/skills/writing-skills/anthropic-best-practices.md",
-      ".agents/skills/writing-skills/graphviz-conventions.dot",
-      ".agents/skills/writing-skills/persuasion-principles.md",
-      ".agents/skills/writing-skills/render-graphs.js",
-      ".agents/skills/writing-skills/testing-skills-with-subagents.md",
-    ]) {
-      expect(readFileSync(sourceDocument, "utf8")).not.toBe("");
-    }
+  test("keeps Effect v4 as the only repository-local skill", () => {
+    expect(existsSync(".agents/skills")).toBe(false);
+    expect(existsSync(".superpowers")).toBe(false);
   });
 });
