@@ -15,9 +15,9 @@
 
 ## Ownership boundaries
 
-- This CLI repository owns the canonical `akua` executable, release artifacts,
-  and `skills/akua/SKILL.md` source with skill name `akua`.
-- `akua-dev/skills` owns importing and syncing the source skill.
+- This CLI repository owns the canonical `akua` executable and release artifacts.
+- `skills/effect-v4/SKILL.md` is the only repository-local skill; it governs
+  production CLI and script changes.
 - `akua-dev/homebrew-tap` owns the `akua` formula, formula tests, and the reviewed
   formula-update PR. CLI automation sends only the verified release manifest
   contract.
@@ -28,9 +28,48 @@ Run `mise run check` and `mise run generate:check` for every change. Release
 changes also require the focused release/workflow tests and a current-host
 compiled archive smoke through `mise run release:smoke`.
 
-The hand-written Agent OS provider-ingress command and its security suites are
-specified in `docs/architecture.md`, `test/secure-token-file.test.ts`, and
-`test/agent-os-loader.test.ts`.
+## Public API command contract
+
+- `openapi/public.json` is the only source of truth for public routes,
+  request/response schemas, operation IDs, authentication, and error shapes.
+  Do not duplicate endpoint definitions, request types, or status-error maps in
+  handwritten CLI code.
+- Generate the typed Effect API surface from that contract. Keep handwritten
+  code limited to generic command parsing, request assembly, authentication
+  composition, rendering, and terminal wiring.
+- Public commands remain provider-neutral. Do not add commands, flags, file
+  readers, environment variables, or credential loaders for a particular cloud
+  provider, cluster vendor, or product integration. Users pass provider-specific
+  data only through the public API's generated request body, for example via
+  `akua secrets create --input -`.
+- The generic executor accepts only generated path, query, header, and body
+  inputs. It must reject unknown fields before sending a request, redact
+  sensitive input in diagnostics, and preserve the generated structured error
+  union for callers and JSON output.
+- Generation must be deterministic and fail on warnings, skipped public
+  operations, or unrepresented request/response/error contracts. Add support to
+  the OpenAPI producer or generator; never hide a contract gap with a manual
+  endpoint implementation.
+
+## Effect v4 production code
+
+Before changing production CLI code in `src/` or `scripts/`, load
+`skills/effect-v4/SKILL.md`. Keep command flow on the audited Effect v4
+services/layers and tagged-failure model; only the binary terminal owns the
+runtime/fiber handoff. Before handoff, run the skill's source scan, focused Bun
+tests, and `mise run check`; inspect each source scan hit rather than treating
+the command as a cosmetic check.
+
+- All production control flow and recoverable failure paths use
+  `Effect.Effect` with a typed error channel. Do not use raw `throw`, native
+  Promise control flow, `async`, `await`, or untyped failure helpers in `src/`
+  or `scripts/`.
+- Pure immutable data, types, and constants may remain plain TypeScript. Do not
+  add Effect imports to a module that cannot perform work or fail.
+- Keep direct host I/O inside named live service adapters. Only minimal
+  executable `import.meta.main` guards may own runtime/fiber handoff.
+- Preserve the structural invariant tests whenever this boundary changes. A
+  source scan is a review aid, not a substitute for the invariant test.
 
 ## Maintaining this file
 

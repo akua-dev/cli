@@ -1,6 +1,7 @@
 # Akua Cloud CLI Architecture
 
-Status: greenfield scaffold with local auth/config MVP.
+Status: local authentication, generated public API contracts, and command
+discovery. The generic public API executor is not yet wired.
 
 ## Decisions And Non-Goals
 
@@ -9,70 +10,13 @@ Status: greenfield scaffold with local auth/config MVP.
 - Repository: standalone open-source `akua-dev/cli`.
 - Packaging: Bun self-contained executable via `bun build --compile`.
 - API source of truth: `https://api.akua.dev/v1/openapi.json`.
-- First release: local auth/config plus public API commands only.
+- First release: local auth/config plus a provider-neutral public API command
+  surface generated from OpenAPI.
 - Compatibility: no `cnap` binary, Go module, config path, env var, or command
   compatibility unless a later captain decision changes this.
 - No live infrastructure mutation is required for development or tests. The
   spec fetch task performs only a read-only OpenAPI GET and rejects non-HTTPS
   source URLs.
-
-## Agent OS HCloud Provider Loader Companion
-
-The one exception to the generated-public-command boundary is the compiled,
-non-generated command:
-
-```sh
-akua agent-os load-hcloud-provider \
-  --workspace <exact-name-or-ws_id> \
-  --token-file <absolute-path> \
-  [--expected-ssh-key-fingerprint <provider-returned-fingerprint> \
-   [--expected-ssh-key-name <name>]]
-```
-
-It is a deliberately thin local companion to the server-owned cnap Agent OS
-provider-loader transaction (`POST /v1/agent_os/hcloud_provider_loads`). The
-cnap transaction is the canonical source of truth for workspace authorization,
-provider identity and inventory validation, storage, idempotency, compensation,
-revocation, and all provider policy. This CLI never implements an inventory,
-uses generic `/secrets` or `/compute_configs` calls, opens a browser, runs a
-shell child, or falls back to another endpoint.
-
-The command requires workspace and token-file flags and rejects positional
-input, `--token`, stdin, provider-token environment/profile input, API URL
-overrides, debug body output, and retry transports. A provider-returned SSH key
-fingerprint is optional and may be sent only when predeclared; its optional name
-requires the fingerprint. With no expected key, cnap requires a fully empty
-inventory. The CLI never derives identity from the provider token. It reads
-normal Akua caller authentication only from the protected local Akua config;
-`AKUA_API_TOKEN` is rejected for this command.
-It sends that authentication in `Authorization`, the explicit selection in
-`Akua-Context`, a newly generated `Idempotency-Key`, and a body containing the
-provider token plus optional `expected_ssh_key_fingerprint` and
-`expected_ssh_key_name`. The production base URL and route are fixed; tests may
-inject a fake HTTPS transport only through an internal dependency seam. The
-client allowlists only `loader_id`, `attestation_id`, `secret_id`,
-`secret_version_id`, `compute_config_id`, and `expected_ssh_key_fingerprint`,
-preserving the secret-version continuity field before spend.
-
-The provider file is opened exactly once in the compiled process by a dedicated
-Unix reader. The reader accepts only an absolute, caller-owned, regular `0600`
-file. It obtains pre-open `lstat` metadata, opens with `O_NOFOLLOW | O_CLOEXEC`,
-compares device/inode/UID/mode with `fstat`, performs one bounded descriptor
-read, and closes before HTTP submission. It rejects symlinks, substitutions,
-directories, devices, FIFOs, sockets, wrong owners, empty input, and oversized
-input. The token is held only in a mutable byte buffer for request assembly;
-the buffer is overwritten immediately after the single request attempt. Bun
-cannot promise physical heap zeroisation, so the security contract is no
-deliberate secret persistence or exposure through CLI interfaces, logs, reports,
-or configuration. A stronger heap guarantee requires a reviewed native module,
-not a weaker file or API contract.
-
-The endpoint is a release dependency delivered by
-[cnap #545](https://github.com/akua-dev/cnap/pull/545), implementing
-`agentOs.hcloudProviderLoads.create`: its production delivery must complete and
-its released route contract must exactly match this companion before CLI
-publication or Phase A invocation. The companion's eventual CLI-owned release is coordinated as
-`0.9.0`; it does not duplicate the multi-platform distribution scope in PR #21.
 
 ## Current Repo Boundary
 
@@ -83,11 +27,13 @@ new repository shape is:
 openapi/public.json              fetched public OpenAPI snapshot
 scripts/fetch-openapi.ts         guarded production spec fetcher
 scripts/generate-commands.ts     operationId-driven command registry generator
+scripts/generate-effect-api.ts   typed Effect API generator
 scripts/release.ts               release target, packaging, and manifest contract
 src/bin/akua.ts                  executable entrypoint
 src/commands/auth.ts             local auth/config command implementation
 src/runtime/                     output, errors, exit codes, command contracts
 src/generated/commands.gen.ts    generated public command registry
+src/generated/openapi-api.gen.ts generated typed public Effect API
 .github/workflows/update-openapi.yml
                                  idempotent public OpenAPI update automation
 .github/workflows/release-please.yml
@@ -101,8 +47,9 @@ test/                            Bun tests for CLI, generation, and release cont
 
 ## OpenAPI And Command Generation
 
-The CLI is operationId-driven. Public OpenAPI operations become generated command
-definitions when all of these are true:
+The CLI is operationId-driven. Every public OpenAPI operation produces both a
+generated command definition and a typed Effect HTTP API endpoint when all of
+these are true:
 
 - `x-platform-visibility` is `PUBLIC`;
 - `operationId` is present;
@@ -128,30 +75,28 @@ segment becomes the action, and single-segment operationIds fall back to the
 HTTP method as the action. The generator assumes OpenAPI operationIds are
 unique; it does not currently enforce uniqueness itself.
 
-The generator deliberately produces a registry, not hand-written API coverage.
-Execution is stubbed until the API client and request/body binding layer lands.
-The next implementation step should add a small CLI overlay file for exceptions
-that cannot be inferred safely from OpenAPI alone, such as preferred aliases,
-default list fields, destructive-command confirmation labels, and resource-
-specific next steps.
+`src/generated/commands.gen.ts` supplies command discovery. The checked-in
+`src/generated/openapi-api.gen.ts` supplies the typed Effect representation of
+the same public contract, including routes, request/response schemas, and typed
+errors. Neither artifact is hand-written API coverage.
+
+The generic executor is not yet wired to the generated API. A generated command
+therefore remains discoverable but reports that execution is not implemented.
+Do not add resource- or provider-specific overlays to close this gap. The future
+executor must consume only generated path, query, header, and body input.
 
 Generation tasks:
 
 ```sh
 mise run spec:fetch      # writes openapi/public.json
-mise run generate        # writes src/generated/commands.gen.ts
-mise run generate:check  # fails on drift
+mise run generate        # writes both generated public API artifacts
+mise run generate:check  # fails on drift in either generated artifact
 ```
 
 `mise run spec:fetch` defaults to `AKUA_OPENAPI_URL`, which is set to the
 production source in `mise.toml`, and `scripts/fetch-openapi.ts` also accepts an
-explicit URL argument. The scheduled `Update OpenAPI` workflow runs weekly,
-fetches the snapshot, regenerates the registry, and then fails if tracked or
-untracked files outside `openapi/public.json` and
-`src/generated/commands.gen.ts` changed. It is idempotent when those files match
-the repository: unchanged runs report a no-op and do not run `mise run check` or
-open/update a pull request. Changed runs execute `mise run check` and open or
-update a pull request containing only the snapshot and generated registry.
+explicit URL argument. Any OpenAPI update must regenerate and review both
+artifacts with `mise run generate:check` before it is accepted.
 
 ## API, Auth, And Config Model
 
@@ -163,11 +108,15 @@ https://api.akua.dev/v1
 
 Authentication:
 
-- bearer tokens use `Authorization: Bearer sk_akua_...`;
-- `AKUA_API_TOKEN` is the primary noninteractive credential env var;
-- `AKUA_API_TOKEN` takes precedence over stored credentials;
-- broad tokens select workspace/scope with the `Akua-Context` header;
-- workspace-owned tokens may imply workspace context.
+- Browser/device login starts with `akua auth login`. It prints the verification
+  URL and user code, attempts to open the browser, and stores the resulting
+  access token only after authorization completes.
+- `akua auth login --no-browser` prints the same verification instructions
+  without attempting to open a browser.
+- `akua auth login --token <token>` stores a supplied token without a browser
+  flow.
+- `AKUA_API_TOKEN` is the noninteractive credential environment variable and
+  takes precedence over a stored token.
 
 Configuration should live under the Akua namespace:
 
@@ -180,16 +129,11 @@ there while preserving unrelated keys. Writes create `~/.config/akua` with
 user-only `0700` permissions and `config.json` with user-only `0600`
 permissions.
 
-Recommended config precedence:
-
-1. command flags such as `--api-url`, `--workspace`, and `--profile`;
-2. environment variables;
-3. profile config;
-4. built-in production defaults.
-
-The first implemented local auth/config slice is:
+The implemented local auth/config surface is:
 
 ```sh
+akua auth login                  # browser/device login
+akua auth login --no-browser     # device login without launching a browser
 akua auth login --token <token>  # save a token in ~/.config/akua/config.json
 akua auth status                 # show whether auth comes from env, config, or none
 akua auth logout                 # remove only the stored config token
@@ -198,8 +142,7 @@ akua auth logout                 # remove only the stored config token
 `auth login` requires `HOME` so it can locate the config file. `auth status`
 honors `AKUA_API_TOKEN` even when `HOME` is unset, and otherwise reads the
 stored token. `auth logout` leaves `AKUA_API_TOKEN` untouched and reports env
-auth as still active when that variable is set. Browser/device login remains out
-of scope.
+auth as still active when that variable is set.
 
 ## Output And UX Modes
 
@@ -229,13 +172,15 @@ Agent mode follows AXI patterns studied from `https://axi.md/` and the public
 - unknown routed commands and flags must fail loudly.
 
 Human mode can use tables and prose, but should stay content-first. A no-args
-`akua` invocation should show live state once API execution exists; the scaffold
-currently shows registry state and next-step commands.
+`akua` invocation currently shows registry state and next-step commands; it does
+not fetch live API state.
 
 The implemented command surface is intentionally small:
 
 ```sh
 akua                                      # registry status home view
+akua auth login                           # browser/device login
+akua auth login --no-browser              # do not launch a browser
 akua auth login --token <token>           # save a local API token
 akua auth status                          # show effective auth source
 akua auth logout                          # remove the saved local API token
@@ -286,18 +231,12 @@ This can be simplified later, but it must remain deterministic and tested.
 
 ## Public-Only First Release
 
-The first release API command surface is generated only from public operations.
-Internal, admin, preview, trusted-partner, and private operations must be absent
-from generated commands and docs unless a separate build target is deliberately
-added later.
-
-Recommended MVP order:
-
-1. local `auth` and token config commands (implemented);
-2. workspace/context commands;
-3. read-only `list` and `get` commands for public resources;
-4. operations status/watch commands;
-5. selected mutations with idempotency and confirmation safety.
+The public command registry and typed Effect API contain only operations marked
+`x-platform-visibility: PUBLIC`. Internal, admin, preview, trusted-partner, and
+private operations must be absent unless a separate build target is deliberately
+added later. The CLI has no provider-specific command, flag, credential loader,
+or environment variable. Provider-specific values belong to a generated public
+API request input once the generic executor is implemented.
 
 ## Mutations And Safety
 
@@ -361,21 +300,23 @@ package-registry publication is configured.
 Current tests cover:
 
 - CLI routing and usage validation for the scaffold commands;
-- local auth login/status/logout behavior, env credential precedence, config
-  preservation, malformed config handling, and user-only config permissions;
+- local token and browser/device login, status, and logout behavior, env
+  credential precedence, config preservation, malformed config handling, and
+  user-only config permissions;
 - output mode detection;
 - agent and JSON rendering;
 - structured error payloads;
 - OpenAPI fetch guard and document shape validation;
-- public-only, deterministic operationId collection;
+- public-only, deterministic operationId collection and typed Effect API
+  generation;
 - Release Please config, manifest, token, and CLI version marker validation;
 - release target naming, archive contents/modes, manifests, checksums, and
   tamper rejection;
 - native install-smoke and workflow ordering/permission contracts;
 - public install/auth/output/codegen documentation and source-skill ownership.
 
-Current validation also runs `mise run generate:check` to catch generated
-registry drift.
+Current validation also runs `mise run generate:check` to catch drift in both
+generated API artifacts.
 
 Future execution slices should add:
 

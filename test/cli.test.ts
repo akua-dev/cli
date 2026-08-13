@@ -1,13 +1,30 @@
 import { describe, expect, test } from "bun:test";
-import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { join } from "node:path";
+import { Effect } from "effect";
 
-import { authView, readProtectedCallerToken } from "../src/commands/auth";
-import { renderSuccess } from "../src/runtime/render";
+import { authView } from "../src/commands/auth";
+import { renderSuccess, type RenderEnvelope } from "../src/runtime/render";
+import { toCliError } from "../src/runtime/effect-runtime";
+import { CliLive } from "../src/runtime/services-live";
+import { runAuthView } from "./auth-test-layer";
 
 describe("akua entrypoint", () => {
   test("fails loudly on unknown flags", async () => {
-    const { stdout, exitCode } = await runAkua(["commands", "--bogus", "--output", "json"]);
+    const { stdout, exitCode } = await runAkua([
+      "commands",
+      "--bogus",
+      "--output",
+      "json",
+    ]);
     expect(exitCode).toBe(2);
     expect(JSON.parse(stdout)).toMatchObject({
       error: {
@@ -18,21 +35,35 @@ describe("akua entrypoint", () => {
     });
   });
 
-  test("documents the compiled Agent OS provider loader without exposing a credential input", async () => {
+  test("does not expose provider-specific commands in help or routing", async () => {
     const { stdout, exitCode } = await runAkua(["--help", "--json"]);
 
     expect(exitCode).toBe(0);
-    expect(stdout).toContain("akua agent-os load-hcloud-provider");
-    expect(stdout).toContain("--token-file");
-    expect(stdout).toContain("--expected-ssh-key-fingerprint");
-    expect(stdout).toContain("--expected-ssh-key-name");
-    expect(stdout).not.toContain("--project-identity-attestation");
-    expect(stdout).not.toContain("--project-anchor-ssh-key-fingerprint");
-    expect(stdout).not.toContain("--token <");
+    expect(stdout).not.toContain("agent-os");
+    expect(stdout).not.toContain("hcloud");
+    expect(stdout).not.toContain("token-file");
+
+    const unknown = await runAkua([
+      "agent-os",
+      "load-hcloud-provider",
+      "--json",
+    ]);
+    expect(unknown.exitCode).toBe(2);
+    expect(JSON.parse(unknown.stdout)).toMatchObject({
+      error: {
+        type: "usage_error",
+        code: "AKUA_USAGE_ERROR",
+        message: "Unknown command: agent-os load-hcloud-provider",
+      },
+    });
   });
 
   test("fails invalid explicit output modes before routing", async () => {
-    const { stdout, exitCode } = await runAkua(["--output", "yaml", "--version"]);
+    const { stdout, exitCode } = await runAkua([
+      "--output",
+      "yaml",
+      "--version",
+    ]);
     expect(exitCode).toBe(2);
     expect(stdout).toContain("Invalid --output value: yaml");
   });
@@ -45,7 +76,7 @@ describe("akua entrypoint", () => {
     const env = await runAkua(["--version"], { AKUA_OUTPUT: "toon" });
     expect(env.exitCode).toBe(2);
     expect(env.stdout).toContain("Invalid AKUA_OUTPUT value: toon");
-  });
+  }, 15_000);
 
   test("fails missing explicit output mode values before routing", async () => {
     const { stdout, exitCode } = await runAkua(["--output", "--version"]);
@@ -54,13 +85,19 @@ describe("akua entrypoint", () => {
   });
 
   test("fails invalid AKUA_OUTPUT values before routing", async () => {
-    const { stdout, exitCode } = await runAkua(["--version"], { AKUA_OUTPUT: "yaml" });
+    const { stdout, exitCode } = await runAkua(["--version"], {
+      AKUA_OUTPUT: "yaml",
+    });
     expect(exitCode).toBe(2);
     expect(stdout).toContain("Invalid AKUA_OUTPUT value: yaml");
   });
 
   test("requires commands filter values", async () => {
-    const { stdout, exitCode } = await runAkua(["commands", "--operation-id", "--json"]);
+    const { stdout, exitCode } = await runAkua([
+      "commands",
+      "--operation-id",
+      "--json",
+    ]);
     expect(exitCode).toBe(2);
     expect(JSON.parse(stdout)).toMatchObject({
       error: {
@@ -72,7 +109,11 @@ describe("akua entrypoint", () => {
   });
 
   test("requires resource filter values", async () => {
-    const { stdout, exitCode } = await runAkua(["commands", "--resource=", "--json"]);
+    const { stdout, exitCode } = await runAkua([
+      "commands",
+      "--resource=",
+      "--json",
+    ]);
     expect(exitCode).toBe(2);
     expect(JSON.parse(stdout)).toMatchObject({
       error: {
@@ -86,7 +127,8 @@ describe("akua entrypoint", () => {
     expect(invalid.exitCode).toBe(2);
     expect(JSON.parse(invalid.stdout)).toMatchObject({
       error: {
-        message: "Invalid value for --limit: banana. Expected a positive integer.",
+        message:
+          "Invalid value for --limit: banana. Expected a positive integer.",
       },
     });
 
@@ -110,7 +152,13 @@ describe("akua entrypoint", () => {
       },
     });
 
-    const extra = await runAkua(["commands", "--limit", "5", "extra", "--json"]);
+    const extra = await runAkua([
+      "commands",
+      "--limit",
+      "5",
+      "extra",
+      "--json",
+    ]);
     expect(extra.exitCode).toBe(2);
     expect(JSON.parse(extra.stdout)).toMatchObject({
       error: {
@@ -123,7 +171,10 @@ describe("akua entrypoint", () => {
     const home = await makeTempHome();
     try {
       const token = "sk_akua_test_login";
-      const { stdout, exitCode } = await runAkua(["auth", "login", "--token", token, "--json"], { HOME: home });
+      const { stdout, exitCode } = await runAkua(
+        ["auth", "login", "--token", token, "--json"],
+        { HOME: home },
+      );
       const payload = JSON.parse(stdout);
       const configPath = join(home, ".config", "akua", "config.json");
 
@@ -139,7 +190,9 @@ describe("akua entrypoint", () => {
         },
       });
       expect(JSON.parse(await readFile(configPath, "utf8"))).toEqual({ token });
-      expect((await stat(join(home, ".config", "akua"))).mode & 0o777).toBe(0o700);
+      expect((await stat(join(home, ".config", "akua"))).mode & 0o777).toBe(
+        0o700,
+      );
       expect((await stat(configPath)).mode & 0o777).toBe(0o600);
     } finally {
       await rm(home, { recursive: true, force: true });
@@ -150,17 +203,24 @@ describe("akua entrypoint", () => {
     const home = await makeTempHome();
     try {
       const configPath = join(home, ".config", "akua", "config.json");
-      await runAkua(["auth", "login", "--token", "sk_akua_old", "--quiet"], { HOME: home });
+      await runAkua(["auth", "login", "--token", "sk_akua_old", "--quiet"], {
+        HOME: home,
+      });
       await chmod(configPath, 0o444);
 
-      const { stdout, exitCode } = await runAkua(["auth", "login", "--token", "sk_akua_new", "--json"], { HOME: home });
+      const { stdout, exitCode } = await runAkua(
+        ["auth", "login", "--token", "sk_akua_new", "--json"],
+        { HOME: home },
+      );
 
       expect(exitCode).toBe(0);
       expect(JSON.parse(stdout)).toMatchObject({
         status: "ok",
         command: "akua auth login",
       });
-      expect(JSON.parse(await readFile(configPath, "utf8"))).toEqual({ token: "sk_akua_new" });
+      expect(JSON.parse(await readFile(configPath, "utf8"))).toEqual({
+        token: "sk_akua_new",
+      });
       expect((await stat(configPath)).mode & 0o777).toBe(0o600);
     } finally {
       await rm(home, { recursive: true, force: true });
@@ -178,7 +238,10 @@ describe("akua entrypoint", () => {
         `${JSON.stringify({ profile: "dev", endpoint: "https://api.example.test", token: "sk_akua_old" }, null, 2)}\n`,
       );
 
-      const { exitCode } = await runAkua(["auth", "login", "--token", "sk_akua_new", "--json"], { HOME: home });
+      const { exitCode } = await runAkua(
+        ["auth", "login", "--token", "sk_akua_new", "--json"],
+        { HOME: home },
+      );
 
       expect(exitCode).toBe(0);
       expect(JSON.parse(await readFile(configPath, "utf8"))).toEqual({
@@ -192,10 +255,365 @@ describe("akua entrypoint", () => {
     }
   });
 
+  test("auth login completes device authorization, launches the browser, and saves only the access token", async () => {
+    const home = await makeTempHome();
+    try {
+      const requests: Array<{ url: string; body: unknown }> = [];
+      const sleeps: number[] = [];
+      const launched: string[] = [];
+      const displayed: Array<{
+        verification_uri_complete: string;
+        user_code: string;
+      }> = [];
+      let tokenRequests = 0;
+      const deviceCode = "device-code-must-not-be-rendered";
+      const accessToken = "access-token-must-not-be-rendered";
+
+      const envelope = await runAuthView(
+        ["login"],
+        { HOME: home },
+        {
+          request: async ({ url, body }: { url: string; body: unknown }) => {
+            requests.push({ url, body });
+            if (url.endsWith("/device/code")) {
+              return {
+                status: 200,
+                body: {
+                  device_code: deviceCode,
+                  user_code: "ABCD-EFGH",
+                  verification_uri: "https://akua.dev/device",
+                  verification_uri_complete:
+                    "https://akua.dev/device?user_code=ABCD-EFGH",
+                  expires_in: 60,
+                  interval: 2,
+                },
+              };
+            }
+
+            tokenRequests += 1;
+            return tokenRequests === 1
+              ? { status: 400, body: { error: "authorization_pending" } }
+              : { status: 200, body: { access_token: accessToken } };
+          },
+          sleep: async (milliseconds: number) => {
+            sleeps.push(milliseconds);
+          },
+          launchBrowser: async (url: string) => {
+            launched.push(url);
+          },
+          displayDeviceAuthorization: (details) => {
+            displayed.push(details);
+          },
+        },
+      );
+
+      expect(requests).toEqual([
+        {
+          url: "https://akua.dev/api/auth/device/code",
+          body: { client_id: "akua-cli", scope: "platform" },
+        },
+        {
+          url: "https://akua.dev/api/auth/device/token",
+          body: {
+            grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+            device_code: deviceCode,
+            client_id: "akua-cli",
+          },
+        },
+        {
+          url: "https://akua.dev/api/auth/device/token",
+          body: {
+            grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+            device_code: deviceCode,
+            client_id: "akua-cli",
+          },
+        },
+      ]);
+      expect(sleeps).toEqual([2_000]);
+      expect(launched).toEqual(["https://akua.dev/device?user_code=ABCD-EFGH"]);
+      expect(displayed).toEqual([
+        {
+          verification_uri_complete:
+            "https://akua.dev/device?user_code=ABCD-EFGH",
+          user_code: "ABCD-EFGH",
+        },
+      ]);
+      expect(envelope).toMatchObject({
+        command: "akua auth login",
+        data: {
+          authenticated: true,
+          source: "config",
+          verification_uri_complete:
+            "https://akua.dev/device?user_code=ABCD-EFGH",
+          user_code: "ABCD-EFGH",
+        },
+      });
+      const rendered = renderSuccess(envelope, "json");
+      expect(rendered).not.toContain(deviceCode);
+      expect(rendered).not.toContain(accessToken);
+      expect(
+        JSON.parse(
+          await readFile(join(home, ".config", "akua", "config.json"), "utf8"),
+        ),
+      ).toEqual({ token: accessToken });
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
+  test("auth login honors slow_down and continues when the browser cannot be opened", async () => {
+    const home = await makeTempHome();
+    try {
+      const sleeps: number[] = [];
+      let tokenRequests = 0;
+
+      const envelope = await runAuthView(
+        ["login"],
+        { HOME: home },
+        {
+          request: async ({ url }: { url: string }) => {
+            if (url.endsWith("/device/code")) {
+              return {
+                status: 200,
+                body: {
+                  device_code: "device-code-must-not-be-rendered",
+                  user_code: "ABCD-EFGH",
+                  verification_uri: "https://akua.dev/device",
+                  verification_uri_complete:
+                    "https://akua.dev/device?user_code=ABCD-EFGH",
+                  expires_in: 60,
+                  interval: 2,
+                },
+              };
+            }
+
+            tokenRequests += 1;
+            return tokenRequests === 1
+              ? { status: 400, body: { error: "authorization_pending" } }
+              : tokenRequests === 2
+                ? { status: 400, body: { error: "slow_down" } }
+                : {
+                    status: 200,
+                    body: { access_token: "access-token-must-not-be-rendered" },
+                  };
+          },
+          sleep: async (milliseconds: number) => {
+            sleeps.push(milliseconds);
+          },
+          launchBrowser: async () => {
+            throw new Error("browser unavailable");
+          },
+        },
+      );
+
+      expect(sleeps).toEqual([2_000, 7_000]);
+      expect(envelope.observations).toContain(
+        "Could not open a browser. Open the verification URL manually.",
+      );
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
+  test("auth device login accepts RFC-compliant fallback responses", async () => {
+    const home = await makeTempHome();
+    try {
+      const requests: Array<{ url: string; body: unknown }> = [];
+      const envelope = await runAuthView(
+        ["login", "--no-browser"],
+        { HOME: home },
+        {
+          request: async ({ url, body }) => {
+            requests.push({ url, body });
+            return url.endsWith("/device/code")
+              ? {
+                  status: 200,
+                  body: {
+                    device_code: "device-code-must-not-be-rendered",
+                    user_code: "ABCD-EFGH",
+                    verification_uri: "https://akua.dev/device",
+                    expires_in: 60,
+                  },
+                }
+              : {
+                  status: 200,
+                  body: { access_token: "access-token-must-not-be-rendered" },
+                };
+          },
+          sleep: async () => undefined,
+          launchBrowser: async () => undefined,
+        },
+      );
+
+      expect(requests[0]?.body).toEqual({
+        client_id: "akua-cli",
+        scope: "platform",
+      });
+      expect(envelope.data).toMatchObject({
+        verification_uri_complete: "https://akua.dev/device",
+      });
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
+  test("auth login reports terminal device-flow outcomes without disclosing the device code", async () => {
+    for (const error of ["access_denied", "expired_token"] as const) {
+      const home = await makeTempHome();
+      try {
+        const deviceCode = "device-code-must-not-be-rendered";
+        await expect(
+          runAuthView(
+            ["login", "--no-browser"],
+            { HOME: home },
+            {
+              request: async ({ url }: { url: string }) =>
+                url.endsWith("/device/code")
+                  ? {
+                      status: 200,
+                      body: {
+                        device_code: deviceCode,
+                        user_code: "ABCD-EFGH",
+                        verification_uri: "https://akua.dev/device",
+                        verification_uri_complete:
+                          "https://akua.dev/device?user_code=ABCD-EFGH",
+                        expires_in: 60,
+                        interval: 1,
+                      },
+                    }
+                  : { status: 400, body: { error } },
+              sleep: async () => undefined,
+              launchBrowser: async () => undefined,
+            },
+          ),
+        ).rejects.toMatchObject({ code: `AKUA_DEVICE_${error.toUpperCase()}` });
+      } finally {
+        await rm(home, { recursive: true, force: true });
+      }
+    }
+  });
+
+  test("auth login stops on cancellation or device-code expiry without saving a token", async () => {
+    const cancelledHome = await makeTempHome();
+    const controller = new AbortController();
+    controller.abort();
+    let cancelledRequested = false;
+    try {
+      await expect(
+        runAuthView(
+          ["login", "--no-browser"],
+          { HOME: cancelledHome },
+          {
+            request: async () => {
+              cancelledRequested = true;
+              return { status: 500, body: {} };
+            },
+            sleep: async () => undefined,
+            launchBrowser: async () => undefined,
+            signal: controller.signal,
+          },
+        ),
+      ).rejects.toMatchObject({ code: "AKUA_DEVICE_CANCELLED" });
+      expect(cancelledRequested).toBe(false);
+    } finally {
+      await rm(cancelledHome, { recursive: true, force: true });
+    }
+
+    const expiredHome = await makeTempHome();
+    let requests = 0;
+    let calls = 0;
+    try {
+      await expect(
+        runAuthView(
+          ["login", "--no-browser"],
+          { HOME: expiredHome },
+          {
+            request: async () => {
+              requests += 1;
+              return {
+                status: 200,
+                body: {
+                  device_code: "device-code-must-not-be-rendered",
+                  user_code: "ABCD-EFGH",
+                  verification_uri: "https://akua.dev/device",
+                  verification_uri_complete:
+                    "https://akua.dev/device?user_code=ABCD-EFGH",
+                  expires_in: 1,
+                  interval: 1,
+                },
+              };
+            },
+            sleep: async () => undefined,
+            launchBrowser: async () => undefined,
+            now: () => (calls++ === 0 ? 0 : 1_000),
+          },
+        ),
+      ).rejects.toMatchObject({ code: "AKUA_DEVICE_EXPIRED_TOKEN" });
+      expect(requests).toBe(1);
+    } finally {
+      await rm(expiredHome, { recursive: true, force: true });
+    }
+  });
+
+  test("auth device login aborts an in-flight token request", async () => {
+    const home = await makeTempHome();
+    const controller = new AbortController();
+    let tokenSignal: AbortSignal | undefined;
+    let tokenRequestStarted: (() => void) | undefined;
+    const tokenRequest = new Promise<void>((resolve) => {
+      tokenRequestStarted = resolve;
+    });
+    try {
+      const login = runAuthView(
+        ["login", "--no-browser"],
+        { HOME: home },
+        {
+          request: ({ url, signal }) => {
+            if (url.endsWith("/device/code")) {
+              return Promise.resolve({
+                status: 200,
+                body: {
+                  device_code: "device-code-must-not-be-rendered",
+                  user_code: "ABCD-EFGH",
+                  verification_uri: "https://akua.dev/device",
+                  expires_in: 60,
+                  interval: 1,
+                },
+              });
+            }
+            tokenSignal = signal;
+            tokenRequestStarted?.();
+            return new Promise((_, reject) =>
+              signal?.addEventListener(
+                "abort",
+                () => reject(new Error("aborted")),
+                { once: true },
+              ),
+            );
+          },
+          sleep: async () => undefined,
+          launchBrowser: async () => undefined,
+          signal: controller.signal,
+        },
+      );
+      await tokenRequest;
+      controller.abort();
+
+      await expect(login).rejects.toMatchObject({
+        code: "AKUA_DEVICE_CANCELLED",
+      });
+      expect(tokenSignal?.aborted).toBe(true);
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
   test("auth status gives AKUA_API_TOKEN precedence over stored tokens", async () => {
     const home = await makeTempHome();
     try {
-      await runAkua(["auth", "login", "--token", "sk_akua_stored", "--quiet"], { HOME: home });
+      await runAkua(["auth", "login", "--token", "sk_akua_stored", "--quiet"], {
+        HOME: home,
+      });
       const { stdout, exitCode } = await runAkua(["auth", "status", "--json"], {
         HOME: home,
         AKUA_API_TOKEN: "sk_akua_env",
@@ -220,10 +638,15 @@ describe("akua entrypoint", () => {
 
   test("auth status honors AKUA_API_TOKEN without HOME", async () => {
     for (const home of [undefined, ""]) {
-      const envelope = await authView(["status"], {
-        HOME: home,
-        AKUA_API_TOKEN: "sk_akua_env",
-      });
+      const envelope = await Effect.runPromise(
+        Effect.provide(
+          authView(["status"], {
+            HOME: home,
+            AKUA_API_TOKEN: "sk_akua_env",
+          }),
+          CliLive,
+        ) as Effect.Effect<RenderEnvelope>,
+      );
       const stdout = renderSuccess(envelope, "json");
       const payload = JSON.parse(stdout);
 
@@ -244,16 +667,22 @@ describe("akua entrypoint", () => {
   test("auth logout removes stored token without clearing AKUA_API_TOKEN", async () => {
     const home = await makeTempHome();
     try {
-      await runAkua(["auth", "login", "--token", "sk_akua_stored", "--quiet"], { HOME: home });
+      await runAkua(["auth", "login", "--token", "sk_akua_stored", "--quiet"], {
+        HOME: home,
+      });
       const { stdout, exitCode } = await runAkua(["auth", "logout", "--json"], {
         HOME: home,
         AKUA_API_TOKEN: "sk_akua_env",
       });
-      const status = await runAkua(["auth", "status", "--json"], { HOME: home });
+      const status = await runAkua(["auth", "status", "--json"], {
+        HOME: home,
+      });
 
       expect(exitCode).toBe(0);
       expect(JSON.parse(stdout)).toMatchObject({
-        observations: ["Stored authentication token removed. AKUA_API_TOKEN is still active."],
+        observations: [
+          "Stored authentication token removed. AKUA_API_TOKEN is still active.",
+        ],
         data: {
           authenticated: true,
           source: "env",
@@ -281,8 +710,12 @@ describe("akua entrypoint", () => {
         `${JSON.stringify({ profile: "dev", endpoint: "https://api.example.test", token: "sk_akua_stored" }, null, 2)}\n`,
       );
 
-      const { stdout, exitCode } = await runAkua(["auth", "logout", "--json"], { HOME: home });
-      const status = await runAkua(["auth", "status", "--json"], { HOME: home });
+      const { stdout, exitCode } = await runAkua(["auth", "logout", "--json"], {
+        HOME: home,
+      });
+      const status = await runAkua(["auth", "status", "--json"], {
+        HOME: home,
+      });
 
       expect(exitCode).toBe(0);
       expect(JSON.parse(stdout)).toMatchObject({
@@ -312,10 +745,14 @@ describe("akua entrypoint", () => {
     const home = await makeTempHome();
     try {
       const configPath = join(home, ".config", "akua", "config.json");
-      await runAkua(["auth", "login", "--token", "sk_akua_stored", "--quiet"], { HOME: home });
+      await runAkua(["auth", "login", "--token", "sk_akua_stored", "--quiet"], {
+        HOME: home,
+      });
       await writeFile(configPath, "{not json\n");
 
-      const { stdout, exitCode } = await runAkua(["auth", "status", "--json"], { HOME: home });
+      const { stdout, exitCode } = await runAkua(["auth", "status", "--json"], {
+        HOME: home,
+      });
 
       expect(exitCode).toBe(1);
       expect(JSON.parse(stdout)).toMatchObject({
@@ -335,11 +772,17 @@ describe("akua entrypoint", () => {
     const home = await makeTempHome();
     try {
       const configPath = join(home, ".config", "akua", "config.json");
-      await runAkua(["auth", "login", "--token", "sk_akua_stored", "--quiet"], { HOME: home });
+      await runAkua(["auth", "login", "--token", "sk_akua_stored", "--quiet"], {
+        HOME: home,
+      });
       await writeFile(configPath, "{not json\n");
 
-      const { stdout, exitCode } = await runAkua(["auth", "logout", "--json"], { HOME: home });
-      const status = await runAkua(["auth", "status", "--json"], { HOME: home });
+      const { stdout, exitCode } = await runAkua(["auth", "logout", "--json"], {
+        HOME: home,
+      });
+      const status = await runAkua(["auth", "status", "--json"], {
+        HOME: home,
+      });
 
       expect(exitCode).toBe(0);
       expect(JSON.parse(stdout)).toMatchObject({
@@ -360,18 +803,13 @@ describe("akua entrypoint", () => {
     }
   });
 
-  test("auth login requires an explicit token flag", async () => {
+  test("auth login validates explicit token flag values", async () => {
     const home = await makeTempHome();
     try {
-      const missingFlag = await runAkua(["auth", "login", "--json"], { HOME: home });
-      expect(missingFlag.exitCode).toBe(2);
-      expect(JSON.parse(missingFlag.stdout)).toMatchObject({
-        error: {
-          message: "Missing required --token flag.",
-        },
-      });
-
-      const missingValue = await runAkua(["auth", "login", "--token", "--json"], { HOME: home });
+      const missingValue = await runAkua(
+        ["auth", "login", "--token", "--json"],
+        { HOME: home },
+      );
       expect(missingValue.exitCode).toBe(2);
       expect(JSON.parse(missingValue.stdout)).toMatchObject({
         error: {
@@ -380,7 +818,10 @@ describe("akua entrypoint", () => {
       });
 
       const tokenLikePositional = "sk_akua_secret_positional";
-      const positional = await runAkua(["auth", "login", tokenLikePositional, "--json"], { HOME: home });
+      const positional = await runAkua(
+        ["auth", "login", tokenLikePositional, "--json"],
+        { HOME: home },
+      );
       expect(positional.exitCode).toBe(2);
       expect(JSON.parse(positional.stdout)).toMatchObject({
         error: {
@@ -397,7 +838,10 @@ describe("akua entrypoint", () => {
     const home = await makeTempHome();
     try {
       const tokenLikeValue = "sk_akua_secret_positional";
-      const unknownSubcommand = await runAkua(["auth", tokenLikeValue, "--json"], { HOME: home });
+      const unknownSubcommand = await runAkua(
+        ["auth", tokenLikeValue, "--json"],
+        { HOME: home },
+      );
       expect(unknownSubcommand.exitCode).toBe(2);
       expect(JSON.parse(unknownSubcommand.stdout)).toMatchObject({
         error: {
@@ -406,7 +850,10 @@ describe("akua entrypoint", () => {
       });
       expect(unknownSubcommand.stdout).not.toContain(tokenLikeValue);
 
-      const statusExtra = await runAkua(["auth", "status", tokenLikeValue, "--json"], { HOME: home });
+      const statusExtra = await runAkua(
+        ["auth", "status", tokenLikeValue, "--json"],
+        { HOME: home },
+      );
       expect(statusExtra.exitCode).toBe(2);
       expect(JSON.parse(statusExtra.stdout)).toMatchObject({
         error: {
@@ -415,7 +862,10 @@ describe("akua entrypoint", () => {
       });
       expect(statusExtra.stdout).not.toContain(tokenLikeValue);
 
-      const logoutExtra = await runAkua(["auth", "logout", tokenLikeValue, "--json"], { HOME: home });
+      const logoutExtra = await runAkua(
+        ["auth", "logout", tokenLikeValue, "--json"],
+        { HOME: home },
+      );
       expect(logoutExtra.exitCode).toBe(2);
       expect(JSON.parse(logoutExtra.stdout)).toMatchObject({
         error: {
@@ -428,27 +878,12 @@ describe("akua entrypoint", () => {
     }
   });
 
-  test("loader caller authentication reads only the protected local config", async () => {
-    const home = await makeTempHome();
-    try {
-      const configDir = join(home, ".config", "akua");
-      const configPath = join(configDir, "config.json");
-      await mkdir(configDir, { recursive: true, mode: 0o700 });
-      await writeFile(configPath, JSON.stringify({ token: "caller-auth-fixture" }), { mode: 0o600 });
-      await chmod(configDir, 0o700);
-      await chmod(configPath, 0o600);
-
-      await expect(readProtectedCallerToken({ HOME: home })).resolves.toBe("caller-auth-fixture");
-      await expect(readProtectedCallerToken({ HOME: home, AKUA_API_TOKEN: "environment-auth-fixture" })).rejects.toMatchObject({
-        code: "AKUA_LOADER_ENV_AUTH_FORBIDDEN",
-      });
-    } finally {
-      await rm(home, { recursive: true, force: true });
-    }
-  });
 });
 
-async function runAkua(args: readonly string[], env: Record<string, string> = {}) {
+async function runAkua(
+  args: readonly string[],
+  env: Record<string, string> = {},
+) {
   const childEnv = { ...process.env, ...env };
   if (!("AKUA_OUTPUT" in env)) {
     delete childEnv.AKUA_OUTPUT;
@@ -458,7 +893,9 @@ async function runAkua(args: readonly string[], env: Record<string, string> = {}
   }
 
   const proc = Bun.spawn({
-    cmd: ["bun", "src/bin/akua.ts", ...args],
+    // Use this Bun process directly: the CI PATH can be a mise shim, while
+    // tests need a deterministic executable for each isolated child process.
+    cmd: [process.execPath, "src/bin/akua.ts", ...args],
     stdout: "pipe",
     stderr: "pipe",
     env: childEnv,

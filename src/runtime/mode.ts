@@ -1,4 +1,6 @@
-import { usageError } from "./errors";
+import { Effect } from "effect";
+
+import { UsageFailure } from "./effect-runtime";
 
 export type OutputMode = "human" | "agent" | "json" | "quiet";
 
@@ -36,82 +38,121 @@ const AUTOMATION_ENV_VARS = [
   "TF_BUILD",
 ];
 
-const EXPLICIT_OUTPUT_MODES = ["human", "agent", "json", "quiet"] as const;
+const EXPLICIT_OUTPUT_MODES: readonly OutputMode[] = [
+  "human",
+  "agent",
+  "json",
+  "quiet",
+];
 
-export function detectOutputMode(input: OutputModeInput): OutputMode {
-  const explicit = readExplicitMode(input.argv, input.env);
-  if (explicit) {
-    return explicit;
-  }
-
-  if (hasAnyEnv(input.env, AGENT_ENV_VARS) || hasAnyEnv(input.env, AUTOMATION_ENV_VARS)) {
-    return "agent";
-  }
-
-  if (input.stdoutIsTTY === false) {
-    return "agent";
-  }
-
-  return "human";
+export function detectOutputMode(
+  input: OutputModeInput,
+): Effect.Effect<OutputMode, UsageFailure> {
+  return readExplicitMode(input.argv, input.env).pipe(
+    Effect.map((explicit) => {
+      if (explicit !== undefined) {
+        return explicit;
+      }
+      if (
+        hasAnyEnv(input.env, AGENT_ENV_VARS) ||
+        hasAnyEnv(input.env, AUTOMATION_ENV_VARS)
+      ) {
+        return "agent";
+      }
+      if (input.stdoutIsTTY === false) {
+        return "agent";
+      }
+      return "human";
+    }),
+  );
 }
 
 export function isAutomationMode(mode: OutputMode): boolean {
   return mode === "agent" || mode === "json" || mode === "quiet";
 }
 
-function readExplicitMode(argv: readonly string[], env: Record<string, string | undefined>): OutputMode | undefined {
-  const outputFlag = readOutputFlag(argv);
-  const envMode = readEnvOutputMode(env);
+function readExplicitMode(
+  argv: readonly string[],
+  env: Record<string, string | undefined>,
+): Effect.Effect<OutputMode | undefined, UsageFailure> {
+  return readOutputFlag(argv).pipe(
+    Effect.flatMap((outputFlag) =>
+      readEnvOutputMode(env).pipe(
+        Effect.map((envMode) => {
+          if (argv.includes("--json")) {
+            return "json";
+          }
+          if (argv.includes("--quiet") || argv.includes("-q")) {
+            return "quiet";
+          }
 
-  if (argv.includes("--json")) {
-    return "json";
-  }
-  if (argv.includes("--quiet") || argv.includes("-q")) {
-    return "quiet";
-  }
-
-  return outputFlag ?? envMode;
+          return outputFlag ?? envMode;
+        }),
+      ),
+    ),
+  );
 }
 
-function readOutputFlag(argv: readonly string[]): OutputMode | undefined {
-  let mode: OutputMode | undefined;
-  for (let index = 0; index < argv.length; index += 1) {
-    const value = argv[index];
-    if (value === "--output" || value === "-o") {
-      const raw = argv[index + 1];
-      if (raw === undefined || raw === "" || raw.startsWith("-")) {
-        throw usageError(`Missing value for ${value}. Expected one of: ${EXPLICIT_OUTPUT_MODES.join(", ")}.`);
+function readOutputFlag(
+  argv: readonly string[],
+): Effect.Effect<OutputMode | undefined, UsageFailure> {
+  return Effect.gen(function* () {
+    let mode: OutputMode | undefined;
+    for (let index = 0; index < argv.length; index += 1) {
+      const value = argv[index];
+      if (value === "--output" || value === "-o") {
+        const raw = argv[index + 1];
+        if (raw === undefined || raw === "" || raw.startsWith("-")) {
+          return yield* invalidMode(
+            `Missing value for ${value}. Expected one of: ${EXPLICIT_OUTPUT_MODES.join(", ")}.`,
+          );
+        }
+        mode = yield* parseOutputMode(raw);
+        index += 1;
+        continue;
       }
-      mode = parseOutputMode(raw);
-      index += 1;
-      continue;
-    }
-    if (value.startsWith("--output=") || value.startsWith("-o=")) {
-      const [flag, raw] = splitFlagAssignment(value);
-      if (raw === "") {
-        throw usageError(`Missing value for ${flag}. Expected one of: ${EXPLICIT_OUTPUT_MODES.join(", ")}.`);
+      if (value.startsWith("--output=") || value.startsWith("-o=")) {
+        const [flag, raw] = splitFlagAssignment(value);
+        if (raw === "") {
+          return yield* invalidMode(
+            `Missing value for ${flag}. Expected one of: ${EXPLICIT_OUTPUT_MODES.join(", ")}.`,
+          );
+        }
+        mode = yield* parseOutputMode(raw);
       }
-      mode = parseOutputMode(raw);
     }
-  }
-  return mode;
+    return mode;
+  });
 }
 
-function readEnvOutputMode(env: Record<string, string | undefined>): OutputMode | undefined {
+function readEnvOutputMode(
+  env: Record<string, string | undefined>,
+): Effect.Effect<OutputMode | undefined, UsageFailure> {
   if (env.AKUA_OUTPUT === undefined) {
-    return undefined;
+    return Effect.succeed(undefined);
   }
   if (env.AKUA_OUTPUT === "") {
-    throw usageError(`Invalid AKUA_OUTPUT value: . Expected one of: ${EXPLICIT_OUTPUT_MODES.join(", ")}.`);
+    return invalidMode(
+      `Invalid AKUA_OUTPUT value: . Expected one of: ${EXPLICIT_OUTPUT_MODES.join(", ")}.`,
+    );
   }
   return parseOutputMode(env.AKUA_OUTPUT, "AKUA_OUTPUT");
 }
 
-function parseOutputMode(value: string, source = "--output"): OutputMode {
-  if (EXPLICIT_OUTPUT_MODES.includes(value as OutputMode)) {
-    return value as OutputMode;
+function parseOutputMode(
+  value: string,
+  source = "--output",
+): Effect.Effect<OutputMode, UsageFailure> {
+  if (isOutputMode(value)) {
+    return Effect.succeed(value);
   }
-  throw usageError(`Invalid ${source} value: ${value}. Expected one of: ${EXPLICIT_OUTPUT_MODES.join(", ")}.`);
+  return invalidMode(
+    `Invalid ${source} value: ${value}. Expected one of: ${EXPLICIT_OUTPUT_MODES.join(", ")}.`,
+  );
+}
+
+function isOutputMode(value: string): value is OutputMode {
+  return EXPLICIT_OUTPUT_MODES.some((mode) => mode === value);
 }
 
 function splitFlagAssignment(value: string): [string, string] {
@@ -124,4 +165,10 @@ function hasAnyEnv(env: Record<string, string | undefined>, names: readonly stri
     const value = env[name];
     return value !== undefined && value !== "" && value !== "0" && value.toLowerCase() !== "false";
   });
+}
+
+function invalidMode(
+  message: string,
+): Effect.Effect<never, UsageFailure> {
+  return Effect.fail(new UsageFailure({ message }));
 }

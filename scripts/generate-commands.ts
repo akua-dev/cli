@@ -1,95 +1,206 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { Effect, Runtime } from "effect";
+import { Command, Flag } from "effect/unstable/cli";
 
 import type { CommandDefinition } from "../src/runtime/registry";
+import {
+  ScriptFiles,
+  ScriptHostFailure,
+  ScriptValidationFailure,
+} from "./runtime/services";
+import { ScriptCliLive } from "./runtime/cli-live";
+import { ScriptLive } from "./runtime/services-live";
 
 const SPEC_PATH = "openapi/public.json";
 const OUTPUT_PATH = "src/generated/commands.gen.ts";
 const HTTP_METHODS = new Set(["get", "post", "put", "patch", "delete"]);
 
 interface OpenApiOperation {
-  operationId?: string;
-  tags?: string[];
-  summary?: string;
-  security?: unknown[];
-  parameters?: OpenApiParameter[];
-  "x-platform-visibility"?: string;
+  readonly operationId?: string;
+  readonly tags?: readonly string[];
+  readonly summary?: string;
+  readonly security?: readonly unknown[];
+  readonly parameters?: readonly OpenApiParameter[];
+  readonly "x-platform-visibility"?: string;
 }
-
 interface OpenApiParameter {
-  name?: string;
-  in?: "path" | "query" | "header" | "cookie";
-  required?: boolean;
+  readonly name?: string;
+  readonly in?: "path" | "query" | "header" | "cookie";
+  readonly required?: boolean;
 }
 
-export async function generateCommandRegistry(specPath = SPEC_PATH): Promise<string> {
-  const spec = JSON.parse(await readFile(specPath, "utf8"));
-  const commands = collectPublicCommands(spec);
-  return renderCommandRegistry(commands);
+export function generateCommandRegistry(
+  specPath = SPEC_PATH,
+): Effect.Effect<
+  string,
+  ScriptHostFailure | ScriptValidationFailure,
+  ScriptFiles
+> {
+  return Effect.gen(function* () {
+    const files = yield* ScriptFiles;
+    const contents = yield* files.readText(specPath);
+    const spec = yield* Effect.try({
+      try: () => JSON.parse(contents),
+      catch: (cause) =>
+        new ScriptValidationFailure({
+          message: `OpenAPI spec is not valid JSON: ${errorMessage(cause)}`,
+        }),
+    });
+    return renderCommandRegistry(yield* collectPublicCommands(spec));
+  });
 }
 
-export function collectPublicCommands(spec: unknown): CommandDefinition[] {
-  if (!spec || typeof spec !== "object") {
-    throw new Error("OpenAPI spec must be an object");
-  }
+export const generateCommandsCommand = Command.make(
+  "generate-commands",
+  {
+    check: Flag.boolean("check").pipe(
+      Flag.withDescription("Fail if the generated registry is out of date"),
+    ),
+  },
+  ({ check }) =>
+    Effect.gen(function* () {
+      const generated = yield* generateCommandRegistry();
+      const files = yield* ScriptFiles;
+      if (check) {
+        const current = yield* files
+          .readText(OUTPUT_PATH)
+          .pipe(Effect.catch(() => Effect.succeed("")));
+        if (current !== generated)
+          return yield* invalidSpec(
+            `${OUTPUT_PATH} is out of date. Run: mise run generate`,
+          );
+        return;
+      }
+      yield* files.writeText(OUTPUT_PATH, generated);
+    }),
+).pipe(Command.withDescription("Generate the public command registry"));
 
-  const paths = (spec as { paths?: unknown }).paths;
-  if (!paths || typeof paths !== "object") {
-    throw new Error("OpenAPI spec is missing paths");
-  }
-
-  const commands: CommandDefinition[] = [];
-  for (const [path, methods] of Object.entries(paths as Record<string, unknown>)) {
-    if (!methods || typeof methods !== "object") {
-      continue;
+export function collectPublicCommands(
+  spec: unknown,
+): Effect.Effect<CommandDefinition[], ScriptValidationFailure> {
+  if (!isRecord(spec)) return invalidSpec("OpenAPI spec must be an object");
+  const paths = spec.paths;
+  if (!isRecord(paths)) return invalidSpec("OpenAPI spec is missing paths");
+  return Effect.gen(function* () {
+    const commands: CommandDefinition[] = [];
+    for (const [path, methods] of Object.entries(paths)) {
+      if (!isRecord(methods)) continue;
+      for (const [method, rawOperation] of Object.entries(methods)) {
+        if (
+          !HTTP_METHODS.has(method) ||
+          !isOpenApiOperation(rawOperation) ||
+          rawOperation["x-platform-visibility"] !== "PUBLIC"
+        )
+          continue;
+        if (
+          rawOperation.operationId === undefined ||
+          rawOperation.operationId === ""
+        ) {
+          return yield* invalidSpec(
+            `Public operation at ${method.toUpperCase()} ${path} is missing operationId`,
+          );
+        }
+        commands.push(yield* toCommandDefinition(method, path, rawOperation));
+      }
     }
-    for (const [method, rawOperation] of Object.entries(methods as Record<string, unknown>)) {
-      if (!HTTP_METHODS.has(method) || !rawOperation || typeof rawOperation !== "object") {
-        continue;
-      }
-      const operation = rawOperation as OpenApiOperation;
-      if (operation["x-platform-visibility"] !== "PUBLIC") {
-        continue;
-      }
-      if (!operation.operationId) {
-        throw new Error(`Public operation at ${method.toUpperCase()} ${path} is missing operationId`);
-      }
-      commands.push(toCommandDefinition(method, path, operation));
-    }
-  }
-
-  return commands.sort((left, right) => left.operation_id.localeCompare(right.operation_id));
+    return commands.sort((left, right) =>
+      left.operation_id.localeCompare(right.operation_id),
+    );
+  });
 }
 
-function toCommandDefinition(method: string, path: string, operation: OpenApiOperation): CommandDefinition {
-  const [resource, rawAction = method] = operation.operationId!.split(".");
+function toCommandDefinition(
+  method: string,
+  path: string,
+  operation: OpenApiOperation,
+): Effect.Effect<CommandDefinition, ScriptValidationFailure> {
+  const operationId = operation.operationId;
+  if (operationId === undefined || operationId === "")
+    return invalidSpec("Operation ID is required");
+  const [resource, rawAction = method] = operationId.split(".");
   const action = kebab(rawAction);
-  return {
-    operation_id: operation.operationId!,
+  return Effect.succeed({
+    operation_id: operationId,
     command: `${kebab(resource)} ${action}`,
     resource: kebab(resource),
     action,
     method: method.toUpperCase(),
     path,
     tag: operation.tags?.[0] ?? kebab(resource),
-    summary: operation.summary ?? operation.operationId!,
+    summary: operation.summary ?? operationId,
     visibility: "PUBLIC",
-    requires_auth: Array.isArray(operation.security) && operation.security.length > 0,
+    requires_auth:
+      operation.security !== undefined && operation.security.length > 0,
     parameters: (operation.parameters ?? [])
-      .filter((parameter) => parameter.name && parameter.in)
+      .filter(
+        (parameter) =>
+          parameter.name !== undefined && parameter.in !== undefined,
+      )
       .map((parameter) => ({
-        name: parameter.name!,
-        in: parameter.in!,
+        name: parameter.name ?? "",
+        in: parameter.in ?? "query",
         required: parameter.required === true,
       })),
-  };
+  });
 }
-
 function renderCommandRegistry(commands: readonly CommandDefinition[]): string {
-  return `// Generated by scripts/generate-commands.ts. Do not edit by hand.\n` +
+  return (
+    `// Generated by scripts/generate-commands.ts. Do not edit by hand.\n` +
     `import type { CommandDefinition } from "../runtime/registry";\n\n` +
-    `export const commandRegistry = ${JSON.stringify(commands, null, 2)} as const satisfies readonly CommandDefinition[];\n`;
+    `export const commandRegistry: readonly CommandDefinition[] = ${JSON.stringify(commands, null, 2)};\n`
+  );
 }
-
+function isOpenApiOperation(value: unknown): value is OpenApiOperation {
+  return (
+    isRecord(value) &&
+    optionalString(value.operationId) &&
+    optionalStrings(value.tags) &&
+    optionalString(value.summary) &&
+    optionalArray(value.security) &&
+    optionalParameters(value.parameters) &&
+    optionalString(value["x-platform-visibility"])
+  );
+}
+function optionalString(value: unknown): boolean {
+  return value === undefined || typeof value === "string";
+}
+function optionalArray(value: unknown): boolean {
+  return value === undefined || Array.isArray(value);
+}
+function optionalStrings(value: unknown): boolean {
+  return (
+    value === undefined ||
+    (Array.isArray(value) && value.every((item) => typeof item === "string"))
+  );
+}
+function optionalParameters(value: unknown): boolean {
+  return (
+    value === undefined ||
+    (Array.isArray(value) && value.every(isOpenApiParameter))
+  );
+}
+function isOpenApiParameter(value: unknown): value is OpenApiParameter {
+  return (
+    isRecord(value) &&
+    optionalString(value.name) &&
+    (value.in === undefined ||
+      value.in === "path" ||
+      value.in === "query" ||
+      value.in === "header" ||
+      value.in === "cookie") &&
+    (value.required === undefined || typeof value.required === "boolean")
+  );
+}
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+function invalidSpec(
+  message: string,
+): Effect.Effect<never, ScriptValidationFailure> {
+  return Effect.fail(new ScriptValidationFailure({ message }));
+}
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
 function kebab(value: string): string {
   return value
     .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
@@ -98,20 +209,16 @@ function kebab(value: string): string {
 }
 
 if (import.meta.main) {
-  try {
-    const generated = await generateCommandRegistry();
-    if (process.argv.includes("--check")) {
-      const current = await readFile(OUTPUT_PATH, "utf8").catch(() => "");
-      if (current !== generated) {
-        console.error(`${OUTPUT_PATH} is out of date. Run: mise run generate`);
-        process.exit(1);
-      }
-    } else {
-      await writeFile(OUTPUT_PATH, generated);
-      console.error(`Generated ${OUTPUT_PATH}`);
-    }
-  } catch (error) {
-    console.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
-  }
+  Runtime.makeRunMain(({ fiber, teardown }) => {
+    fiber.addObserver((exit) =>
+      teardown(exit, (code) => {
+        process.exitCode = code;
+      }),
+    );
+  })(
+    Command.run(generateCommandsCommand, { version: "0.9.0" }).pipe(
+      Effect.provide(ScriptLive),
+      Effect.provide(ScriptCliLive),
+    ),
+  );
 }

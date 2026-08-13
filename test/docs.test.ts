@@ -19,12 +19,13 @@ describe("distribution documentation", () => {
     expect(readme).not.toMatch(/npm (?:install|i)|bun add|npx .*@akua-dev\/cli/);
   });
 
-  test("README explains auth, adaptive output, codegen, upgrades, and the source skill honestly", async () => {
+  test("README explains auth, adaptive output, generated API status, and upgrades honestly", async () => {
     const readme = await text("README.md");
 
     for (const value of [
       "AKUA_API_TOKEN",
       "akua auth login",
+      "akua auth login --no-browser",
       "akua auth status",
       "akua auth logout",
       "~/.config/akua/config.json",
@@ -38,23 +39,44 @@ describe("distribution documentation", () => {
       "mise run generate",
       "mise run generate:check",
       "operationId",
-      "skills/akua/SKILL.md",
+      "generated typed Effect API",
+      "generic executor is not yet wired",
+      "provider-specific commands",
       "brew upgrade akua",
     ]) {
       expect(readme).toContain(value);
     }
-    expect(readme).toContain("private");
-    expect(readme).toContain("skill name `akua`");
+    expect(readme).not.toContain("skills/akua/");
+    expect(readme).not.toContain("akua-dev/skills");
+    expect(readme).toMatch(
+      /API commands still report that execution\s+is not implemented\./,
+    );
+    expect(readme).not.toContain("Generated API commands execute");
     expect(readme).not.toContain("agent-skills-standard-following");
     expect(readme).not.toContain("skills add akua-dev/skills");
   });
 
-  test("AGENTS records durable release and cross-repository ownership rules", async () => {
+  test("architecture records device authentication and both generated API artifacts without claiming execution", async () => {
+    const architecture = await text("docs/architecture.md");
+
+    for (const value of [
+      "src/generated/commands.gen.ts",
+      "src/generated/openapi-api.gen.ts",
+      "Browser/device login",
+      "akua auth login --no-browser",
+      "generic executor is not yet wired",
+      "provider-specific command",
+    ]) {
+      expect(architecture).toContain(value);
+    }
+  });
+
+  test("AGENTS records durable release and Effect-only development rules", async () => {
     const agents = await text("AGENTS.md");
 
     expect(agents).toContain("scripts/release.ts");
-    expect(agents).toContain("akua-dev/skills");
     expect(agents).toContain("akua-dev/homebrew-tap");
+    expect(agents).toContain("skills/effect-v4/SKILL.md");
     expect(agents).toContain("## Maintaining this file");
   });
 });

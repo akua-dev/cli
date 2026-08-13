@@ -1,0 +1,14 @@
+diff --git a/dist/internal/schema/toCodeDocument.js b/dist/internal/schema/toCodeDocument.js
+index 59399d367e3b0755e2394e384e3b1586e5032363..c3d282057f7d7d4c788b5495b7f96d41005da418 100644
+--- a/dist/internal/schema/toCodeDocument.js
++++ b/dist/internal/schema/toCodeDocument.js
+@@ -418,7 +418,8 @@
+             return makeCode(`Schema.Record(${signature.parameter.runtime}, ${signature.type.runtime})`, `{ readonly [x: ${signature.parameter.Type}]: ${signature.type.Type} }`);
+           }
+           const indexRuntimes = indexSignatures.map(signature => `Schema.Record(${signature.parameter.runtime}, ${signature.type.runtime})`).join(", ");
+-          const indexTypes = indexSignatures.map(signature => `readonly [x: ${signature.parameter.Type}]: ${signature.type.Type}`).join(", ");
++          const indexValueType = properties.some(property => property.Type.includes("?")) ? " | undefined" : "";
++          const indexTypes = indexSignatures.map(signature => `readonly [x: ${signature.parameter.Type}]: ${signature.type.Type}${indexValueType}`).join(", ");
+           return makeCode(`Schema.StructWithRest(Schema.Struct({ ${propertyRuntimes} }), [${indexRuntimes}])`, `{ ${propertyTypes}${properties.length > 0 ? ", " : ""}${indexTypes} }`);
+         }
+      case "Union":
