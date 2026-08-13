@@ -28,11 +28,6 @@ describe("release-please configuration", () => {
           type: "generic",
           path: "src/bin/akua.ts",
         },
-        {
-          type: "json",
-          path: "skills/akua/skill-package.json",
-          jsonpath: "$.version",
-        },
       ],
     });
     expect(config["include-component-in-tag"]).toBe(false);
@@ -53,15 +48,13 @@ describe("release-please configuration", () => {
     expect(manifest["."]).toMatch(/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/);
   });
 
-  test("keeps package, binary, and skill release metadata coherent", () => {
+  test("keeps package and binary release metadata coherent", () => {
     const manifest = JSON.parse(readFileSync(".release-please-manifest.json", "utf8")) as Record<string, string>;
     const packageVersion = JSON.parse(readFileSync("package.json", "utf8")) as { version: string };
-    const skillPackage = JSON.parse(readFileSync("skills/akua/skill-package.json", "utf8")) as { version: string };
     const cli = readFileSync("src/bin/akua.ts", "utf8");
     const changelog = readFileSync("CHANGELOG.md", "utf8");
 
     expect(packageVersion.version).toBe(manifest["."]);
-    expect(skillPackage.version).toBe(manifest["."]);
     expect(cli).toContain(`const VERSION = "${manifest["."]}"; // x-release-please-version`);
     expect(changelog).toContain(`## [${manifest["."]}]`);
   });

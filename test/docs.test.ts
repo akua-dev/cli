@@ -19,7 +19,7 @@ describe("distribution documentation", () => {
     expect(readme).not.toMatch(/npm (?:install|i)|bun add|npx .*@akua-dev\/cli/);
   });
 
-  test("README explains auth, adaptive output, generated API status, upgrades, and the source skill honestly", async () => {
+  test("README explains auth, adaptive output, generated API status, and upgrades honestly", async () => {
     const readme = await text("README.md");
 
     for (const value of [
@@ -42,13 +42,12 @@ describe("distribution documentation", () => {
       "generated typed Effect API",
       "generic executor is not yet wired",
       "provider-specific commands",
-      "skills/akua/SKILL.md",
       "brew upgrade akua",
     ]) {
       expect(readme).toContain(value);
     }
-    expect(readme).toContain("private");
-    expect(readme).toContain("skill name `akua`");
+    expect(readme).not.toContain("skills/akua/");
+    expect(readme).not.toContain("akua-dev/skills");
     expect(readme).toMatch(
       /API commands still report that execution\s+is not implemented\./,
     );
@@ -72,12 +71,12 @@ describe("distribution documentation", () => {
     }
   });
 
-  test("AGENTS records durable release and cross-repository ownership rules", async () => {
+  test("AGENTS records durable release and Effect-only development rules", async () => {
     const agents = await text("AGENTS.md");
 
     expect(agents).toContain("scripts/release.ts");
-    expect(agents).toContain("akua-dev/skills");
     expect(agents).toContain("akua-dev/homebrew-tap");
+    expect(agents).toContain("skills/effect-v4/SKILL.md");
     expect(agents).toContain("## Maintaining this file");
   });
 });

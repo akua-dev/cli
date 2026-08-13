@@ -9,11 +9,6 @@
         {
           "type": "generic",
           "path": "src/bin/akua.ts"
-        },
-        {
-          "type": "json",
-          "path": "skills/akua/skill-package.json",
-          "jsonpath": "$.version"
         }
       ]
     }

@@ -214,16 +214,6 @@ provider-neutral: it has no provider-specific commands, flags, environment
 variables, or credential loaders. When execution is added, provider-specific
 data belongs only in the generated public API request input.
 
-## CLI-owned agent skill
-
-This repository owns the canonical source location at
-`skills/akua/SKILL.md` with skill name `akua`. Use the source from a branch or
-tag that contains the file; its package metadata is kept in sync by the CLI's
-release configuration.
-
-The separate `akua-dev/skills` repository owns importing and syncing this source.
-It is private today and is not claimed here as a publicly installable channel.
-
 ## Development and release validation
 
 Prerequisites are [mise](https://mise.jdx.dev/) and the pinned Bun toolchain:
