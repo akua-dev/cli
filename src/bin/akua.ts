@@ -159,7 +159,7 @@ function helpView(): RenderEnvelope {
       "Usage: akua [--output human|agent|json|quiet] <command>",
       "Commands:",
       "  akua                  Show compact home view",
-      "  akua auth login       Save a local API token",
+      "  akua auth login       Sign in with a browser/device flow",
       "  akua auth status      Show local authentication status",
       "  akua auth logout      Remove the saved local API token",
       "  akua commands         List generated public OpenAPI command registry",

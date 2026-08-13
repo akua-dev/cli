@@ -29,6 +29,10 @@ describe("akua entrypoint", () => {
     expect(help.stdout).toContain(
       "akua <resource> <action> [--input -|<file>]",
     );
+    expect(help.stdout).toContain(
+      "akua auth login       Sign in with a browser/device flow",
+    );
+    expect(help.stdout).not.toContain("Save a local API token");
   });
 
   test("fails loudly on unknown flags", async () => {
