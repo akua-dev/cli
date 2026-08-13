@@ -6,9 +6,9 @@ export interface HttpResponse {
   readonly body: unknown;
 }
 
-export interface HttpRequest {
+export interface JsonHttpRequest {
   readonly url: string;
-  readonly fields: Readonly<Record<string, string>>;
+  readonly body: Readonly<Record<string, string>>;
 }
 
 export class HttpFailure extends Data.TaggedError("HttpFailure")<{
@@ -30,8 +30,8 @@ export class SecureConfigFailure extends Data.TaggedError(
 export class Http extends Context.Service<
   Http,
   {
-    readonly postForm: (
-      request: HttpRequest,
+    readonly postJson: (
+      request: JsonHttpRequest,
     ) => Effect.Effect<HttpResponse, HttpFailure>;
   }
 >()("platform/cli/Http") {}

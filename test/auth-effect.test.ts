@@ -36,16 +36,17 @@ const testClockLayer = Layer.succeed(CliClock, {
 
 describe("Effect auth command", () => {
   test("runs the device flow through injected services and TestClock", async () => {
-    const requests: string[] = [];
+    const requests: Array<{ url: string; body: Readonly<Record<string, string>> }> =
+      [];
     const launched: string[] = [];
     const stderr: string[] = [];
     const saved: Array<{ path: string; token: string }> = [];
     let tokenRequests = 0;
     const services = Layer.mergeAll(
       Layer.succeed(Http, {
-        postForm: ({ url }) =>
+        postJson: ({ url, body }) =>
           Effect.sync(() => {
-            requests.push(url);
+            requests.push({ url, body });
             if (url.endsWith("/device/code")) {
               return {
                 status: 200,
@@ -95,9 +96,26 @@ describe("Effect auth command", () => {
     );
 
     expect(requests).toEqual([
-      "https://akua.dev/api/auth/device/code",
-      "https://akua.dev/api/auth/device/token",
-      "https://akua.dev/api/auth/device/token",
+      {
+        url: "https://akua.dev/api/auth/device/code",
+        body: { client_id: "akua-cli", scope: "platform" },
+      },
+      {
+        url: "https://akua.dev/api/auth/device/token",
+        body: {
+          client_id: "akua-cli",
+          device_code: "device-code",
+          grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+        },
+      },
+      {
+        url: "https://akua.dev/api/auth/device/token",
+        body: {
+          client_id: "akua-cli",
+          device_code: "device-code",
+          grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+        },
+      },
     ]);
     expect(launched).toEqual(["https://example.test/device"]);
     expect(stderr).toEqual([
@@ -131,7 +149,7 @@ describe("Effect auth command", () => {
       ];
       const services = Layer.mergeAll(
         Layer.succeed(Http, {
-          postForm: () => Effect.sync(() => responses.shift()!),
+          postJson: () => Effect.sync(() => responses.shift()!),
         }),
         Layer.succeed(Browser, { launch: () => Effect.void }),
         Layer.succeed(Process, { awaitSignal: Effect.never }),

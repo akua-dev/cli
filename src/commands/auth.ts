@@ -246,11 +246,11 @@ function pollForDeviceToken(
   });
 }
 
-function requestDevice(url: string, fields: Record<string, string>) {
+function requestDevice(url: string, body: Record<string, string>) {
   return Effect.gen(function* () {
     const http = yield* Http;
     return yield* http
-      .postForm({ url, fields })
+      .postJson({ url, body })
       .pipe(Effect.mapError(() => new DeviceRequestFailure()));
   });
 }

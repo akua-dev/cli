@@ -50,7 +50,7 @@ describe("Effect CLI runtime", () => {
 
   test("uses service tags and TestClock layers without host dependencies", async () => {
     const services = Layer.mergeAll(
-      Layer.succeed(Http, { postForm: () => Effect.die("not used") }),
+      Layer.succeed(Http, { postJson: () => Effect.die("not used") }),
       Layer.succeed(Browser, { launch: () => Effect.void }),
       Layer.succeed(Process, { awaitSignal: Effect.never }),
       Layer.succeed(Console, {

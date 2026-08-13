@@ -12,8 +12,11 @@ import { dirname, join } from "node:path";
 import { Data, Duration, Effect, Layer } from "effect";
 import {
   FetchHttpClient,
+  HttpBody,
   HttpClient,
+  HttpClientError,
   HttpClientRequest,
+  HttpClientResponse,
 } from "effect/unstable/http";
 
 import {
@@ -42,12 +45,11 @@ export const HttpLive = Layer.effect(
   Effect.gen(function* () {
     const client = yield* HttpClient.HttpClient;
     return {
-      postForm: (request) =>
+      postJson: (request) =>
         readJsonResponse(
-          client.execute(
-            HttpClientRequest.post(request.url).pipe(
-              HttpClientRequest.bodyUrlParams(request.fields),
-            ),
+          HttpClientRequest.post(request.url).pipe(
+            HttpClientRequest.bodyJson(request.body),
+            Effect.flatMap(client.execute),
           ),
           "Device response is too large.",
         ),
@@ -172,7 +174,10 @@ export const CliLive: Layer.Layer<CliServices> = Layer.mergeAll(
 );
 
 function readJsonResponse(
-  response: ReturnType<HttpClient.HttpClient["execute"]>,
+  response: Effect.Effect<
+    HttpClientResponse.HttpClientResponse,
+    HttpClientError.HttpClientError | HttpBody.HttpBodyError
+  >,
   oversizedMessage: string,
 ): Effect.Effect<{ readonly status: number; readonly body: unknown }, HttpFailure> {
   return response.pipe(

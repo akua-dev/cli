@@ -60,12 +60,12 @@ function testServices(dependencies: AuthTestDependencies) {
   const now = dependencies.now ?? Date.now;
   return Layer.mergeAll(
     Layer.succeed(Http, {
-      postForm: ({ url, fields }) =>
+      postJson: ({ url, body }) =>
         Effect.tryPromise({
           try: () =>
             dependencies.request({
               url,
-              body: fields,
+              body,
               signal: dependencies.signal,
             }),
           catch: (cause) => new HttpFailure({ cause }),

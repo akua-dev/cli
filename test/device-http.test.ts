@@ -6,7 +6,7 @@ import { Http, HttpFailure } from "../src/runtime/services";
 import { HttpLive } from "../src/runtime/services-live";
 
 describe("device authorization HTTP", () => {
-  test("uses Effect's FetchHttpClient to encode form requests", async () => {
+  test("uses Effect's FetchHttpClient to encode JSON requests", async () => {
     let received: Request | undefined;
     const fetch = (input: RequestInfo | URL, init?: RequestInit) => {
       received = new Request(input, init);
@@ -14,9 +14,9 @@ describe("device authorization HTTP", () => {
     };
     const program = Effect.gen(function* () {
       const http = yield* Http;
-      return yield* http.postForm({
+      return yield* http.postJson({
         url: "https://api.example.test/device/token",
-        fields: {
+        body: {
           client_id: "akua cli",
           scope: "platform/read+write",
         },
@@ -31,12 +31,11 @@ describe("device authorization HTTP", () => {
     );
 
     expect(response).toEqual({ status: 200, body: { access_token: "token" } });
-    expect(received?.headers.get("content-type")).toContain(
-      "application/x-www-form-urlencoded",
-    );
-    expect(await received?.text()).toBe(
-      "client_id=akua+cli&scope=platform%2Fread%2Bwrite",
-    );
+    expect(received?.headers.get("content-type")).toContain("application/json");
+    expect(await received?.json()).toEqual({
+      client_id: "akua cli",
+      scope: "platform/read+write",
+    });
   });
 
   test("maps invalid and oversized response bodies to HttpFailure", async () => {
@@ -56,9 +55,9 @@ describe("device authorization HTTP", () => {
     };
     const request = Effect.gen(function* () {
       const http = yield* Http;
-      return yield* http.postForm({
+      return yield* http.postJson({
         url: "https://api.example.test/device/token",
-        fields: {},
+        body: {},
       });
     });
 
