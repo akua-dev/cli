@@ -44111,7 +44111,76 @@
                 },
                 "x-effect-stream": {
                   "encoding": "sse",
-                  "failureEvent": "error",
+                  "failureEvent": "effect/httpapi/stream/failure",
+                  "causeSchema": {
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "_tag": {
+                              "const": "Fail"
+                            },
+                            "error": {
+                              "type": "object",
+                              "properties": {
+                                "error": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "error"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "_tag",
+                            "error"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "_tag": {
+                              "const": "Die"
+                            },
+                            "defect": {}
+                          },
+                          "required": [
+                            "_tag",
+                            "defect"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "_tag": {
+                              "const": "Interrupt"
+                            },
+                            "fiberId": {
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "_tag",
+                            "fiberId"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
                   "errorSchema": {
                     "type": "object",
                     "properties": {
