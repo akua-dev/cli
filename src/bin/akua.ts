@@ -1,6 +1,9 @@
 #!/usr/bin/env bun
-import { Effect, Exit, Runtime, Stream } from "effect";
+import { Effect, Exit, Ref, Runtime, Stream } from "effect";
+import { NodeServices } from "@effect/platform-node";
+import { CliOutput, Command } from "effect/unstable/cli";
 
+import { makeAkuaCommand, shouldShowGroupHelp } from "../cli/command";
 import { authView } from "../commands/auth";
 import {
   generatedCommandView,
@@ -60,12 +63,51 @@ function mainEffect(
       env,
       stdoutIsTTY: console.stdoutIsTTY,
     }).pipe(
-      Effect.flatMap((mode) => runCli(route(argv, env), { mode })),
+      Effect.flatMap((mode) => {
+        if (usesStructuredRenderer(argv, mode)) {
+          return runCli(route(argv, env), { mode });
+        }
+
+        return Effect.gen(function* () {
+          const exitCode = yield* Ref.make(0);
+          const command = makeAkuaCommand(() =>
+            runCli(route(argv, env), { mode }).pipe(
+              Effect.tap((code) => Ref.set(exitCode, code)),
+              Effect.asVoid,
+            ),
+          );
+          yield* Command.runWith(command, { version: VERSION })(
+            commandInput(argv),
+          ).pipe(
+            Effect.catch(() => Ref.set(exitCode, 2)),
+          );
+          return yield* Ref.get(exitCode);
+        }).pipe(
+          Effect.provide(NodeServices.layer),
+          Effect.provide(
+            CliOutput.layer(CliOutput.defaultFormatter({ colors: false })),
+          ),
+        );
+      }),
       Effect.catch((failure) =>
         runCli(Effect.fail(failure), { mode: fallbackMode }),
       ),
     );
   });
+}
+
+function usesStructuredRenderer(
+  argv: readonly string[],
+  mode: OutputMode,
+): boolean {
+  return mode !== "human" && argv.length > 0;
+}
+
+function commandInput(argv: readonly string[]): readonly string[] {
+  if (argv.length === 0 || shouldShowGroupHelp(argv)) {
+    return [...argv, "--help"];
+  }
+  return argv;
 }
 
 function route(
