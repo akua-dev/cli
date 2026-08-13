@@ -42,7 +42,7 @@ export type CliFailure =
   | CommandFailure;
 
 export interface CliRenderer {
-  readonly mode: OutputMode | (() => OutputMode);
+  readonly mode: OutputMode;
 }
 
 export function runCli<R>(
@@ -54,12 +54,12 @@ export function runCli<R>(
     return yield* Effect.matchEffect(command, {
       onSuccess: (envelope) =>
         console
-          .writeStdout(renderSuccess(envelope, rendererMode(renderer)))
+          .writeStdout(renderSuccess(envelope, renderer.mode))
           .pipe(Effect.as(0)),
       onFailure: (failure) => {
         const error = toCliError(failure);
         return console
-          .writeStdout(renderError(error, rendererMode(renderer)))
+          .writeStdout(renderError(error, renderer.mode))
           .pipe(Effect.as(error.exitCode));
       },
     });
@@ -113,8 +113,4 @@ function deviceError(code: string, message: string): AkuaCliError {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-function rendererMode(renderer: CliRenderer): OutputMode {
-  return typeof renderer.mode === "function" ? renderer.mode() : renderer.mode;
 }

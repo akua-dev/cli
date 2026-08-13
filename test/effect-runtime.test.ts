@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { Clock, Effect, Layer } from "effect";
 import { TestClock } from "effect/testing";
 
@@ -12,6 +13,13 @@ import {
 } from "../src/runtime/services";
 
 describe("Effect CLI runtime", () => {
+  test("requires a resolved output mode at the render boundary", () => {
+    const runtime = readFileSync("src/runtime/effect-runtime.ts", "utf8");
+
+    expect(runtime).not.toContain("OutputMode | (() => OutputMode)");
+    expect(runtime).not.toContain("function rendererMode");
+  });
+
   test("runs an Effect command through the central render boundary", async () => {
     const stdout: string[] = [];
     const exitCode = await Effect.runPromise(

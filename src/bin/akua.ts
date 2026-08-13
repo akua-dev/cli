@@ -44,22 +44,19 @@ function mainEffect(
   argv: readonly string[],
   env: Record<string, string | undefined>,
 ): Effect.Effect<number, never, CliServices> {
-  let mode = fallbackErrorMode(argv);
+  const fallbackMode = fallbackErrorMode(argv);
   return Effect.gen(function* () {
     const console = yield* Console;
-    const command = detectOutputMode({
+    return yield* detectOutputMode({
       argv,
       env,
       stdoutIsTTY: console.stdoutIsTTY,
     }).pipe(
-      Effect.tap((detectedMode) =>
-        Effect.sync(() => {
-          mode = detectedMode;
-        }),
+      Effect.flatMap((mode) => runCli(route(argv, env), { mode })),
+      Effect.catch((failure) =>
+        runCli(Effect.fail(failure), { mode: fallbackMode }),
       ),
-      Effect.flatMap(() => route(argv, env)),
     );
-    return yield* runCli(command, { mode: () => mode });
   });
 }
 
