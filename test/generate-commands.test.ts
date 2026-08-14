@@ -159,6 +159,88 @@ describe("collectPublicCommands", () => {
     expect(commands[0]?.requires_auth).toBe(false);
   });
 
+  test("projects request-body requirement and placeholder examples", () => {
+    const commands = Effect.runSync(
+      collectPublicCommands({
+        components: {
+          schemas: {
+            AddMemberBody: {
+              type: "object",
+              properties: {
+                email: { type: "string" },
+                role: { type: "string", enum: ["admin", "member"] },
+                seats: { type: "integer" },
+                notify: { type: "boolean" },
+                tags: { type: "array", items: { type: "string" } },
+                metadata: { type: "object" },
+              },
+              required: ["email", "role", "seats", "notify", "tags", "metadata"],
+            },
+          },
+        },
+        paths: {
+          "/v1/workspaces/{id}/members": {
+            post: {
+              "x-platform-visibility": "PUBLIC",
+              operationId: "workspaces.addMember",
+              requestBody: {
+                required: true,
+                content: {
+                  "application/json": {
+                    schema: { $ref: "#/components/schemas/AddMemberBody" },
+                  },
+                },
+              },
+            },
+          },
+          "/v1/machines": {
+            post: {
+              "x-platform-visibility": "PUBLIC",
+              operationId: "machines.create",
+              requestBody: {
+                content: {
+                  "application/json": {
+                    schema: {
+                      type: "object",
+                      properties: { cluster_id: { type: "string" } },
+                      required: ["cluster_id"],
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "/v1/offers/{id}:archive": {
+            post: {
+              "x-platform-visibility": "PUBLIC",
+              operationId: "offers.archive",
+            },
+          },
+        },
+      }),
+    );
+
+    const byId = new Map(
+      commands.map((command) => [command.operation_id, command]),
+    );
+    expect(byId.get("workspaces.addMember")?.body).toEqual({
+      required: true,
+      example: {
+        email: "<email>",
+        role: "admin",
+        seats: 0,
+        notify: false,
+        tags: [],
+        metadata: {},
+      },
+    });
+    expect(byId.get("machines.create")?.body).toEqual({
+      required: false,
+      example: { cluster_id: "<cluster_id>" },
+    });
+    expect(byId.get("offers.archive")?.body).toBeUndefined();
+  });
+
   test("sorts generated commands deterministically by operationId", () => {
     const commands = Effect.runSync(
       collectPublicCommands({

@@ -273,6 +273,290 @@ describe("generated public commands", () => {
     });
   });
 
+  test("input schema failures carry issue details and a runnable example", async () => {
+    await expect(
+      runGenerated("workspaces.listMembers", [], "{}", () =>
+        Promise.resolve(Response.json({})),
+      ),
+    ).rejects.toMatchObject({
+      _tag: "GeneratedCommandFailure",
+      reason: "input",
+      command: "workspaces list-members",
+      issues: [{ path: ["path", "id"], message: "Missing key" }],
+      inputExample: '{"path":{"id":"<id>"}}',
+    });
+  });
+
+  test("input excess-property failures name the offending body key", async () => {
+    await expect(
+      runGenerated(
+        "machines.create",
+        ["--input", "-"],
+        '{"body":{"cluster_id":"clu_123","instance_type":"cx23","compute_config_id":"ccfg_123","secret":"sentinel"}}',
+        () => Promise.resolve(Response.json({})),
+      ),
+    ).rejects.toMatchObject({
+      _tag: "GeneratedCommandFailure",
+      reason: "input",
+      issues: [
+        { path: ["body", "secret"], message: "Expected no excess property" },
+      ],
+      inputExample:
+        '{"body":{"cluster_id":"<cluster_id>","instance_type":"<instance_type>","compute_config_id":"<compute_config_id>"}}',
+    });
+  });
+
+  test("input examples follow the operation body contract, not the HTTP method", async () => {
+    // Bodyless POST: the example must not suggest a body envelope key.
+    await expect(
+      runGenerated(
+        "offers.archive",
+        ["--input", "-"],
+        '{"path":{"id":"off_1"},"bogus":{}}',
+        () => Promise.resolve(Response.json({})),
+      ),
+    ).rejects.toMatchObject({
+      _tag: "GeneratedCommandFailure",
+      reason: "input",
+      inputExample: '{"path":{"id":"<id>"},"headers":{"if-match":"<if-match>"}}',
+    });
+
+    // Optional body without required fields: the example omits the body.
+    await expect(
+      runGenerated(
+        "machines.update",
+        ["--input", "-"],
+        '{"path":{"id":"mch_1"},"bogus":{}}',
+        () => Promise.resolve(Response.json({})),
+      ),
+    ).rejects.toMatchObject({
+      _tag: "GeneratedCommandFailure",
+      reason: "input",
+      inputExample: '{"path":{"id":"<id>"},"headers":{"if-match":"<if-match>"}}',
+    });
+  });
+
+  test("renders input issues with envelope hint and runnable next step", () => {
+    const payload = generatedCommandError(
+      new GeneratedCommandFailure({
+        operationId: "workspaces.listMembers",
+        reason: "input",
+        command: "workspaces list-members",
+        issues: [{ path: ["path", "id"], message: "Missing key" }],
+        inputExample: '{"path":{"id":"<id>"}}',
+      }),
+    ).toPayload();
+
+    expect(payload.error.message).toBe(
+      "Input for workspaces.listMembers does not match the public API contract: path.id: Missing key.",
+    );
+    expect(payload.error.next_steps).toEqual([
+      {
+        command:
+          "echo '{\"path\":{\"id\":\"<id>\"}}' | akua workspaces list-members --input -",
+        description:
+          'Pass a JSON envelope whose keys mirror the OpenAPI parameter locations: {"path":{...},"query":{...},"headers":{...},"body":{...}}.',
+      },
+    ]);
+  });
+
+  test("decodes undeclared-status ApiErrorResponse bodies structurally", async () => {
+    const body = {
+      success: false,
+      errors: [
+        {
+          code: 9001,
+          message: "Workspace member listing is not implemented yet",
+        },
+      ],
+      result: {},
+    };
+    const failure = await runGenerated(
+      "workspaces.listMembers",
+      ["--input", "-"],
+      '{"path":{"id":"ws_123"}}',
+      () => Promise.resolve(Response.json(body, { status: 501 })),
+    ).then(
+      () => undefined,
+      (caught: unknown) => caught,
+    );
+
+    expect(failure).toMatchObject({
+      _tag: "GeneratedCommandFailure",
+      reason: "api",
+      status: 501,
+      apiError: body,
+    });
+    if (!(failure instanceof GeneratedCommandFailure)) return;
+    const payload = generatedCommandError(failure).toPayload();
+    expect(payload.error).toMatchObject({
+      status: 501,
+      code: "AKUA_API_9001",
+      message: "Workspace member listing is not implemented yet",
+      response: body,
+    });
+  });
+
+  test("extracts the server message from long undeclared-status JSON bodies", async () => {
+    const body = JSON.stringify({
+      message: "Not implemented yet",
+      detail: "x".repeat(3000),
+    });
+    await expect(
+      runGenerated(
+        "workspaces.listMembers",
+        ["--input", "-"],
+        '{"path":{"id":"ws_123"}}',
+        () =>
+          Promise.resolve(
+            new Response(body, {
+              status: 501,
+              headers: { "content-type": "application/json" },
+            }),
+          ),
+      ),
+    ).rejects.toMatchObject({
+      _tag: "GeneratedCommandFailure",
+      reason: "api",
+      status: 501,
+      responseBody: body.slice(0, 2000),
+      responseMessage: "Not implemented yet",
+    });
+  });
+
+  test("falls back to the top-level message when the errors array is empty", async () => {
+    await expect(
+      runGenerated(
+        "workspaces.listMembers",
+        ["--input", "-"],
+        '{"path":{"id":"ws_123"}}',
+        () =>
+          Promise.resolve(
+            Response.json(
+              { errors: [], message: "fallback message wins" },
+              { status: 501 },
+            ),
+          ),
+      ),
+    ).rejects.toMatchObject({
+      _tag: "GeneratedCommandFailure",
+      reason: "api",
+      status: 501,
+      responseMessage: "fallback message wins",
+    });
+  });
+
+  test("keeps undeclared-status non-JSON bodies as truncated response detail", async () => {
+    const longBody = `upstream said:\nbad gateway\n${"x".repeat(3000)}`;
+    const failure = await runGenerated(
+      "workspaces.listMembers",
+      ["--input", "-"],
+      '{"path":{"id":"ws_123"}}',
+      () =>
+        Promise.resolve(
+          new Response(longBody, {
+            status: 502,
+            headers: { "content-type": "text/plain" },
+          }),
+        ),
+    ).then(
+      () => undefined,
+      (caught: unknown) => caught,
+    );
+
+    expect(failure).toBeInstanceOf(GeneratedCommandFailure);
+    if (!(failure instanceof GeneratedCommandFailure)) return;
+    expect(failure.reason).toBe("api");
+    expect(failure.status).toBe(502);
+    expect(failure.responseMessage).toBeUndefined();
+    expect(failure.responseBody).toHaveLength(2000);
+    expect(failure.responseBody).toBe(longBody.slice(0, 2000));
+
+    const payload = generatedCommandError(failure).toPayload();
+    expect(payload.error.message).toBe(
+      "The public API rejected the request.",
+    );
+    // Raw bodies render wrapped and flattened so line-oriented output stays
+    // one value per line and the JSON response field stays object-typed.
+    expect(payload.error.response).toEqual({
+      raw: longBody.slice(0, 2000).replaceAll("\n", "\\n"),
+    });
+  });
+
+  test("renders the extracted server message for undeclared statuses", () => {
+    const payload = generatedCommandError(
+      new GeneratedCommandFailure({
+        operationId: "workspaces.listMembers",
+        reason: "api",
+        status: 501,
+        responseBody: '{"message":"Not implemented"}',
+        responseMessage: "Not implemented",
+      }),
+    ).toPayload();
+
+    expect(payload.error).toMatchObject({
+      status: 501,
+      code: "AKUA_API_ERROR",
+      message: "Not implemented",
+      response: { raw: '{"message":"Not implemented"}' },
+    });
+  });
+
+  test("classifies unknown internal failures as internal, not input", () => {
+    const error = generatedCommandError(
+      new GeneratedCommandFailure({
+        operationId: "workspaces.listMembers",
+        reason: "internal",
+      }),
+    );
+
+    expect(error.toPayload().error).toMatchObject({
+      type: "internal_error",
+      code: "AKUA_CLI_INTERNAL",
+    });
+    expect(error.exitCode).toBe(1);
+  });
+
+  test("enriches mid-stream failures instead of labeling them api errors", async () => {
+    const encoder = new TextEncoder();
+    let pulls = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulls += 1;
+        if (pulls === 1) {
+          controller.enqueue(
+            encoder.encode("event: message\ndata: first line\n\n"),
+          );
+          return;
+        }
+        controller.error(new Error("connection reset"));
+      },
+    });
+    const result = await runGenerated(
+      "installs.getLogs",
+      ["--input", "-"],
+      '{"path":{"id":"inst_123"},"query":{"follow":false}}',
+      () =>
+        Promise.resolve(
+          new Response(body, {
+            headers: { "content-type": "text/event-stream" },
+          }),
+        ),
+    );
+    const stream = result.stream;
+    expect(Stream.isStream(stream)).toBe(true);
+    if (!Stream.isStream(stream)) return;
+
+    const failure = await Effect.runPromise(Stream.runCollect(stream)).then(
+      () => undefined,
+      (caught: unknown) => caught,
+    );
+    expect(failure).toMatchObject({
+      _tag: "GeneratedCommandFailure",
+      reason: "transport",
+    });
+  });
+
   test("keeps HTTP status separate from the structured API error", () => {
     const apiError: typeof Api.ApiErrorResponse.Type = {
       success: false,

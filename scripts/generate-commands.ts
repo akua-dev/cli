@@ -1,7 +1,7 @@
 import { Effect, Runtime } from "effect";
 import { Command, Flag } from "effect/unstable/cli";
 
-import type { CommandDefinition } from "../src/runtime/registry";
+import type { CommandBody, CommandDefinition } from "../src/runtime/registry";
 import {
   ScriptFiles,
   ScriptHostFailure,
@@ -29,6 +29,7 @@ interface OpenApiOperation {
   readonly summary?: string;
   readonly security?: readonly OpenApiSecurityRequirement[];
   readonly parameters?: readonly OpenApiParameter[];
+  readonly requestBody?: unknown;
   readonly "x-platform-visibility"?: string;
 }
 interface OpenApiSecurityRequirement {
@@ -120,6 +121,7 @@ export function collectPublicCommands(
             path,
             rawOperation,
             rootSecurity,
+            spec,
           ),
         );
       }
@@ -135,12 +137,14 @@ function toCommandDefinition(
   path: string,
   operation: OpenApiOperation,
   rootSecurity: readonly OpenApiSecurityRequirement[],
+  spec: Record<string, unknown>,
 ): Effect.Effect<CommandDefinition, ScriptValidationFailure> {
   const operationId = operation.operationId;
   if (operationId === undefined || operationId === "")
     return invalidSpec("Operation ID is required");
   const [resource, rawAction = method] = operationId.split(".");
   const action = kebab(rawAction);
+  const body = commandBody(spec, operation.requestBody);
   return Effect.succeed({
     operation_id: operationId,
     command: `${kebab(resource)} ${action}`,
@@ -164,7 +168,81 @@ function toCommandDefinition(
         in: parameter.in ?? "query",
         required: parameter.required === true,
       })),
+    ...(body === undefined ? {} : { body }),
   });
+}
+
+// Mirrors scripts/generate-effect-api.ts: an operation has a body when
+// requestBody is an object, and the body is required when required === true.
+function commandBody(
+  spec: Record<string, unknown>,
+  requestBody: unknown,
+): CommandBody | undefined {
+  if (!isRecord(requestBody)) return undefined;
+  const content = isRecord(requestBody.content)
+    ? requestBody.content
+    : undefined;
+  const json =
+    content !== undefined && isRecord(content["application/json"])
+      ? content["application/json"]
+      : undefined;
+  const schema =
+    json === undefined ? undefined : resolveSchema(spec, json.schema);
+  return {
+    required: requestBody.required === true,
+    example: bodyExample(spec, schema),
+  };
+}
+
+function resolveSchema(
+  spec: Record<string, unknown>,
+  schema: unknown,
+): Record<string, unknown> | undefined {
+  if (!isRecord(schema)) return undefined;
+  const ref = schema.$ref;
+  if (typeof ref !== "string") return schema;
+  const prefix = "#/components/schemas/";
+  if (!ref.startsWith(prefix)) return undefined;
+  const components = isRecord(spec.components) ? spec.components : undefined;
+  const schemas =
+    components !== undefined && isRecord(components.schemas)
+      ? components.schemas
+      : undefined;
+  const resolved =
+    schemas === undefined ? undefined : schemas[ref.slice(prefix.length)];
+  return isRecord(resolved) ? resolved : undefined;
+}
+
+function bodyExample(
+  spec: Record<string, unknown>,
+  schema: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  if (schema === undefined) return {};
+  const required = Array.isArray(schema.required)
+    ? schema.required.filter((name) => typeof name === "string")
+    : [];
+  const properties = isRecord(schema.properties) ? schema.properties : {};
+  const example: Record<string, unknown> = {};
+  for (const name of required) {
+    example[name] = placeholderFor(name, resolveSchema(spec, properties[name]));
+  }
+  return example;
+}
+
+function placeholderFor(
+  name: string,
+  property: Record<string, unknown> | undefined,
+): unknown {
+  if (property === undefined) return `<${name}>`;
+  if (Array.isArray(property.enum) && property.enum.length > 0) {
+    return property.enum[0];
+  }
+  const type = property.type;
+  if (type === "integer" || type === "number") return 0;
+  if (type === "boolean") return false;
+  if (type === "array") return [];
+  if (type === "object") return {};
+  return `<${name}>`;
 }
 function renderCommandRegistry(commands: readonly CommandDefinition[]): string {
   return (

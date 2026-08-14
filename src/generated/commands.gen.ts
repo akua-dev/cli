@@ -20,7 +20,11 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": false
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {}
+    }
   },
   {
     "operation_id": "accessDecisions.explainBatch",
@@ -39,7 +43,13 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": false
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {
+        "requests": []
+      }
+    }
   },
   {
     "operation_id": "agentEvents.list",
@@ -205,7 +215,15 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": false
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {
+        "communication_profile": "BEGINNER",
+        "learning_mode_enabled": false,
+        "seen_concepts": []
+      }
+    }
   },
   {
     "operation_id": "agentProviderExchanges.list",
@@ -272,7 +290,15 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": false
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {
+        "name": "<name>",
+        "instructions": "<instructions>",
+        "capabilities": []
+      }
+    }
   },
   {
     "operation_id": "agents.enable",
@@ -368,7 +394,11 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": true
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {}
+    }
   },
   {
     "operation_id": "agentSessions.archive",
@@ -406,7 +436,13 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": false
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {
+        "agent_id": "<agent_id>"
+      }
+    }
   },
   {
     "operation_id": "agentSessions.detectConflicts",
@@ -532,7 +568,16 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "path",
         "required": true
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {
+        "events_retained_until": 0,
+        "filesystem_retained_until": 0,
+        "filesystem_pinned": false,
+        "retention_reason": "SESSION_ACTIVE"
+      }
+    }
   },
   {
     "operation_id": "agentSkills.get",
@@ -676,7 +721,14 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": false
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {
+        "session_id": "<session_id>",
+        "message": "<message>"
+      }
+    }
   },
   {
     "operation_id": "agentTurns.emit",
@@ -705,7 +757,11 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": true
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {}
+    }
   },
   {
     "operation_id": "agentTurns.get",
@@ -777,7 +833,13 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": false
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {
+        "name": "<name>"
+      }
+    }
   },
   {
     "operation_id": "apiTokens.list",
@@ -903,7 +965,13 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": true
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {
+        "decision": "APPROVE"
+      }
+    }
   },
   {
     "operation_id": "cloudflare.createCredential",
@@ -922,7 +990,17 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": false
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {
+        "name": "<name>",
+        "account_id": "<account_id>",
+        "origin_zone_id": "<origin_zone_id>",
+        "origin_hostname_suffix": "<origin_hostname_suffix>",
+        "api_token": "<api_token>"
+      }
+    }
   },
   {
     "operation_id": "cloudflare.deleteCredential",
@@ -999,7 +1077,14 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": false
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {
+        "name": "<name>",
+        "region_id": "<region_id>"
+      }
+    }
   },
   {
     "operation_id": "clusters.createWorkerBootstrap",
@@ -1028,7 +1113,11 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": false
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {}
+    }
   },
   {
     "operation_id": "clusters.delete",
@@ -1096,7 +1185,15 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": true
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {
+        "namespace": "<namespace>",
+        "pod": "<pod>",
+        "command": []
+      }
+    }
   },
   {
     "operation_id": "clusters.get",
@@ -1245,7 +1342,15 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": false
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {
+        "name": "<name>",
+        "region_id": "<region_id>",
+        "kubeconfig": "<kubeconfig>"
+      }
+    }
   },
   {
     "operation_id": "clusters.list",
@@ -1507,7 +1612,11 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": true
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {}
+    }
   },
   {
     "operation_id": "clusters.updateComputeSettings",
@@ -1536,7 +1645,11 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": true
       }
-    ]
+    ],
+    "body": {
+      "required": true,
+      "example": {}
+    }
   },
   {
     "operation_id": "computeConfigs.create",
@@ -1560,7 +1673,16 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": false
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {
+        "name": "<name>",
+        "provider": "hcloud",
+        "provider_config": {},
+        "credential_scope": "<credential_scope>"
+      }
+    }
   },
   {
     "operation_id": "computeConfigs.delete",
@@ -1686,7 +1808,11 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": true
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {}
+    }
   },
   {
     "operation_id": "customDomains.create",
@@ -1710,7 +1836,14 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": true
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {
+        "hostname": "<hostname>",
+        "target": "<target>"
+      }
+    }
   },
   {
     "operation_id": "customDomains.delete",
@@ -1841,7 +1974,11 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": true
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {}
+    }
   },
   {
     "operation_id": "dashboards.create",
@@ -1860,7 +1997,13 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": false
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {
+        "name": "<name>"
+      }
+    }
   },
   {
     "operation_id": "dashboards.createRevision",
@@ -1889,7 +2032,17 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": true
       }
-    ]
+    ],
+    "body": {
+      "required": true,
+      "example": {
+        "name": "<name>",
+        "description": "<description>",
+        "filter_definitions": [],
+        "default_filter_values": {},
+        "widgets": []
+      }
+    }
   },
   {
     "operation_id": "dashboards.createWidget",
@@ -1918,7 +2071,11 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": false
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {}
+    }
   },
   {
     "operation_id": "dashboards.delete",
@@ -2212,7 +2369,13 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": true
       }
-    ]
+    ],
+    "body": {
+      "required": true,
+      "example": {
+        "summary": "<summary>"
+      }
+    }
   },
   {
     "operation_id": "dashboards.update",
@@ -2236,7 +2399,11 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": true
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {}
+    }
   },
   {
     "operation_id": "dashboards.updateWidget",
@@ -2275,7 +2442,11 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": true
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {}
+    }
   },
   {
     "operation_id": "entitlements.list",
@@ -2338,7 +2509,11 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": false
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {}
+    }
   },
   {
     "operation_id": "installs.createRender",
@@ -2367,7 +2542,11 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": false
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {}
+    }
   },
   {
     "operation_id": "installs.delete",
@@ -2653,7 +2832,13 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": true
       }
-    ]
+    ],
+    "body": {
+      "required": true,
+      "example": {
+        "render_id": "<render_id>"
+      }
+    }
   },
   {
     "operation_id": "installs.setAutomaticUpdates",
@@ -2687,7 +2872,13 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": true
       }
-    ]
+    ],
+    "body": {
+      "required": true,
+      "example": {
+        "automatic_updates_enabled": false
+      }
+    }
   },
   {
     "operation_id": "installs.updateVersion",
@@ -2721,7 +2912,13 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": true
       }
-    ]
+    ],
+    "body": {
+      "required": true,
+      "example": {
+        "package_version_id": "<package_version_id>"
+      }
+    }
   },
   {
     "operation_id": "machines.create",
@@ -2745,7 +2942,15 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": false
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {
+        "cluster_id": "<cluster_id>",
+        "instance_type": "<instance_type>",
+        "compute_config_id": "<compute_config_id>"
+      }
+    }
   },
   {
     "operation_id": "machines.createDriftReport",
@@ -2774,7 +2979,11 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": false
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {}
+    }
   },
   {
     "operation_id": "machines.delete",
@@ -3046,7 +3255,11 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": true
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {}
+    }
   },
   {
     "operation_id": "machines.suspend",
@@ -3080,7 +3293,11 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": true
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {}
+    }
   },
   {
     "operation_id": "machines.update",
@@ -3114,7 +3331,11 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": true
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {}
+    }
   },
   {
     "operation_id": "notifications.getUnreadCount",
@@ -3236,7 +3457,11 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": false
       }
-    ]
+    ],
+    "body": {
+      "required": true,
+      "example": {}
+    }
   },
   {
     "operation_id": "offers.get",
@@ -3506,7 +3731,13 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": true
       }
-    ]
+    ],
+    "body": {
+      "required": true,
+      "example": {
+        "claim_token": "<claim_token>"
+      }
+    }
   },
   {
     "operation_id": "orderDrafts.create",
@@ -3573,7 +3804,11 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "path",
         "required": true
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {}
+    }
   },
   {
     "operation_id": "orderDrafts.get",
@@ -3708,7 +3943,11 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": true
       }
-    ]
+    ],
+    "body": {
+      "required": true,
+      "example": {}
+    }
   },
   {
     "operation_id": "orderDrafts.submitConfigure",
@@ -3732,7 +3971,13 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": true
       }
-    ]
+    ],
+    "body": {
+      "required": true,
+      "example": {
+        "field_values": {}
+      }
+    }
   },
   {
     "operation_id": "organizations.acceptInvitation",
@@ -3745,7 +3990,13 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
     "summary": "Accept an organization invitation",
     "visibility": "PUBLIC",
     "requires_auth": true,
-    "parameters": []
+    "parameters": [],
+    "body": {
+      "required": false,
+      "example": {
+        "token": "<token>"
+      }
+    }
   },
   {
     "operation_id": "organizations.addMember",
@@ -3774,7 +4025,13 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": true
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {
+        "user_id": "<user_id>"
+      }
+    }
   },
   {
     "operation_id": "organizations.cancelInvitation",
@@ -3817,7 +4074,13 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": false
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {
+        "name": "<name>"
+      }
+    }
   },
   {
     "operation_id": "organizations.createInvitation",
@@ -3836,7 +4099,13 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "path",
         "required": true
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {
+        "email": "<email>"
+      }
+    }
   },
   {
     "operation_id": "organizations.delete",
@@ -4082,7 +4351,11 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": true
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {}
+    }
   },
   {
     "operation_id": "organizations.updateMemberRole",
@@ -4116,7 +4389,13 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": true
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {
+        "role": "owner"
+      }
+    }
   },
   {
     "operation_id": "packages.create",
@@ -4140,7 +4419,14 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": false
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {
+        "name": "<name>",
+        "sources": []
+      }
+    }
   },
   {
     "operation_id": "packages.createVersion",
@@ -4164,7 +4450,15 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": false
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {
+        "semver": "<semver>",
+        "ref": "<ref>",
+        "input_schema": "<input_schema>"
+      }
+    }
   },
   {
     "operation_id": "packages.delete",
@@ -4338,7 +4632,15 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": false
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {
+        "name": "<name>",
+        "oci_ref": "<oci_ref>",
+        "version": {}
+      }
+    }
   },
   {
     "operation_id": "packages.list",
@@ -4435,7 +4737,14 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": true
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {
+        "track": "<track>",
+        "render_id": "<render_id>"
+      }
+    }
   },
   {
     "operation_id": "previewHostnames.bindPinned",
@@ -4464,7 +4773,13 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": true
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {
+        "render_id": "<render_id>"
+      }
+    }
   },
   {
     "operation_id": "previewHostnames.delete",
@@ -4615,7 +4930,11 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": true
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {}
+    }
   },
   {
     "operation_id": "products.create",
@@ -4639,7 +4958,15 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": false
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {
+        "name": "<name>",
+        "package_id": "<package_id>",
+        "package_version_pin": "<package_version_pin>"
+      }
+    }
   },
   {
     "operation_id": "products.get",
@@ -4726,7 +5053,11 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": true
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {}
+    }
   },
   {
     "operation_id": "products.update",
@@ -4760,7 +5091,11 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": true
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {}
+    }
   },
   {
     "operation_id": "quotas.get",
@@ -4822,7 +5157,13 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": false
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {
+        "name": "<name>"
+      }
+    }
   },
   {
     "operation_id": "regions.list",
@@ -4875,7 +5216,16 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": false
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {
+        "name": "<name>",
+        "registry_url": "<registry_url>",
+        "type": "basic",
+        "credentials": {}
+      }
+    }
   },
   {
     "operation_id": "registry.deleteCredential",
@@ -5054,7 +5404,11 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": true
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {}
+    }
   },
   {
     "operation_id": "repositoryChangeRequests.createToken",
@@ -5083,7 +5437,11 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": true
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {}
+    }
   },
   {
     "operation_id": "repositoryChangeRequests.get",
@@ -5190,7 +5548,13 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": true
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {
+        "rejection_reason": "<rejection_reason>"
+      }
+    }
   },
   {
     "operation_id": "repositoryChangeRequests.withdraw",
@@ -5277,7 +5641,11 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": false
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {}
+    }
   },
   {
     "operation_id": "secrets.createVersion",
@@ -5306,7 +5674,13 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": false
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {
+        "value": "<value>"
+      }
+    }
   },
   {
     "operation_id": "secrets.delete",
@@ -5636,7 +6010,11 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": true
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {}
+    }
   },
   {
     "operation_id": "secrets.validateToken",
@@ -5649,7 +6027,14 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
     "summary": "Validate a provider token",
     "visibility": "PUBLIC",
     "requires_auth": true,
-    "parameters": []
+    "parameters": [],
+    "body": {
+      "required": false,
+      "example": {
+        "provider": "hcloud",
+        "value": "<value>"
+      }
+    }
   },
   {
     "operation_id": "snippetRuns.get",
@@ -5740,7 +6125,11 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
     "summary": "Create snippet",
     "visibility": "PUBLIC",
     "requires_auth": true,
-    "parameters": []
+    "parameters": [],
+    "body": {
+      "required": false,
+      "example": {}
+    }
   },
   {
     "operation_id": "snippets.createRun",
@@ -5769,7 +6158,11 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": false
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {}
+    }
   },
   {
     "operation_id": "snippets.delete",
@@ -5812,7 +6205,13 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": false
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {
+        "code": "<code>"
+      }
+    }
   },
   {
     "operation_id": "snippets.executeStored",
@@ -5831,7 +6230,11 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "path",
         "required": true
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {}
+    }
   },
   {
     "operation_id": "snippets.get",
@@ -6004,7 +6407,11 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": true
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {}
+    }
   },
   {
     "operation_id": "workspaces.addMember",
@@ -6033,7 +6440,14 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": false
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {
+        "user_id": "<user_id>",
+        "role": "admin"
+      }
+    }
   },
   {
     "operation_id": "workspaces.cancelSubscription",
@@ -6067,7 +6481,13 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": true
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {
+        "effective": "period_end"
+      }
+    }
   },
   {
     "operation_id": "workspaces.changeSubscriptionTier",
@@ -6096,7 +6516,13 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": true
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {
+        "tier": "<tier>"
+      }
+    }
   },
   {
     "operation_id": "workspaces.create",
@@ -6109,7 +6535,13 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
     "summary": "Create workspace",
     "visibility": "PUBLIC",
     "requires_auth": true,
-    "parameters": []
+    "parameters": [],
+    "body": {
+      "required": false,
+      "example": {
+        "name": "<name>"
+      }
+    }
   },
   {
     "operation_id": "workspaces.delete",
@@ -6374,7 +6806,11 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": true
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {}
+    }
   },
   {
     "operation_id": "workspaces.removeMember",
@@ -6471,7 +6907,11 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": true
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {}
+    }
   },
   {
     "operation_id": "workspaces.updateMember",
@@ -6505,7 +6945,13 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": false
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {
+        "role": "admin"
+      }
+    }
   },
   {
     "operation_id": "workspaceSubdomains.get",
@@ -6553,6 +6999,12 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "in": "header",
         "required": true
       }
-    ]
+    ],
+    "body": {
+      "required": false,
+      "example": {
+        "name": "<name>"
+      }
+    }
   }
 ];
