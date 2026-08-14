@@ -1,5 +1,8 @@
 import { ExitCodes, type ExitCode } from "./exit-codes";
-import type { GeneratedCommandFailure } from "../commands/generated";
+import type {
+  GeneratedCommandFailure,
+  PublicInputIssue,
+} from "../commands/generated";
 
 export interface NextStep {
   command: string;
@@ -80,11 +83,16 @@ export function generatedCommandError(
     );
   }
   if (failure.reason === "input") {
+    const detail = (failure.issues ?? []).map(formatInputIssue).join("; ");
     return new AkuaCliError({
       type: "input_error",
       code: "AKUA_INPUT_INVALID",
-      message: `Input for ${failure.operationId} does not match the public API contract.`,
+      message:
+        detail === ""
+          ? `Input for ${failure.operationId} does not match the public API contract.`
+          : `Input for ${failure.operationId} does not match the public API contract: ${detail}.`,
       exitCode: ExitCodes.Usage,
+      nextSteps: inputNextSteps(failure),
     });
   }
   if (failure.reason === "source") {
@@ -110,9 +118,12 @@ export function generatedCommandError(
       type: "api_error",
       code:
         first === undefined ? "AKUA_API_ERROR" : `AKUA_API_${first.code}`,
-      message: first?.message ?? "The public API rejected the request.",
+      message:
+        first?.message ??
+        failure.responseMessage ??
+        "The public API rejected the request.",
       status: failure.status,
-      response: failure.apiError,
+      response: failure.apiError ?? failure.responseBody,
     });
   }
   if (failure.reason === "response") {
@@ -130,6 +141,27 @@ export function generatedCommandError(
     message: "The public API request could not be completed.",
     exitCode: ExitCodes.Retryable,
   });
+}
+
+function formatInputIssue(issue: PublicInputIssue): string {
+  return issue.path.length === 0
+    ? issue.message
+    : `${issue.path.join(".")}: ${issue.message}`;
+}
+
+function inputNextSteps(
+  failure: GeneratedCommandFailure,
+): readonly NextStep[] {
+  if (failure.command === undefined || failure.inputExample === undefined) {
+    return [];
+  }
+  return [
+    {
+      command: `echo '${failure.inputExample}' | akua ${failure.command} --input -`,
+      description:
+        'Pass a JSON envelope whose keys mirror the OpenAPI parameter locations: {"path":{...},"query":{...},"headers":{...},"body":{...}}.',
+    },
+  ];
 }
 
 function exitCodeForStatus(status: number | undefined): ExitCode {

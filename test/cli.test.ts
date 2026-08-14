@@ -40,8 +40,9 @@ describe("akua entrypoint", () => {
     const invalid = await runAkua(["commands", "--not-a-real-flag"]);
 
     expect(invalid.exitCode).toBe(2);
-    expect(invalid.stdout).toContain("USAGE");
-    expect(invalid.stderr).toContain("Unrecognized flag: --not-a-real-flag");
+    expect(invalid.stdout).toContain("type: usage_error");
+    expect(invalid.stdout).toContain("code: AKUA_USAGE_ERROR");
+    expect(invalid.stdout).toContain("--not-a-real-flag");
   });
 
   test("home and help describe executable generated commands", async () => {
@@ -264,7 +265,7 @@ describe("akua entrypoint", () => {
         error: {
           code: "AKUA_INPUT_INVALID",
           message:
-            "Input for machines.create does not match the public API contract.",
+            "Input for machines.create does not match the public API contract: body.undeclared: Expected no excess property.",
         },
       });
       expect(result.stdout).not.toContain(sentinel);

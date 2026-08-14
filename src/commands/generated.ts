@@ -1,5 +1,6 @@
-import { Data, Effect, Schema, Stream } from "effect";
+import { Data, Effect, Exit, Schema, SchemaIssue, Stream } from "effect";
 import { HttpClientError } from "effect/unstable/http";
+import type { HttpClientResponse } from "effect/unstable/http";
 
 import {
   executeAnyPublicOperation,
@@ -13,6 +14,11 @@ import type { CommandDefinition } from "../runtime/registry";
 import { PublicInput } from "../runtime/services";
 
 type ApiErrorResponse = typeof Api.ApiErrorResponse.Type;
+
+export interface PublicInputIssue {
+  readonly path: readonly string[];
+  readonly message: string;
+}
 
 export class GeneratedCommandFailure extends Data.TaggedError(
   "GeneratedCommandFailure",
@@ -28,6 +34,11 @@ export class GeneratedCommandFailure extends Data.TaggedError(
     | "transport";
   readonly status?: number;
   readonly apiError?: ApiErrorResponse;
+  readonly command?: string;
+  readonly issues?: readonly PublicInputIssue[];
+  readonly inputExample?: string;
+  readonly responseBody?: string;
+  readonly responseMessage?: string;
 }> {}
 
 export function generatedCommandView(
@@ -41,15 +52,15 @@ export function generatedCommandView(
   return Effect.gen(function* () {
     const inputSource = yield* parseInputFlag(definition.operation_id, argv);
     const rawInput = yield* readPublicInput(definition.operation_id, inputSource);
-    const input = yield* parsePublicInput(definition.operation_id, rawInput);
+    const input = yield* parsePublicInput(definition, rawInput);
     const client = yield* PublicApiClient;
     const result = yield* executeAnyPublicOperation(
       client,
       definition.operation_id,
       input,
     ).pipe(
-      Effect.mapError((failure) =>
-        mapGeneratedFailure(definition.operation_id, failure),
+      Effect.catch((failure) =>
+        Effect.flatMap(describeGeneratedFailure(definition, failure), Effect.fail),
       ),
     );
     const command = `akua ${definition.command}`;
@@ -59,7 +70,7 @@ export function generatedCommandView(
           command,
           stream: result.stream.pipe(
             Stream.mapError((failure) =>
-              mapGeneratedFailure(definition.operation_id, failure),
+              mapGeneratedFailure(definition, failure),
             ),
           ),
         };
@@ -95,19 +106,78 @@ function readPublicInput(
 }
 
 function parsePublicInput(
-  operationId: string,
+  definition: CommandDefinition<PublicOperationId>,
   rawInput: string,
 ): Effect.Effect<unknown, GeneratedCommandFailure> {
   return Effect.try({
     try: () => JSON.parse(rawInput),
-    catch: () => new GeneratedCommandFailure({ operationId, reason: "input" }),
+    catch: (cause) =>
+      new GeneratedCommandFailure({
+        operationId: definition.operation_id,
+        reason: "input",
+        command: definition.command,
+        issues: [
+          {
+            path: [],
+            message:
+              cause instanceof Error
+                ? `Input is not valid JSON: ${cause.message}`
+                : "Input is not valid JSON",
+          },
+        ],
+        inputExample: inputExampleFor(definition),
+      }),
   });
 }
 
+const MAX_RESPONSE_BODY_CHARS = 2000;
+
+function describeGeneratedFailure(
+  definition: CommandDefinition<PublicOperationId>,
+  failure: unknown,
+): Effect.Effect<GeneratedCommandFailure> {
+  if (
+    failure instanceof PublicOperationResponseFailure &&
+    failure.status !== undefined
+  ) {
+    const error: unknown = failure.error;
+    if (
+      !Schema.is(Api.ApiErrorResponse)(error) &&
+      HttpClientError.isHttpClientError(error) &&
+      error.response !== undefined
+    ) {
+      const status = failure.status;
+      return enrichedApiFailure(definition, status, error.response);
+    }
+  }
+  return Effect.succeed(mapGeneratedFailure(definition, failure));
+}
+
+function enrichedApiFailure(
+  definition: CommandDefinition<PublicOperationId>,
+  status: number,
+  response: HttpClientResponse.HttpClientResponse,
+): Effect.Effect<GeneratedCommandFailure> {
+  return readResponseBody(response).pipe(
+    Effect.map(
+      (body) =>
+        new GeneratedCommandFailure({
+          operationId: definition.operation_id,
+          reason: "api",
+          status,
+          responseBody: body,
+          responseMessage:
+            body === undefined ? undefined : extractResponseMessage(body),
+        }),
+    ),
+  );
+}
+
 function mapGeneratedFailure(
-  operationId: string,
+  definition: CommandDefinition<PublicOperationId>,
   failure: unknown,
 ): GeneratedCommandFailure {
+  const operationId = definition.operation_id;
   if (failure instanceof PublicOperationResponseFailure) {
     if (Schema.is(Api.ApiErrorResponse)(failure.error)) {
       return new GeneratedCommandFailure({
@@ -127,5 +197,97 @@ function mapGeneratedFailure(
       status: failure.status,
     });
   }
-  return new GeneratedCommandFailure({ operationId, reason: "input" });
+  if (Schema.isSchemaError(failure)) {
+    return new GeneratedCommandFailure({
+      operationId,
+      reason: "input",
+      command: definition.command,
+      issues: schemaIssues(failure),
+      inputExample: inputExampleFor(definition),
+    });
+  }
+  return new GeneratedCommandFailure({
+    operationId,
+    reason: "input",
+    command: definition.command,
+    inputExample: inputExampleFor(definition),
+  });
+}
+
+const formatStandardIssues = SchemaIssue.makeFormatterStandardSchemaV1();
+
+function schemaIssues(
+  error: Schema.SchemaError,
+): readonly PublicInputIssue[] {
+  return formatStandardIssues(error.issue).issues.map((issue) => ({
+    path: (issue.path ?? []).map(pathSegmentToString),
+    message: issue.message,
+  }));
+}
+
+function pathSegmentToString(
+  segment: PropertyKey | { readonly key: PropertyKey },
+): string {
+  return typeof segment === "object" ? String(segment.key) : String(segment);
+}
+
+function inputExampleFor(
+  definition: CommandDefinition<PublicOperationId>,
+): string {
+  const sections: {
+    path?: Record<string, string>;
+    query?: Record<string, string>;
+    headers?: Record<string, string>;
+    body?: Record<string, never>;
+  } = {};
+  for (const parameter of definition.parameters) {
+    if (!parameter.required) continue;
+    if (parameter.in === "path") {
+      (sections.path ??= {})[parameter.name] = `<${parameter.name}>`;
+    } else if (parameter.in === "query") {
+      (sections.query ??= {})[parameter.name] = `<${parameter.name}>`;
+    } else if (parameter.in === "header") {
+      (sections.headers ??= {})[parameter.name] = `<${parameter.name}>`;
+    }
+  }
+  if (
+    definition.method === "POST" ||
+    definition.method === "PUT" ||
+    definition.method === "PATCH"
+  ) {
+    sections.body = {};
+  }
+  return JSON.stringify(sections);
+}
+
+function readResponseBody(
+  response: HttpClientResponse.HttpClientResponse,
+): Effect.Effect<string | undefined> {
+  return response.text.pipe(
+    Effect.map((body) =>
+      body === ""
+        ? undefined
+        : body.length > MAX_RESPONSE_BODY_CHARS
+          ? body.slice(0, MAX_RESPONSE_BODY_CHARS)
+          : body,
+    ),
+    Effect.catch(() => Effect.succeed(undefined)),
+  );
+}
+
+const ResponseBodyWithMessage = Schema.fromJsonString(
+  Schema.Union([
+    Schema.Struct({
+      errors: Schema.Array(Schema.Struct({ message: Schema.String })),
+    }),
+    Schema.Struct({ message: Schema.String }),
+  ]),
+);
+
+function extractResponseMessage(body: string): string | undefined {
+  const exit = Schema.decodeUnknownExit(ResponseBodyWithMessage)(body);
+  if (!Exit.isSuccess(exit)) return undefined;
+  const value = exit.value;
+  const message = "errors" in value ? value.errors[0]?.message : value.message;
+  return message === undefined || message === "" ? undefined : message;
 }
