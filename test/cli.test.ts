@@ -35,6 +35,11 @@ describe("akua entrypoint", () => {
               return 0;
             }),
         }),
+        Effect.provideService(Console, {
+          stdoutIsTTY: true,
+          writeStderr: () => Effect.void,
+          writeStdout: () => Effect.void,
+        }),
         Effect.provide(CliLive),
       ),
     );
