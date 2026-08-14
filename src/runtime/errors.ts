@@ -123,7 +123,15 @@ export function generatedCommandError(
         failure.responseMessage ??
         "The public API rejected the request.",
       status: failure.status,
-      response: failure.apiError ?? failure.responseBody,
+      response: failure.apiError ?? rawResponse(failure.responseBody),
+    });
+  }
+  if (failure.reason === "internal") {
+    return new AkuaCliError({
+      type: "internal_error",
+      code: "AKUA_CLI_INTERNAL",
+      message: `The CLI failed internally while executing ${failure.operationId}. This is a CLI bug, not an input problem.`,
+      exitCode: ExitCodes.Runtime,
     });
   }
   if (failure.reason === "response") {
@@ -141,6 +149,16 @@ export function generatedCommandError(
     message: "The public API request could not be completed.",
     exitCode: ExitCodes.Retryable,
   });
+}
+
+// Raw bodies are wrapped so the JSON-mode response field stays object-typed
+// (matching structured ApiErrorResponse payloads) and flattened so the
+// line-oriented agent renderer emits one value per line.
+function rawResponse(
+  body: string | undefined,
+): { readonly raw: string } | undefined {
+  if (body === undefined) return undefined;
+  return { raw: body.split(/\r\n|[\r\n]/).join("\\n") };
 }
 
 function formatInputIssue(issue: PublicInputIssue): string {

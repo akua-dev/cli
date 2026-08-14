@@ -446,11 +446,12 @@ function renderPartDecoder(
         : part === "headers"
           ? "Headers"
           : "RequestJson";
-  const fallback = part === "body" ? "" : " ?? {}";
+  const source = part === "body" ? "input.body" : `input.${part} ?? {}`;
+  const decode = `atEnvelopeKey(${JSON.stringify(part)}, Schema.decodeUnknownEffect(\n          Api.${operation.schemaBase}${suffix},\n          strictParseOptions,\n        )(${source}))`;
   if (part === "body" && !operation.bodyRequired) {
-    return `        const ${localName} = input.body === undefined\n          ? undefined\n          : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(\n              Api.${operation.schemaBase}${suffix},\n              strictParseOptions,\n            )(input.body));`;
+    return `        const ${localName} = input.body === undefined\n          ? undefined\n          : yield* ${decode};`;
   }
-  return `        const ${localName} = yield* atEnvelopeKey(${JSON.stringify(part)}, Schema.decodeUnknownEffect(\n          Api.${operation.schemaBase}${suffix},\n          strictParseOptions,\n        )(input.${part}${fallback}));`;
+  return `        const ${localName} = yield* ${decode};`;
 }
 
 function executorGenerationFailure(

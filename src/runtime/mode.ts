@@ -59,7 +59,9 @@ export function detectOutputMode(
       ) {
         return "agent";
       }
-      if (input.stdoutIsTTY === false) {
+      // Node/Bun report isTTY as undefined (not false) for piped stdout, so
+      // anything short of a confirmed TTY selects structured output.
+      if (input.stdoutIsTTY !== true) {
         return "agent";
       }
       return "human";

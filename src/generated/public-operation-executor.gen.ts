@@ -576,9 +576,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.AccessDecisionsExplainRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.AccessDecisionsExplainRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Access Decisions"]["accessDecisionsExplain"]({ headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -595,9 +595,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.AccessDecisionsExplainBatchRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.AccessDecisionsExplainBatchRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Access Decisions"]["accessDecisionsExplainBatch"]({ headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -661,9 +661,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.AgentPreferencesUpdateRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.AgentPreferencesUpdateRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Agent preferences"]["agentPreferencesUpdate"]({ headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -710,9 +710,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.AgentsCreateRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.AgentsCreateRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Agents"]["agentsCreate"]({ headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -776,9 +776,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.AgentsUpdateRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.AgentsUpdateRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Agents"]["agentsUpdate"]({ params: path, headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -808,9 +808,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.AgentSessionsCreateRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.AgentSessionsCreateRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Agent sessions"]["agentSessionsCreate"]({ headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -874,9 +874,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.AgentSessionsSetRetentionRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.AgentSessionsSetRetentionRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Agent sessions"]["agentSessionsSetRetention"]({ params: path, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -970,9 +970,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.AgentTurnsCreateRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.AgentTurnsCreateRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Agent turns"]["agentTurnsCreate"]({ headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -993,9 +993,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.AgentTurnsEmitRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.AgentTurnsEmitRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Agent turns"]["agentTurnsEmit"]({ params: path, headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -1042,9 +1042,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.ApiTokensCreateRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.ApiTokensCreateRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["API Tokens"]["apiTokensCreate"]({ headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -1116,9 +1116,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.ApprovalRequestsResolveRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.ApprovalRequestsResolveRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Approval requests"]["approvalRequestsResolve"]({ params: path, headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -1135,9 +1135,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.CloudflareCreateCredentialRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.CloudflareCreateCredentialRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Cloudflare"]["cloudflareCreateCredential"]({ headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -1188,9 +1188,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.ClustersCreateRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.ClustersCreateRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Clusters"]["clustersCreate"]({ headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -1211,9 +1211,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.ClustersCreateWorkerBootstrapRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.ClustersCreateWorkerBootstrapRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Clusters"]["clustersCreateWorkerBootstrap"]({ params: path, headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -1251,9 +1251,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.ClustersExecRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.ClustersExecRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Clusters"]["clustersExec"]({ params: path, headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -1355,9 +1355,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.ClustersImportRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.ClustersImportRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Clusters"]["clustersImport"]({ headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -1501,9 +1501,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.ClustersUpdateRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.ClustersUpdateRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Clusters"]["clustersUpdate"]({ params: path, headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -1541,9 +1541,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.ComputeConfigsCreateRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.ComputeConfigsCreateRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["ComputeConfigs"]["computeConfigsCreate"]({ headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -1615,9 +1615,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.ComputeConfigsUpdateRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.ComputeConfigsUpdateRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["ComputeConfigs"]["computeConfigsUpdate"]({ params: path, headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -1638,9 +1638,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.CustomDomainsCreateRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.CustomDomainsCreateRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Custom domains"]["customDomainsCreate"]({ params: path, headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -1708,9 +1708,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.CustomDomainsUpdateRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.CustomDomainsUpdateRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Custom domains"]["customDomainsUpdate"]({ params: path, headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -1727,9 +1727,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.DashboardsCreateRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.DashboardsCreateRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Dashboards"]["dashboardsCreate"]({ headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -1771,9 +1771,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.DashboardsCreateWidgetRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.DashboardsCreateWidgetRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Dashboards"]["dashboardsCreateWidget"]({ params: path, headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -1969,9 +1969,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.DashboardsUpdateRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.DashboardsUpdateRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Dashboards"]["dashboardsUpdate"]({ params: path, headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -1992,9 +1992,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.DashboardsUpdateWidgetRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.DashboardsUpdateWidgetRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Dashboards"]["dashboardsUpdateWidget"]({ params: path, headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -2024,9 +2024,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.InstallsCreateRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.InstallsCreateRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Installs"]["installsCreate"]({ headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -2047,9 +2047,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.InstallsCreateRenderRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.InstallsCreateRenderRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Installs"]["installsCreateRender"]({ params: path, headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -2283,9 +2283,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.MachinesCreateRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.MachinesCreateRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Machines"]["machinesCreate"]({ headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -2306,9 +2306,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.MachinesCreateDriftReportRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.MachinesCreateDriftReportRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Machines"]["machinesCreateDriftReport"]({ params: path, headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -2456,9 +2456,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.MachinesResumeRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.MachinesResumeRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Machines"]["machinesResume"]({ params: path, headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -2479,9 +2479,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.MachinesSuspendRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.MachinesSuspendRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Machines"]["machinesSuspend"]({ params: path, headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -2502,9 +2502,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.MachinesUpdateRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.MachinesUpdateRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Machines"]["machinesUpdate"]({ params: path, headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -2795,9 +2795,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.OrderDraftsCreateWorkerBootstrapRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.OrderDraftsCreateWorkerBootstrapRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Order Drafts"]["orderDraftsCreateWorkerBootstrap"]({ params: path, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -2912,9 +2912,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.OrganizationsAcceptInvitationRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.OrganizationsAcceptInvitationRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Organizations"]["organizationsAcceptInvitation"]({ payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -2935,9 +2935,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.OrganizationsAddMemberRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.OrganizationsAddMemberRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Organizations"]["organizationsAddMember"]({ params: path, headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -2967,9 +2967,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.OrganizationsCreateRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.OrganizationsCreateRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Organizations"]["organizationsCreate"]({ headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -2986,9 +2986,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.OrganizationsCreateInvitationRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.OrganizationsCreateInvitationRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Organizations"]["organizationsCreateInvitation"]({ params: path, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -3133,9 +3133,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.OrganizationsUpdateRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.OrganizationsUpdateRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Organizations"]["organizationsUpdate"]({ params: path, headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -3156,9 +3156,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.OrganizationsUpdateMemberRoleRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.OrganizationsUpdateMemberRoleRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Organizations"]["organizationsUpdateMemberRole"]({ params: path, headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -3175,9 +3175,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.PackagesCreateRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.PackagesCreateRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Packages"]["packagesCreate"]({ headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -3198,9 +3198,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.PackagesCreateVersionRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.PackagesCreateVersionRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Packages"]["packagesCreateVersion"]({ params: path, headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -3306,9 +3306,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.PackagesImportPublishedRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.PackagesImportPublishedRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Packages"]["packagesImportPublished"]({ headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -3367,9 +3367,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.PreviewHostnamesBindFloatingRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.PreviewHostnamesBindFloatingRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Preview hostnames"]["previewHostnamesBindFloating"]({ params: path, headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -3390,9 +3390,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.PreviewHostnamesBindPinnedRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.PreviewHostnamesBindPinnedRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Preview hostnames"]["previewHostnamesBindPinned"]({ params: path, headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -3468,9 +3468,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.ProductsArchiveRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.ProductsArchiveRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Products"]["productsArchive"]({ params: path, headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -3487,9 +3487,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.ProductsCreateRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.ProductsCreateRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Products"]["productsCreate"]({ headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -3544,9 +3544,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.ProductsUnarchiveRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.ProductsUnarchiveRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Products"]["productsUnarchive"]({ params: path, headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -3567,9 +3567,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.ProductsUpdateRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.ProductsUpdateRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Products"]["productsUpdate"]({ params: path, headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -3616,9 +3616,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.RegionsCreateRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.RegionsCreateRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Regions"]["regionsCreate"]({ headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -3652,9 +3652,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.RegistryCreateCredentialRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.RegistryCreateCredentialRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Registry"]["registryCreateCredential"]({ headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -3760,9 +3760,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.RepositoryChangeRequestsCreateRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.RepositoryChangeRequestsCreateRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Repository change requests"]["repositoryChangeRequestsCreate"]({ headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -3783,9 +3783,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.RepositoryChangeRequestsCreateTokenRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.RepositoryChangeRequestsCreateTokenRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Repository change requests"]["repositoryChangeRequestsCreateToken"]({ params: path, headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -3840,9 +3840,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.RepositoryChangeRequestsRejectRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.RepositoryChangeRequestsRejectRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Repository change requests"]["repositoryChangeRequestsReject"]({ params: path, headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -3893,9 +3893,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.SecretsCreateRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.SecretsCreateRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Secrets"]["secretsCreate"]({ headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -3916,9 +3916,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.SecretsCreateVersionRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.SecretsCreateVersionRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Secrets"]["secretsCreateVersion"]({ params: path, headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -4100,9 +4100,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.SecretsUpdateRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.SecretsUpdateRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Secrets"]["secretsUpdate"]({ params: path, headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -4115,9 +4115,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.SecretsValidateTokenRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.SecretsValidateTokenRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Secrets"]["secretsValidateToken"]({ payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -4164,9 +4164,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.SnippetsCreateRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.SnippetsCreateRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Snippets"]["snippetsCreate"]({ payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -4187,9 +4187,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.SnippetsCreateRunRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.SnippetsCreateRunRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Snippets"]["snippetsCreateRun"]({ params: path, headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -4223,9 +4223,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.SnippetsExecuteRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.SnippetsExecuteRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Snippets"]["snippetsExecute"]({ headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -4242,9 +4242,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.SnippetsExecuteStoredRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.SnippetsExecuteStoredRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Snippets"]["snippetsExecuteStored"]({ params: path, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -4351,9 +4351,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.SnippetsUpdateRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.SnippetsUpdateRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Snippets"]["snippetsUpdate"]({ params: path, headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -4374,9 +4374,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.WorkspacesAddMemberRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.WorkspacesAddMemberRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Workspaces"]["workspacesAddMember"]({ params: path, headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -4397,9 +4397,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.WorkspacesCancelSubscriptionRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.WorkspacesCancelSubscriptionRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Workspaces"]["workspacesCancelSubscription"]({ params: path, headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -4420,9 +4420,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.WorkspacesChangeSubscriptionTierRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.WorkspacesChangeSubscriptionTierRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Workspaces"]["workspacesChangeSubscriptionTier"]({ params: path, headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -4435,9 +4435,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.WorkspacesCreateRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.WorkspacesCreateRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Workspaces"]["workspacesCreate"]({ payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -4607,9 +4607,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.WorkspacesReactivateSubscriptionRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.WorkspacesReactivateSubscriptionRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Workspaces"]["workspacesReactivateSubscription"]({ params: path, headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -4664,9 +4664,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.WorkspacesUpdateRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.WorkspacesUpdateRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Workspaces"]["workspacesUpdate"]({ params: path, headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -4687,9 +4687,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.WorkspacesUpdateMemberRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.WorkspacesUpdateMemberRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Workspaces"]["workspacesUpdateMember"]({ params: path, headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
@@ -4723,9 +4723,9 @@ function executeOperation(
         const payload = input.body === undefined
           ? undefined
           : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-              Api.WorkspaceSubdomainsSetNameRequestJson,
-              strictParseOptions,
-            )(input.body));
+          Api.WorkspaceSubdomainsSetNameRequestJson,
+          strictParseOptions,
+        )(input.body));
         const value = yield* executeClientOperation(client, client.client["Workspace subdomains"]["workspaceSubdomainsSetName"]({ params: path, headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });

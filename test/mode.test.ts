@@ -82,6 +82,15 @@ describe("detectOutputMode", () => {
     );
   });
 
+  test("treats an unknown TTY state as non-interactive", () => {
+    // Node/Bun report isTTY as undefined (not false) for piped stdout, so
+    // undefined must select structured output for piped consumers.
+    expect(expectMode({ argv: [], env: {}, stdoutIsTTY: undefined })).toBe(
+      "agent",
+    );
+    expect(expectMode({ argv: [], env: {} })).toBe("agent");
+  });
+
   test("uses human output for interactive sessions without automation signals", () => {
     expect(expectMode({ argv: [], env: {}, stdoutIsTTY: true })).toBe("human");
   });

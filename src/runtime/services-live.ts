@@ -109,7 +109,9 @@ export const ProcessLive = Layer.succeed(Process, {
 });
 
 export const ConsoleLive = Layer.succeed(Console, {
-  stdoutIsTTY: process.stdout.isTTY,
+  // isTTY is undefined (not false) when stdout is piped; normalize so the
+  // declared boolean service contract holds at runtime.
+  stdoutIsTTY: process.stdout.isTTY === true,
   writeStderr: (value) => Effect.sync(() => process.stderr.write(value)),
   writeStdout: (value) => Effect.sync(() => process.stdout.write(value)),
 });

@@ -1,4 +1,4 @@
-import { Data, Effect, Exit, Schema, SchemaIssue, Stream } from "effect";
+import { Cause, Data, Effect, Exit, Schema, SchemaIssue, Stream } from "effect";
 import { HttpClientError } from "effect/unstable/http";
 import type { HttpClientResponse } from "effect/unstable/http";
 
@@ -31,7 +31,8 @@ export class GeneratedCommandFailure extends Data.TaggedError(
     | "auth"
     | "api"
     | "response"
-    | "transport";
+    | "transport"
+    | "internal";
   readonly status?: number;
   readonly apiError?: ApiErrorResponse;
   readonly command?: string;
@@ -68,11 +69,7 @@ export function generatedCommandView(
       ? { command, data: result.value }
       : {
           command,
-          stream: result.stream.pipe(
-            Stream.mapError((failure) =>
-              mapGeneratedFailure(definition, failure),
-            ),
-          ),
+          stream: result.stream.pipe(describeStreamFailures(definition)),
         };
   });
 }
@@ -136,41 +133,74 @@ function describeGeneratedFailure(
   definition: CommandDefinition<PublicOperationId>,
   failure: unknown,
 ): Effect.Effect<GeneratedCommandFailure> {
-  if (
-    failure instanceof PublicOperationResponseFailure &&
-    failure.status !== undefined
-  ) {
-    const error: unknown = failure.error;
-    if (
-      !Schema.is(Api.ApiErrorResponse)(error) &&
-      HttpClientError.isHttpClientError(error) &&
-      error.response !== undefined
-    ) {
-      const status = failure.status;
-      return enrichedApiFailure(definition, status, error.response);
-    }
+  const mapped = mapGeneratedFailure(definition, failure);
+  if (mapped.reason !== "api" || mapped.apiError !== undefined) {
+    return Effect.succeed(mapped);
   }
-  return Effect.succeed(mapGeneratedFailure(definition, failure));
-}
-
-function enrichedApiFailure(
-  definition: CommandDefinition<PublicOperationId>,
-  status: number,
-  response: HttpClientResponse.HttpClientResponse,
-): Effect.Effect<GeneratedCommandFailure> {
+  const response = failureResponse(failure);
+  if (response === undefined) return Effect.succeed(mapped);
   return readResponseBody(response).pipe(
-    Effect.map(
-      (body) =>
-        new GeneratedCommandFailure({
-          operationId: definition.operation_id,
-          reason: "api",
-          status,
-          responseBody: body,
-          responseMessage:
-            body === undefined ? undefined : extractResponseMessage(body),
-        }),
+    Effect.map((body) =>
+      body === undefined ? mapped : withResponseDetail(mapped, body),
     ),
   );
+}
+
+function describeStreamFailures(
+  definition: CommandDefinition<PublicOperationId>,
+): <Value>(
+  stream: Stream.Stream<Value, unknown>,
+) => Stream.Stream<Value, GeneratedCommandFailure> {
+  return (stream) =>
+    stream.pipe(
+      Stream.catchCause((cause) => {
+        const failed = cause.reasons.find(Cause.isFailReason);
+        if (failed === undefined) {
+          // Defect/interrupt-only causes carry no failure to map; re-raise.
+          return Stream.failCause(
+            Cause.map(cause, (error) =>
+              mapGeneratedFailure(definition, error),
+            ),
+          );
+        }
+        return Stream.unwrap(
+          Effect.map(
+            describeGeneratedFailure(definition, failed.error),
+            Stream.fail,
+          ),
+        );
+      }),
+    );
+}
+
+function failureResponse(
+  failure: unknown,
+): HttpClientResponse.HttpClientResponse | undefined {
+  if (!(failure instanceof PublicOperationResponseFailure)) return undefined;
+  const error: unknown = failure.error;
+  return HttpClientError.isHttpClientError(error) ? error.response : undefined;
+}
+
+function withResponseDetail(
+  mapped: GeneratedCommandFailure,
+  body: string,
+): GeneratedCommandFailure {
+  const apiError = decodeApiErrorBody(body);
+  if (apiError !== undefined) {
+    return new GeneratedCommandFailure({
+      operationId: mapped.operationId,
+      reason: "api",
+      status: mapped.status,
+      apiError,
+    });
+  }
+  return new GeneratedCommandFailure({
+    operationId: mapped.operationId,
+    reason: "api",
+    status: mapped.status,
+    responseBody: truncateBody(body),
+    responseMessage: extractResponseMessage(body),
+  });
 }
 
 function mapGeneratedFailure(
@@ -179,21 +209,30 @@ function mapGeneratedFailure(
 ): GeneratedCommandFailure {
   const operationId = definition.operation_id;
   if (failure instanceof PublicOperationResponseFailure) {
-    if (Schema.is(Api.ApiErrorResponse)(failure.error)) {
+    const error: unknown = failure.error;
+    if (Schema.is(Api.ApiErrorResponse)(error)) {
       return new GeneratedCommandFailure({
         operationId,
         reason: "api",
         status: failure.status,
-        apiError: failure.error,
+        apiError: error,
+      });
+    }
+    if (HttpClientError.isHttpClientError(error)) {
+      return new GeneratedCommandFailure({
+        operationId,
+        // A 2xx/3xx status means the API accepted the request; a client
+        // error after that (for example a dropped stream) is transport-level.
+        reason:
+          failure.status !== undefined && failure.status >= 400
+            ? "api"
+            : "transport",
+        status: failure.status,
       });
     }
     return new GeneratedCommandFailure({
       operationId,
-      reason: HttpClientError.isHttpClientError(failure.error)
-        ? failure.status === undefined
-          ? "transport"
-          : "api"
-        : "response",
+      reason: "response",
       status: failure.status,
     });
   }
@@ -206,12 +245,7 @@ function mapGeneratedFailure(
       inputExample: inputExampleFor(definition),
     });
   }
-  return new GeneratedCommandFailure({
-    operationId,
-    reason: "input",
-    command: definition.command,
-    inputExample: inputExampleFor(definition),
-  });
+  return new GeneratedCommandFailure({ operationId, reason: "internal" });
 }
 
 const formatStandardIssues = SchemaIssue.makeFormatterStandardSchemaV1();
@@ -238,7 +272,7 @@ function inputExampleFor(
     path?: Record<string, string>;
     query?: Record<string, string>;
     headers?: Record<string, string>;
-    body?: Record<string, never>;
+    body?: Readonly<Record<string, unknown>>;
   } = {};
   for (const parameter of definition.parameters) {
     if (!parameter.required) continue;
@@ -250,12 +284,12 @@ function inputExampleFor(
       (sections.headers ??= {})[parameter.name] = `<${parameter.name}>`;
     }
   }
+  const body = definition.body;
   if (
-    definition.method === "POST" ||
-    definition.method === "PUT" ||
-    definition.method === "PATCH"
+    body !== undefined &&
+    (body.required || Object.keys(body.example).length > 0)
   ) {
-    sections.body = {};
+    sections.body = body.example;
   }
   return JSON.stringify(sections);
 }
@@ -264,30 +298,45 @@ function readResponseBody(
   response: HttpClientResponse.HttpClientResponse,
 ): Effect.Effect<string | undefined> {
   return response.text.pipe(
-    Effect.map((body) =>
-      body === ""
-        ? undefined
-        : body.length > MAX_RESPONSE_BODY_CHARS
-          ? body.slice(0, MAX_RESPONSE_BODY_CHARS)
-          : body,
-    ),
+    Effect.map((body) => (body === "" ? undefined : body)),
     Effect.catch(() => Effect.succeed(undefined)),
   );
 }
 
-const ResponseBodyWithMessage = Schema.fromJsonString(
-  Schema.Union([
-    Schema.Struct({
-      errors: Schema.Array(Schema.Struct({ message: Schema.String })),
-    }),
-    Schema.Struct({ message: Schema.String }),
-  ]),
+function truncateBody(body: string): string {
+  return body.length > MAX_RESPONSE_BODY_CHARS
+    ? body.slice(0, MAX_RESPONSE_BODY_CHARS)
+    : body;
+}
+
+const ApiErrorResponseJson = Schema.fromJsonString(Api.ApiErrorResponse);
+
+function decodeApiErrorBody(body: string): ApiErrorResponse | undefined {
+  const exit = Schema.decodeUnknownExit(ApiErrorResponseJson)(body);
+  return Exit.isSuccess(exit) ? exit.value : undefined;
+}
+
+const ErrorsEnvelopeJson = Schema.fromJsonString(
+  Schema.Struct({
+    errors: Schema.Array(
+      Schema.Struct({ message: Schema.optionalKey(Schema.String) }),
+    ),
+  }),
+);
+
+const TopLevelMessageJson = Schema.fromJsonString(
+  Schema.Struct({ message: Schema.String }),
 );
 
 function extractResponseMessage(body: string): string | undefined {
-  const exit = Schema.decodeUnknownExit(ResponseBodyWithMessage)(body);
-  if (!Exit.isSuccess(exit)) return undefined;
-  const value = exit.value;
-  const message = "errors" in value ? value.errors[0]?.message : value.message;
-  return message === undefined || message === "" ? undefined : message;
+  const envelope = Schema.decodeUnknownExit(ErrorsEnvelopeJson)(body);
+  if (Exit.isSuccess(envelope)) {
+    const message = envelope.value.errors[0]?.message;
+    if (message !== undefined && message !== "") return message;
+  }
+  const topLevel = Schema.decodeUnknownExit(TopLevelMessageJson)(body);
+  if (Exit.isSuccess(topLevel) && topLevel.value.message !== "") {
+    return topLevel.value.message;
+  }
+  return undefined;
 }
