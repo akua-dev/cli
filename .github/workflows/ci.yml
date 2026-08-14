@@ -25,7 +25,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: jdx/mise-action@v2
-      - run: bun install --frozen-lockfile
+      - run: bun install --frozen-lockfile --os='*' --cpu='*'
       - name: Derive native smoke matrix
         id: release-matrix
         shell: bash

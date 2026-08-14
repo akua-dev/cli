@@ -4,9 +4,10 @@
 
 - `scripts/release.ts` is the source of truth for target IDs, Bun targets,
   archive names, executable names, SHA-256 files, and release manifests.
-- Every target must produce a one-executable archive, adjacent `.sha256`, an
-  entry in `checksums.txt`, and a native install smoke running `akua --version`,
-  `akua --help`, and `akua commands --limit 1`.
+- Every target must produce an archive containing the `akua` executable and its
+  adjacent target-native package runtime, an adjacent `.sha256`, an entry in
+  `checksums.txt`, and a native install smoke covering both cloud commands and a
+  real `akua pkg init` → `check` → `render` → `inspect` flow.
 - Keep the tested matrix aligned across the script and workflows: macOS
   arm64/x64, glibc Linux arm64/x64, and Windows x64. Use baseline Bun targets
   for Linux x64 and Windows x64.

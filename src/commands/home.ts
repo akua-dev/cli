@@ -22,6 +22,7 @@ export function buildHomeView(): RenderEnvelope {
     next_steps: [
       { command: "akua commands" },
       { command: "akua commands --json" },
+      { command: "akua pkg --help" },
       { command: "akua workspaces list --input -" },
     ],
   };

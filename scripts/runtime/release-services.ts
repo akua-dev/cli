@@ -19,6 +19,7 @@ export interface ReleaseTarget {
   arch: "arm64" | "x64";
   archive: "tar.gz" | "zip";
   executable: "akua" | "akua.exe";
+  bindingPackage: string;
   runner: string;
   homebrew?: {
     os: "macos" | "linux";
@@ -34,6 +35,7 @@ export const RELEASE_TARGETS: readonly ReleaseTarget[] = [
     arch: "arm64",
     archive: "tar.gz",
     executable: "akua",
+    bindingPackage: "native-darwin-arm64",
     runner: "macos-15",
     homebrew: { os: "macos", arch: "arm" },
   },
@@ -44,6 +46,7 @@ export const RELEASE_TARGETS: readonly ReleaseTarget[] = [
     arch: "x64",
     archive: "tar.gz",
     executable: "akua",
+    bindingPackage: "native-darwin-x64",
     runner: "macos-15-intel",
     homebrew: { os: "macos", arch: "intel" },
   },
@@ -54,6 +57,7 @@ export const RELEASE_TARGETS: readonly ReleaseTarget[] = [
     arch: "arm64",
     archive: "tar.gz",
     executable: "akua",
+    bindingPackage: "native-linux-arm64-gnu",
     runner: "ubuntu-24.04-arm",
     homebrew: { os: "linux", arch: "arm" },
   },
@@ -64,6 +68,7 @@ export const RELEASE_TARGETS: readonly ReleaseTarget[] = [
     arch: "x64",
     archive: "tar.gz",
     executable: "akua",
+    bindingPackage: "native-linux-x64-gnu",
     runner: "akua-x64-ci-v2",
     homebrew: { os: "linux", arch: "intel" },
   },
@@ -74,6 +79,7 @@ export const RELEASE_TARGETS: readonly ReleaseTarget[] = [
     arch: "x64",
     archive: "zip",
     executable: "akua.exe",
+    bindingPackage: "native-win32-x64-msvc",
     runner: "windows-2025",
   },
 ];
@@ -85,6 +91,7 @@ export interface ReleaseAsset {
   arch: ReleaseTarget["arch"];
   archive: ReleaseTarget["archive"];
   executable: ReleaseTarget["executable"];
+  contents: string[];
   file: string;
   checksum_file: string;
   sha256: string;
@@ -104,12 +111,14 @@ export interface PackageExistingExecutablesInput {
   version: string;
   outputDir: string;
   binaries: Record<string, string>;
+  packageRoot: string;
 }
 
 export interface PackageReleaseInput {
   version: string;
   outputDir: string;
   entrypoint?: string;
+  packageRoot?: string;
 }
 
 export function releaseMatrix(): {

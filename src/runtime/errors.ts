@@ -74,6 +74,21 @@ export function usageError(message: string): AkuaCliError {
   });
 }
 
+export function packageCommandError(): AkuaCliError {
+  return new AkuaCliError({
+    type: "runtime_error",
+    code: "AKUA_PACKAGE_UNAVAILABLE",
+    message: "The embedded package toolchain could not be loaded.",
+    exitCode: ExitCodes.Runtime,
+    nextSteps: [
+      {
+        command: "brew reinstall akua-dev/tap/akua",
+        description: "Reinstall the CLI and its native package toolchain.",
+      },
+    ],
+  });
+}
+
 export function generatedCommandError(
   failure: GeneratedCommandFailure,
 ): AkuaCliError {

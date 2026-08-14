@@ -58,7 +58,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$tag_commit"
           test "$(bun -p "require('./package.json').version")" = "$VERSION"
           echo "commit=$tag_commit" >> "$GITHUB_OUTPUT"
-      - run: bun install --frozen-lockfile
+      - run: bun install --frozen-lockfile --os='*' --cpu='*'
       - name: Derive native smoke matrix
         id: release-matrix
         shell: bash

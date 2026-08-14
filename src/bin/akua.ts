@@ -11,7 +11,10 @@ import {
 } from "../commands/generated";
 import { buildHomeView } from "../commands/home";
 import { commandRegistry } from "../generated/commands.gen";
-import { generatedCommandError } from "../runtime/errors";
+import {
+  generatedCommandError,
+  packageCommandError,
+} from "../runtime/errors";
 import { detectOutputMode, type OutputMode } from "../runtime/mode";
 import type { RenderEnvelope } from "../runtime/render";
 import {
@@ -21,7 +24,7 @@ import {
   UsageFailure,
 } from "../runtime/effect-runtime";
 import { CliLive } from "../runtime/services-live";
-import { Console, type CliServices } from "../runtime/services";
+import { Console, PackageCli, type CliServices } from "../runtime/services";
 import {
   PublicApiAuthenticationFailure,
   PublicApiClientLive,
@@ -64,29 +67,48 @@ function mainEffect(
       stdoutIsTTY: console.stdoutIsTTY,
     }).pipe(
       Effect.flatMap((mode) => {
-        if (usesStructuredRenderer(argv, mode)) {
-          return runCli(route(argv, env), { mode });
-        }
+        return stripGlobalFlags(argv).pipe(
+          Effect.flatMap((stripped) => {
+            if (stripped[0] === "pkg") {
+              return Effect.gen(function* () {
+                const pkg = yield* PackageCli;
+                return yield* pkg.execute(packageCommandArgs(stripped, mode)).pipe(
+                  Effect.catchTag("PackageCliFailure", () =>
+                    runCli(
+                      Effect.fail(
+                        new CommandFailure({ error: packageCommandError() }),
+                      ),
+                      { mode },
+                    ),
+                  ),
+                );
+              });
+            }
+            if (usesStructuredRenderer(argv, mode)) {
+              return runCli(route(argv, env), { mode });
+            }
 
-        return Effect.gen(function* () {
-          const exitCode = yield* Ref.make(0);
-          const command = makeAkuaCommand(() =>
-            runCli(route(argv, env), { mode }).pipe(
-              Effect.tap((code) => Ref.set(exitCode, code)),
-              Effect.asVoid,
-            ),
-          );
-          yield* Command.runWith(command, { version: VERSION })(
-            commandInput(argv),
-          ).pipe(
-            Effect.catch(() => Ref.set(exitCode, 2)),
-          );
-          return yield* Ref.get(exitCode);
-        }).pipe(
-          Effect.provide(NodeServices.layer),
-          Effect.provide(
-            CliOutput.layer(CliOutput.defaultFormatter({ colors: false })),
-          ),
+            return Effect.gen(function* () {
+              const exitCode = yield* Ref.make(0);
+              const command = makeAkuaCommand(() =>
+                runCli(route(argv, env), { mode }).pipe(
+                  Effect.tap((code) => Ref.set(exitCode, code)),
+                  Effect.asVoid,
+                ),
+              );
+              yield* Command.runWith(command, { version: VERSION })(
+                commandInput(argv),
+              ).pipe(
+                Effect.catch(() => Ref.set(exitCode, 2)),
+              );
+              return yield* Ref.get(exitCode);
+            }).pipe(
+              Effect.provide(NodeServices.layer),
+              Effect.provide(
+                CliOutput.layer(CliOutput.defaultFormatter({ colors: false })),
+              ),
+            );
+          }),
         );
       }),
       Effect.catch((failure) =>
@@ -94,6 +116,14 @@ function mainEffect(
       ),
     );
   });
+}
+
+function packageCommandArgs(
+  argv: readonly string[],
+  mode: OutputMode,
+): readonly string[] {
+  const args = argv.length === 1 ? ["--help"] : argv.slice(1);
+  return mode === "agent" || mode === "json" ? [...args, "--json"] : args;
 }
 
 function usesStructuredRenderer(
@@ -213,6 +243,7 @@ function helpView(): RenderEnvelope {
       "  akua auth status      Show local authentication status",
       "  akua auth logout      Remove the saved local API token",
       "  akua commands         List generated public OpenAPI command registry",
+      "  akua pkg --help       Build, render, publish, and inspect Packages",
       "  akua <resource> <action> [--input -|<file>]",
       "                         Execute a generated public API operation",
       "  akua --help           Show help",
@@ -221,6 +252,7 @@ function helpView(): RenderEnvelope {
     next_steps: [
       { command: "akua commands" },
       { command: "akua commands --json" },
+      { command: "akua pkg --help" },
     ],
   };
 }

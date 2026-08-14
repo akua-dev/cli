@@ -266,8 +266,10 @@ published targets are:
 - `bun-linux-arm64` and `bun-linux-x64-baseline` (glibc);
 - `bun-windows-x64-baseline`.
 
-Each Unix `.tar.gz` contains only executable `akua` with mode `0755`; the
-Windows `.zip` contains only `akua.exe`. Stable names have the form
+Each archive contains executable `akua` (`akua.exe` on Windows) plus the
+target-native `@akua-dev/native` and `@akua-dev/native-engines` package runtime.
+The package runtime must stay adjacent to the executable under `node_modules`.
+Unix executables have mode `0755`. Stable names have the form
 `akua-v<version>-<os>-<arch>.<archive>`. Every archive has an adjacent
 `.sha256`, appears in `checksums.txt`, and is described in the release manifest.
 The generated Homebrew manifest maps the four macOS/Linux formula selectors to
@@ -277,8 +279,8 @@ exact release URLs and SHA-256 digests.
 release:package` cross-compiles and verifies the whole release directory, while
 `mise run release:smoke` extracts and executes the current host archive. CI
 builds the candidate once, then macOS arm64/x64, Linux arm64/x64, and Windows x64
-hosted runners execute `akua --version`, `akua --help`, and `akua commands
---limit 1` from their extracted archive.
+hosted runners exercise the cloud CLI and a real `akua pkg init` → `check` →
+`render` → `inspect` flow from their extracted archive.
 
 Release Please runs in manifest mode for the root Bun package. It uses
 `release-please-config.json` and `.release-please-manifest.json` to prepare

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import {
   chmodSync,
+  copyFileSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
@@ -12,7 +13,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { Effect, Layer } from "effect";
 
 import {
@@ -214,6 +215,11 @@ function packageExistingExecutables(
         yield* attempt("set staged executable timestamp", () =>
           utimesSync(stagedExecutable, ARCHIVE_TIMESTAMP, ARCHIVE_TIMESTAMP),
         );
+        const runtimeFiles = yield* stagePackageRuntime(
+          input.packageRoot,
+          stagingDir,
+          target,
+        );
         if (target.archive === "tar.gz") {
           const metadataArguments =
             process.platform === "linux"
@@ -244,13 +250,23 @@ function packageExistingExecutables(
               "-C",
               stagingDir,
               target.executable,
+              "node_modules",
             ],
             { COPYFILE_DISABLE: "1" },
           );
         } else {
           yield* runCommand(
-            ["zip", "-X", "-q", "-j", archivePath, stagedExecutable],
+            [
+              "zip",
+              "-X",
+              "-q",
+              "-r",
+              archivePath,
+              target.executable,
+              "node_modules",
+            ],
             { COPYFILE_DISABLE: "1", TZ: "UTC" },
+            stagingDir,
           );
         }
         const bytes = new Uint8Array(
@@ -273,6 +289,7 @@ function packageExistingExecutables(
           arch: target.arch,
           archive: target.archive,
           executable: target.executable,
+          contents: [target.executable, ...runtimeFiles],
           file: archive,
           checksum_file: checksumFile,
           sha256: digest,
@@ -365,6 +382,8 @@ function packageRelease(
         version: input.version,
         outputDir: input.outputDir,
         binaries,
+        packageRoot:
+          input.packageRoot ?? join(process.cwd(), "node_modules", "@akua-dev"),
       });
     });
     yield* buildBinaries.pipe(
@@ -438,6 +457,52 @@ function smokeReleaseArtifact(input: {
         commandsOutput.trim() !== "",
         `Installed ${target.id} executable returned empty command output`,
       );
+      const packageSmokeRoot = join(installRoot, "package-smoke");
+      yield* attempt("create package smoke directory", () =>
+        mkdirSync(packageSmokeRoot, { recursive: true }),
+      );
+      yield* runCommand(
+        [executable, "pkg", "version", "--json"],
+        {},
+        packageSmokeRoot,
+      );
+      yield* runCommand(
+        [executable, "pkg", "init", "demo", "--json"],
+        {},
+        packageSmokeRoot,
+      );
+      const packageDirectory = join(packageSmokeRoot, "demo");
+      yield* runCommand(
+        [executable, "pkg", "check", "--json"],
+        {},
+        packageDirectory,
+      );
+      yield* runCommand(
+        [
+          executable,
+          "pkg",
+          "render",
+          "--inputs",
+          "inputs.example.yaml",
+          "--out",
+          "deploy",
+          "--json",
+        ],
+        {},
+        packageDirectory,
+      );
+      const renderedFiles = yield* attempt("read package smoke output", () =>
+        readdirSync(join(packageDirectory, "deploy")),
+      );
+      yield* check(
+        renderedFiles.length > 0,
+        `Installed ${target.id} package renderer returned no manifests`,
+      );
+      yield* runCommand(
+        [executable, "pkg", "inspect", "--json"],
+        {},
+        packageDirectory,
+      );
     });
     yield* smoke.pipe(
       Effect.ensuring(
@@ -500,7 +565,19 @@ function verifyReleaseDirectory(
           asset.archive === target.archive &&
           asset.file === expectedFile &&
           asset.checksum_file === `${expectedFile}.sha256` &&
-          asset.executable === target.executable,
+          asset.executable === target.executable &&
+          asset.contents[0] === target.executable &&
+          asset.contents.includes(
+            "node_modules/@akua-dev/native/package.json",
+          ) &&
+          asset.contents.includes(
+            "node_modules/@akua-dev/native-engines/helm-engine.wasm",
+          ) &&
+          asset.contents.includes(
+            "node_modules/@akua-dev/native-engines/kustomize-engine.wasm",
+          ) &&
+          asset.contents.filter((entry) => entry.endsWith(".node")).length ===
+            1,
         `Release manifest target mismatch for ${target.id}`,
       );
       const bytes = new Uint8Array(
@@ -530,7 +607,7 @@ function verifyReleaseDirectory(
         `Release asset size mismatch: ${asset.file}`,
       );
       aggregateLines.push(expectedLine);
-      yield* verifyArchive(outputDir, target, asset.file);
+      yield* verifyArchive(outputDir, target, asset.file, asset.contents);
     }
     const aggregate = yield* attempt("read aggregate checksums", () =>
       readFileSync(join(outputDir, manifest.checksums), "utf8"),
@@ -610,6 +687,7 @@ function verifyArchive(
   outputDir: string,
   target: ReleaseTarget,
   file: string,
+  contents: readonly string[],
 ): Effect.Effect<void, ReleaseFailure> {
   return Effect.gen(function* () {
     const archivePath = join(outputDir, file);
@@ -617,13 +695,15 @@ function verifyArchive(
       target.archive === "zip"
         ? ["unzip", "-Z1", archivePath]
         : ["tar", "-tzf", archivePath];
-    const listed = (yield* runCommand(listCommand))
+    const listedFiles = (yield* runCommand(listCommand))
       .trim()
       .split("\n")
-      .filter(Boolean);
+      .filter((entry) => entry !== "" && !entry.endsWith("/"))
+      .sort();
+    const expectedFiles = [...contents].sort();
     yield* check(
-      listed.length === 1 && listed[0] === target.executable,
-      `Release archive ${file} must contain only ${target.executable}`,
+      JSON.stringify(listedFiles) === JSON.stringify(expectedFiles),
+      `Release archive ${file} has unexpected files: ${listedFiles.join(", ")}`,
     );
     if (target.os === "windows") return;
     const extractDir = yield* attempt(
@@ -654,6 +734,7 @@ function verifyArchive(
 function runCommand(
   command: string[],
   extraEnv: Record<string, string> = {},
+  cwd?: string,
 ): Effect.Effect<string, ReleaseFailure> {
   return Effect.gen(function* () {
     const proc = yield* attempt("run release command", () =>
@@ -662,6 +743,7 @@ function runCommand(
         stdout: "pipe",
         stderr: "pipe",
         env: { ...process.env, ...extraEnv },
+        cwd,
       }),
     );
     const decoder = new TextDecoder();
@@ -673,6 +755,129 @@ function runCommand(
     );
     return stdout;
   });
+}
+
+function stagePackageRuntime(
+  packageRoot: string,
+  stagingDir: string,
+  target: ReleaseTarget,
+): Effect.Effect<string[], ReleaseFailure> {
+  return Effect.gen(function* () {
+    const scopeRoot = join(stagingDir, "node_modules", "@akua-dev");
+    const nativeDestination = join(scopeRoot, "native");
+    const archiveFiles: string[] = [];
+    const runtimeDirectories = new Set<string>();
+    for (const packageName of ["native", "native-engines"]) {
+      const manifest = yield* readPackageManifest(packageRoot, packageName);
+      const declaredFiles = yield* packageManifestFiles(manifest, packageName);
+      for (const file of ["package.json", ...declaredFiles]) {
+        const destination = join(scopeRoot, packageName, file);
+        yield* stagePackageRuntimeFile(
+          join(packageRoot, packageName, file),
+          destination,
+        );
+        archiveFiles.push(
+          `node_modules/@akua-dev/${packageName}/${file.replaceAll("\\", "/")}`,
+        );
+        runtimeDirectories.add(dirname(destination));
+      }
+    }
+    const bindingManifest = yield* readPackageManifest(
+      packageRoot,
+      target.bindingPackage,
+    );
+    const bindingFile = yield* packageManifestMain(
+      bindingManifest,
+      target.bindingPackage,
+    );
+    const bindingDestination = join(nativeDestination, bindingFile);
+    yield* stagePackageRuntimeFile(
+      join(packageRoot, target.bindingPackage, bindingFile),
+      bindingDestination,
+    );
+    archiveFiles.push(
+      `node_modules/@akua-dev/native/${bindingFile.replaceAll("\\", "/")}`,
+    );
+    runtimeDirectories.add(dirname(bindingDestination));
+    runtimeDirectories.add(scopeRoot);
+    runtimeDirectories.add(join(stagingDir, "node_modules"));
+    for (const directory of runtimeDirectories) {
+      yield* attempt("set package runtime directory timestamp", () =>
+        utimesSync(directory, ARCHIVE_TIMESTAMP, ARCHIVE_TIMESTAMP),
+      );
+    }
+    return archiveFiles;
+  });
+}
+
+function stagePackageRuntimeFile(
+  source: string,
+  destination: string,
+): Effect.Effect<void, ReleaseFailure> {
+  return Effect.gen(function* () {
+    yield* attempt("create package runtime file directory", () =>
+      mkdirSync(dirname(destination), { recursive: true }),
+    );
+    yield* attempt("stage package runtime file", () =>
+      copyFileSync(source, destination),
+    );
+    yield* attempt("set package runtime file mode", () =>
+      chmodSync(destination, 0o644),
+    );
+    yield* attempt("set package runtime file timestamp", () =>
+      utimesSync(destination, ARCHIVE_TIMESTAMP, ARCHIVE_TIMESTAMP),
+    );
+  });
+}
+
+function readPackageManifest(
+  packageRoot: string,
+  packageName: string,
+): Effect.Effect<unknown, ReleaseFailure> {
+  return Effect.gen(function* () {
+    const source = yield* attempt("read package runtime manifest", () =>
+      readFileSync(join(packageRoot, packageName, "package.json"), "utf8"),
+    );
+    return yield* attempt("parse package runtime manifest", () =>
+      JSON.parse(source),
+    );
+  });
+}
+
+function packageManifestFiles(
+  value: unknown,
+  packageName: string,
+): Effect.Effect<string[], ReleaseFailure> {
+  if (!isRecord(value) || !Array.isArray(value.files)) {
+    return releaseFailure(`Package runtime files are invalid for ${packageName}`);
+  }
+  return Effect.all(
+    value.files.map((file) => safePackageRelativePath(file, packageName)),
+  );
+}
+
+function packageManifestMain(
+  value: unknown,
+  packageName: string,
+): Effect.Effect<string, ReleaseFailure> {
+  return isRecord(value)
+    ? safePackageRelativePath(value.main, packageName)
+    : releaseFailure(`Package runtime main is invalid for ${packageName}`);
+}
+
+function safePackageRelativePath(
+  value: unknown,
+  packageName: string,
+): Effect.Effect<string, ReleaseFailure> {
+  if (
+    typeof value !== "string" ||
+    value === "" ||
+    isAbsolute(value) ||
+    value.split(/[\\/]/).some((segment) => segment === "" || segment === "..")
+  ) {
+    return releaseFailure(`Package runtime path is invalid for ${packageName}`);
+  }
+  return Effect.succeed(value);
 }
 
 function sha256(bytes: Uint8Array): Effect.Effect<string, ReleaseFailure> {
@@ -740,9 +945,11 @@ function parseReleaseAsset(
     "checksum_file",
     "sha256",
   ];
+  const contents = value.contents;
   if (
     stringFields.some((field) => typeof value[field] !== "string") ||
-    typeof value.size !== "number"
+    typeof value.size !== "number" ||
+    !isStringArray(contents)
   ) {
     return releaseFailure("Release manifest asset is invalid");
   }
@@ -759,6 +966,7 @@ function parseReleaseAsset(
       arch,
       archive,
       executable,
+      contents,
       file: yield* requiredString(value.file),
       checksum_file: yield* requiredString(value.checksum_file),
       sha256: yield* requiredString(value.sha256),
@@ -821,6 +1029,10 @@ function requiredNumber(value: unknown): Effect.Effect<number, ReleaseFailure> {
   return typeof value === "number"
     ? Effect.succeed(value)
     : releaseFailure("Release manifest asset is invalid");
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === "string");
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

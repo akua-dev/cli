@@ -11,13 +11,92 @@ import {
 import { join } from "node:path";
 import { Effect } from "effect";
 
+import { main } from "../src/bin/akua";
 import { authView } from "../src/commands/auth";
 import { renderSuccess, type RenderEnvelope } from "../src/runtime/render";
 import { toCliError } from "../src/runtime/effect-runtime";
 import { CliLive } from "../src/runtime/services-live";
+import {
+  Console,
+  PackageCli,
+  PackageCliFailure,
+} from "../src/runtime/services";
 import { runAuthView } from "./auth-test-layer";
 
 describe("akua entrypoint", () => {
+  test("embeds package help under the akua pkg invocation", async () => {
+    const calls: Array<readonly string[]> = [];
+    const run = (argv: readonly string[]) => Effect.runPromise(
+      main(argv, {}).pipe(
+        Effect.provideService(PackageCli, {
+          execute: (args) =>
+            Effect.sync(() => {
+              calls.push(args);
+              return 0;
+            }),
+        }),
+        Effect.provide(CliLive),
+      ),
+    );
+
+    expect(await run(["pkg"])).toBe(0);
+    expect(await run(["pkg", "render", "--help"])).toBe(0);
+    expect(calls).toEqual([
+      ["--help"],
+      ["render", "--help"],
+    ]);
+  });
+
+  test("normalizes root output flags before dispatching package commands", async () => {
+    const calls: Array<readonly string[]> = [];
+    const run = (argv: readonly string[]) => Effect.runPromise(
+      main(argv, {}).pipe(
+        Effect.provideService(PackageCli, {
+          execute: (args) =>
+            Effect.sync(() => {
+              calls.push(args);
+              return 0;
+            }),
+        }),
+        Effect.provide(CliLive),
+      ),
+    );
+
+    expect(await run(["--json", "pkg", "version"])).toBe(0);
+    expect(await run(["pkg", "version", "--output", "json"])).toBe(0);
+    expect(calls).toEqual([
+      ["version", "--json"],
+      ["version", "--json"],
+    ]);
+  });
+
+  test("renders package loader failures through the Effect error boundary", async () => {
+    const stdout: string[] = [];
+    const exitCode = await Effect.runPromise(
+      main(["pkg", "version"], {}).pipe(
+        Effect.provideService(PackageCli, {
+          execute: () =>
+            Effect.fail(
+              new PackageCliFailure({ cause: new Error("native detail") }),
+            ),
+        }),
+        Effect.provideService(Console, {
+          stdoutIsTTY: false,
+          writeStderr: () => Effect.void,
+          writeStdout: (value) =>
+            Effect.sync(() => {
+              stdout.push(value);
+            }),
+        }),
+        Effect.provide(CliLive),
+      ),
+    );
+
+    expect(exitCode).toBe(1);
+    expect(stdout.join("\n")).toContain("AKUA_PACKAGE_UNAVAILABLE");
+    expect(stdout.join("\n")).not.toContain("native detail");
+  });
+
   test("uses Effect CLI to describe the interactive command tree", async () => {
     const root = await runAkua([]);
     const auth = await runAkua(["auth", "--help"]);
@@ -26,6 +105,7 @@ describe("akua entrypoint", () => {
     expect(root.stdout).toContain("SUBCOMMANDS");
     expect(root.stdout).toContain("auth");
     expect(root.stdout).toContain("commands");
+    expect(root.stdout).toContain("pkg");
     expect(root.stdout).toContain("machines");
     expect(root.stdout).toContain(
       "agent-provider-exchanges  Run generated agent-provider-exchanges API commands",
@@ -59,6 +139,8 @@ describe("akua entrypoint", () => {
     expect(help.stdout).toContain(
       "akua auth login       Sign in with a browser/device flow",
     );
+    expect(home.stdout).toContain("akua pkg --help");
+    expect(help.stdout).toContain("akua pkg --help");
     expect(help.stdout).not.toContain("Save a local API token");
   });
 
