@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.10.0](https://github.com/akua-dev/cli/compare/v0.9.0...v0.10.0) (2026-08-17)
+
+
+### Features
+
+* **cli:** execute generated public API operations ([#40](https://github.com/akua-dev/cli/issues/40)) ([255d9d6](https://github.com/akua-dev/cli/commit/255d9d684e2cdb204168c938a6abee6404bf343e))
+* **cli:** expose Effect command tree ([#41](https://github.com/akua-dev/cli/issues/41)) ([9459e02](https://github.com/akua-dev/cli/commit/9459e0237f5f9c39ec67288fa57db3a5add1a945))
+* **hcloud:** add generic provider setup flow ([#26](https://github.com/akua-dev/cli/issues/26)) ([3d44871](https://github.com/akua-dev/cli/commit/3d448719949369d6d328c00e8fe8e19ade83ae3d))
+* **release:** ship the embedded package runtime in every archive ([#42](https://github.com/akua-dev/cli/issues/42)) ([c873e0a](https://github.com/akua-dev/cli/commit/c873e0a063d9157de7c0ab9c25606e6b1de81888))
+
+
+### Bug Fixes
+
+* **auth:** send Better Auth device requests as JSON ([f619e81](https://github.com/akua-dev/cli/commit/f619e8170a40c5e496194bb154578bc88b92621c))
+* **cli:** surface input schema issues and undeclared API response bodies ([#43](https://github.com/akua-dev/cli/issues/43)) ([9576a47](https://github.com/akua-dev/cli/commit/9576a47619b11b87d7d98e4f6e743331971d8c70))
+* preserve release binary bytes in Kata ([2267e6d](https://github.com/akua-dev/cli/commit/2267e6d3587dc657abcf11adb05022a67745105b))
+
 ## [0.9.0](https://github.com/akua-dev/cli/compare/v0.8.0...v0.9.0) (2026-07-14)
 
 
