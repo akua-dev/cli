@@ -30,7 +30,7 @@ import {
   PublicApiClientLive,
 } from "../runtime/public-api";
 
-const VERSION = "0.10.0"; // x-release-please-version
+const VERSION = "0.10.1"; // x-release-please-version
 
 export function main(
   argv: readonly string[],
