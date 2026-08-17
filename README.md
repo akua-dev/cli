@@ -13,8 +13,9 @@ The canonical executable is `akua`; there is no `cnap` compatibility binary.
 ## Install
 
 GitHub Releases and Homebrew are the supported install channels. Every GitHub
-archive contains one executable and has an adjacent SHA-256 file. A release also
-publishes `checksums.txt`, a complete release manifest, and the exact Homebrew
+archive contains the `akua` executable and its adjacent target-native package
+runtime, and has an adjacent SHA-256 file. A release also publishes
+`checksums.txt`, a complete release manifest, and the exact Homebrew
 artifact/checksum mapping.
 
 ### Homebrew
@@ -24,6 +25,7 @@ brew install akua-dev/tap/akua
 akua --version
 akua --help
 akua commands --limit 1
+akua pkg version
 ```
 
 Upgrade with:
@@ -61,12 +63,14 @@ if command -v sha256sum >/dev/null 2>&1; then
 else
   shasum -a 256 --check "${ASSET}.sha256"
 fi
-tar -xzf "$ASSET"
-mkdir -p "$HOME/.local/bin"
-install -m 0755 akua "$HOME/.local/bin/akua"
+INSTALL_ROOT="$HOME/.local/libexec/akua-v${VERSION}"
+mkdir -p "$INSTALL_ROOT" "$HOME/.local/bin"
+tar -xzf "$ASSET" -C "$INSTALL_ROOT"
+ln -sfn "$INSTALL_ROOT/akua" "$HOME/.local/bin/akua"
 "$HOME/.local/bin/akua" --version
 "$HOME/.local/bin/akua" --help
 "$HOME/.local/bin/akua" commands --limit 1
+"$HOME/.local/bin/akua" pkg version
 ```
 
 Ensure `~/.local/bin` is on `PATH`. Manual upgrades repeat these steps with a
@@ -88,11 +92,16 @@ $Expected = ((Get-Content "$Asset.sha256") -split "\s+")[0].ToLower()
 $Actual = (Get-FileHash $Asset -Algorithm SHA256).Hash.ToLower()
 if ($Actual -ne $Expected) { throw "SHA-256 mismatch for $Asset" }
 Expand-Archive $Asset -DestinationPath .\akua-release -Force
+$InstallRoot = "$HOME\libexec\akua-v$Version"
+New-Item -ItemType Directory -Force "$InstallRoot" | Out-Null
+Copy-Item .\akua-release\* "$InstallRoot" -Recurse -Force
 New-Item -ItemType Directory -Force "$HOME\bin" | Out-Null
-Copy-Item .\akua-release\akua.exe "$HOME\bin\akua.exe" -Force
+Copy-Item "$InstallRoot\akua.exe" "$HOME\bin\akua.exe" -Force
+Copy-Item "$InstallRoot\node_modules" "$HOME\bin\node_modules" -Recurse -Force
 & "$HOME\bin\akua.exe" --version
 & "$HOME\bin\akua.exe" --help
 & "$HOME\bin\akua.exe" commands --limit 1
+& "$HOME\bin\akua.exe" pkg version
 ```
 
 ### Supported release artifacts
@@ -108,7 +117,9 @@ Copy-Item .\akua-release\akua.exe "$HOME\bin\akua.exe" -Force
 Linux musl, Windows arm64, and other systems are not in the tested release
 contract. x64 Linux and Windows use Bun's baseline target for older CPUs. Unix
 archives preserve executable mode `0755`; the Windows ZIP contains `akua.exe`.
-The binaries are self-contained and do not require Bun to be installed.
+All archives also contain the target-native package runtime under
+`node_modules/@akua-dev`. Keep that directory adjacent to the executable. Bun is
+not required on the target machine.
 
 To audit a whole release, download `checksums.txt` plus the archives and run
 `sha256sum --check checksums.txt` on Linux or `shasum -a 256 --check

@@ -22,6 +22,25 @@ describe("distribution workflows", () => {
     expect(workflow).toContain("fromJSON(needs.package.outputs.matrix)");
   });
 
+  test("release packaging installs every target-native optional dependency", async () => {
+    const [ciWorkflow, releaseWorkflow] = await Promise.all([
+      readFile(".github/workflows/ci.yml", "utf8"),
+      readFile(".github/workflows/release.yml", "utf8"),
+    ]);
+    const installCommand = "bun install --frozen-lockfile --os='*' --cpu='*'";
+    const ciPackageJob = ciWorkflow.slice(
+      ciWorkflow.indexOf("  package-release:"),
+      ciWorkflow.indexOf("  install-smoke:"),
+    );
+    const releasePackageJob = releaseWorkflow.slice(
+      releaseWorkflow.indexOf("  package:"),
+      releaseWorkflow.indexOf("  install-smoke:"),
+    );
+
+    expect(ciPackageJob).toContain(installCommand);
+    expect(releasePackageJob).toContain(installCommand);
+  });
+
   test("CI packages once and install-smokes every runnable target natively", async () => {
     const workflow = await readFile(".github/workflows/ci.yml", "utf8");
 

@@ -30,6 +30,46 @@ async function makeReleaseTempDir(): Promise<string> {
   return mkdtemp(join(releaseRoot, ".tmp-akua-release-"));
 }
 
+async function makePackageRuntimeFixture(root: string): Promise<string> {
+  const packageRoot = join(root, "runtime-packages");
+  const packages = [
+    {
+      packageName: "native",
+      files: ["index.js", "loader.js", "index.d.ts", "extra-runtime.txt"],
+    },
+    {
+      packageName: "native-engines",
+      files: ["index.js", "helm-engine.wasm", "kustomize-engine.wasm"],
+    },
+  ];
+  for (const runtimePackage of packages) {
+    const { packageName, files } = runtimePackage;
+    const directory = join(packageRoot, packageName);
+    await mkdir(directory, { recursive: true });
+    await writeFile(
+      join(directory, "package.json"),
+      `${JSON.stringify({ name: `@akua-dev/${packageName}`, files })}\n`,
+    );
+    for (const file of files) {
+      await writeFile(join(directory, file), `${packageName}/${file}\n`);
+    }
+  }
+  for (const target of RELEASE_TARGETS) {
+    const directory = join(packageRoot, target.bindingPackage);
+    const bindingFile = `akua.${target.bindingPackage.slice("native-".length)}.node`;
+    await mkdir(directory, { recursive: true });
+    await writeFile(
+      join(directory, "package.json"),
+      `${JSON.stringify({ main: bindingFile })}\n`,
+    );
+    await writeFile(
+      join(directory, bindingFile),
+      `${target.bindingPackage}/${bindingFile}\n`,
+    );
+  }
+  return packageRoot;
+}
+
 test("release packaging has a dedicated implementation module", async () => {
   expect(await Bun.file("scripts/release.ts").exists()).toBe(true);
 });
@@ -110,6 +150,7 @@ describe("release target contract", () => {
         arch: "arm64",
         archive: "tar.gz",
         executable: "akua",
+        bindingPackage: "native-darwin-arm64",
         runner: "macos-15",
         homebrew: { os: "macos", arch: "arm" },
       },
@@ -120,6 +161,7 @@ describe("release target contract", () => {
         arch: "x64",
         archive: "tar.gz",
         executable: "akua",
+        bindingPackage: "native-darwin-x64",
         runner: "macos-15-intel",
         homebrew: { os: "macos", arch: "intel" },
       },
@@ -130,6 +172,7 @@ describe("release target contract", () => {
         arch: "arm64",
         archive: "tar.gz",
         executable: "akua",
+        bindingPackage: "native-linux-arm64-gnu",
         runner: "ubuntu-24.04-arm",
         homebrew: { os: "linux", arch: "arm" },
       },
@@ -140,6 +183,7 @@ describe("release target contract", () => {
         arch: "x64",
         archive: "tar.gz",
         executable: "akua",
+        bindingPackage: "native-linux-x64-gnu",
         runner: "akua-x64-ci-v2",
         homebrew: { os: "linux", arch: "intel" },
       },
@@ -150,6 +194,7 @@ describe("release target contract", () => {
         arch: "x64",
         archive: "zip",
         executable: "akua.exe",
+        bindingPackage: "native-win32-x64-msvc",
         runner: "windows-2025",
       },
     ]);
@@ -336,17 +381,21 @@ describe("release target contract", () => {
     }
   });
 
-  test("packages executable-only archives, manifests, and matching checksums", async () => {
+  test("packages executables with their target-native package runtime", async () => {
     const release = (await import("../scripts/release")) as Record<
       string,
       unknown
     >;
-    const targets = release.RELEASE_TARGETS as Array<{ id: string }>;
+    const targets = release.RELEASE_TARGETS as Array<{
+      id: string;
+      bindingPackage: string;
+    }>;
     const packageExistingExecutables =
       release.packageExistingExecutables as (input: {
         version: string;
         outputDir: string;
         binaries: Record<string, string>;
+        packageRoot: string;
       }) => Effect.Effect<void, Error>;
     const verifyReleaseDirectory = release.verifyReleaseDirectory as (
       outputDir: string,
@@ -357,6 +406,7 @@ describe("release target contract", () => {
     try {
       const source = join(root, "akua-fixture");
       const outputDir = join(root, "release");
+      const packageRoot = await makePackageRuntimeFixture(root);
       await writeFile(source, "#!/bin/sh\necho akua fixture\n");
       await chmod(source, 0o755);
       runRelease(
@@ -366,6 +416,7 @@ describe("release target contract", () => {
           binaries: Object.fromEntries(
             targets.map((target) => [target.id, source]),
           ),
+          packageRoot,
         }),
       );
 
@@ -428,6 +479,33 @@ describe("release target contract", () => {
       expect(await readFile(join(extractDir, "akua"))).toEqual(
         await readFile(source),
       );
+      expect(
+        await readFile(
+          join(
+            extractDir,
+            "node_modules/@akua-dev/native/akua.linux-x64-gnu.node",
+          ),
+          "utf8",
+        ),
+      ).toBe("native-linux-x64-gnu/akua.linux-x64-gnu.node\n");
+      expect(
+        await readFile(
+          join(
+            extractDir,
+            "node_modules/@akua-dev/native-engines/helm-engine.wasm",
+          ),
+          "utf8",
+        ),
+      ).toBe("native-engines/helm-engine.wasm\n");
+      expect(
+        await readFile(
+          join(
+            extractDir,
+            "node_modules/@akua-dev/native/extra-runtime.txt",
+          ),
+          "utf8",
+        ),
+      ).toBe("native/extra-runtime.txt\n");
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -447,6 +525,7 @@ describe("release target contract", () => {
         version: string;
         outputDir: string;
         binaries: Record<string, string>;
+        packageRoot: string;
       }) => Effect.Effect<void, Error>;
     const root = await makeReleaseTempDir();
 
@@ -454,6 +533,7 @@ describe("release target contract", () => {
       const source = join(root, "akua-fixture");
       const firstOutputDir = join(root, "first");
       const secondOutputDir = join(root, "second");
+      const packageRoot = await makePackageRuntimeFixture(root);
       const binaries = Object.fromEntries(
         targets.map((target) => [target.id, source]),
       );
@@ -465,6 +545,7 @@ describe("release target contract", () => {
           version: "1.2.3",
           outputDir: firstOutputDir,
           binaries,
+          packageRoot,
         }),
       );
       await Bun.sleep(2100);
@@ -473,6 +554,7 @@ describe("release target contract", () => {
           version: "1.2.3",
           outputDir: secondOutputDir,
           binaries,
+          packageRoot,
         }),
       );
 
@@ -501,6 +583,7 @@ describe("release target contract", () => {
         version: string;
         outputDir: string;
         binaries: Record<string, string>;
+        packageRoot: string;
       }) => Effect.Effect<void, Error>;
     const verifyReleaseDirectory = release.verifyReleaseDirectory as (
       outputDir: string,
@@ -511,6 +594,7 @@ describe("release target contract", () => {
     try {
       const source = join(root, "akua-fixture");
       const outputDir = join(root, "release");
+      const packageRoot = await makePackageRuntimeFixture(root);
       await writeFile(source, "#!/bin/sh\necho akua fixture\n");
       await chmod(source, 0o755);
       runRelease(
@@ -520,6 +604,7 @@ describe("release target contract", () => {
           binaries: Object.fromEntries(
             targets.map((target) => [target.id, source]),
           ),
+          packageRoot,
         }),
       );
       await writeFile(
@@ -602,6 +687,7 @@ describe("release target contract", () => {
         version: string;
         outputDir: string;
         binaries: Record<string, string>;
+        packageRoot: string;
       }) => Effect.Effect<void, Error>;
     const verifyReleaseDirectory = release.verifyReleaseDirectory as (
       outputDir: string,
@@ -612,6 +698,7 @@ describe("release target contract", () => {
     try {
       const source = join(root, "akua-fixture");
       const outputDir = join(root, "release");
+      const packageRoot = await makePackageRuntimeFixture(root);
       await writeFile(source, "#!/bin/sh\necho akua fixture\n");
       await chmod(source, 0o755);
       runRelease(
@@ -621,6 +708,7 @@ describe("release target contract", () => {
           binaries: Object.fromEntries(
             targets.map((target) => [target.id, source]),
           ),
+          packageRoot,
         }),
       );
       const manifestPath = join(outputDir, "akua-v1.2.3-homebrew.json");
@@ -711,6 +799,7 @@ describe("release target contract", () => {
         version: string;
         outputDir: string;
         binaries: Record<string, string>;
+        packageRoot: string;
       }) => Effect.Effect<void, Error>;
     const smokeReleaseArtifact = release.smokeReleaseArtifact as (input: {
       version: string;
@@ -722,9 +811,11 @@ describe("release target contract", () => {
     try {
       const source = join(root, "akua-fixture");
       const outputDir = join(root, "release");
+      const packageRoot = await makePackageRuntimeFixture(root);
+      const smokeLog = join(root, "smoke.log");
       await writeFile(
         source,
-        '#!/bin/sh\ncase "$1" in\n  --version) echo \'{"status":"ok","data":{"version":"1.2.3"}}\' ;;\n  --help) echo \'Usage: akua\' ;;\n  commands) echo \'commands[1]\' ;;\n  *) exit 2 ;;\nesac\n',
+        `#!/bin/sh\nprintf '%s\\n' "$*" >> '${smokeLog}'\ncase "$1" in\n  --version) echo '{"status":"ok","data":{"version":"1.2.3"}}' ;;\n  --help) echo 'Usage: akua' ;;\n  commands) echo 'commands[1]' ;;\n  pkg)\n    case "$2" in\n      version) echo '{"version":"0.8.26"}' ;;\n      init) mkdir -p demo; echo '{}' ;;\n      check) echo '{}' ;;\n      render) mkdir -p deploy; echo manifest > deploy/manifest.yaml; echo '{}' ;;\n      inspect) echo '{}' ;;\n      *) exit 2 ;;\n    esac\n    ;;\n  *) exit 2 ;;\nesac\n`,
       );
       await chmod(source, 0o755);
       runRelease(
@@ -734,6 +825,7 @@ describe("release target contract", () => {
           binaries: Object.fromEntries(
             targets.map((target) => [target.id, source]),
           ),
+          packageRoot,
         }),
       );
 
@@ -746,6 +838,16 @@ describe("release target contract", () => {
           }),
         ),
       ).toBeUndefined();
+      expect((await readFile(smokeLog, "utf8")).trim().split("\n")).toEqual([
+        "--version --json",
+        "--help",
+        "commands --limit 1",
+        "pkg version --json",
+        "pkg init demo --json",
+        "pkg check --json",
+        "pkg render --inputs inputs.example.yaml --out deploy --json",
+        "pkg inspect --json",
+      ]);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -767,6 +869,7 @@ describe("release target contract", () => {
         version: string;
         outputDir: string;
         binaries: Record<string, string>;
+        packageRoot: string;
       }) => Effect.Effect<void, Error>;
     const smokeReleaseArtifact = release.smokeReleaseArtifact as (input: {
       version: string;
@@ -778,6 +881,7 @@ describe("release target contract", () => {
     try {
       const source = join(root, "akua-fixture");
       const outputDir = join(root, "release");
+      const packageRoot = await makePackageRuntimeFixture(root);
       await writeFile(
         source,
         '#!/bin/sh\ncase "$1" in\n  --version) echo \'{"status":"ok","data":{"version":"11.2.3"}}\' ;;\n  --help) echo \'Usage: akua\' ;;\n  commands) echo \'commands[1]\' ;;\n  *) exit 2 ;;\nesac\n',
@@ -790,6 +894,7 @@ describe("release target contract", () => {
           binaries: Object.fromEntries(
             targets.map((target) => [target.id, source]),
           ),
+          packageRoot,
         }),
       );
 

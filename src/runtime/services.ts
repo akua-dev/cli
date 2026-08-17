@@ -31,6 +31,12 @@ export class PublicInputFailure extends Data.TaggedError(
   "PublicInputFailure",
 )<{}> {}
 
+export class PackageCliFailure extends Data.TaggedError(
+  "PackageCliFailure",
+)<{
+  readonly cause: unknown;
+}> {}
+
 export class Http extends Context.Service<
   Http,
   {
@@ -88,6 +94,15 @@ export class PublicInput extends Context.Service<
   }
 >()("platform/cli/PublicInput") {}
 
+export class PackageCli extends Context.Service<
+  PackageCli,
+  {
+    readonly execute: (
+      args: readonly string[],
+    ) => Effect.Effect<number, PackageCliFailure>;
+  }
+>()("platform/cli/PackageCli") {}
+
 export class CliClock extends Context.Service<
   CliClock,
   {
@@ -103,4 +118,5 @@ export type CliServices =
   | Console
   | SecureConfig
   | PublicInput
+  | PackageCli
   | CliClock;

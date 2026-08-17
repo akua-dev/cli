@@ -10,6 +10,7 @@ import {
 import { dirname, join } from "node:path";
 
 import { Data, Duration, Effect, Layer } from "effect";
+import { execute as executePackageCommand } from "@akua-dev/sdk/execute";
 import {
   FetchHttpClient,
   HttpBody,
@@ -28,6 +29,8 @@ import {
   Http,
   HttpFailure,
   Process,
+  PackageCli,
+  PackageCliFailure,
   PublicInput,
   PublicInputFailure,
   SecureConfig,
@@ -176,6 +179,13 @@ export const PublicInputLive = Layer.succeed(PublicInput, {
     }),
 });
 
+export const PackageCliLive = Layer.succeed(PackageCli, {
+  execute: (args) => Effect.try({
+    try: () => executePackageCommand(args, { binName: "akua pkg" }),
+    catch: (cause) => new PackageCliFailure({ cause }),
+  }),
+});
+
 export const CliLive: Layer.Layer<CliServices> = Layer.mergeAll(
   HttpLive,
   BrowserLive,
@@ -183,6 +193,7 @@ export const CliLive: Layer.Layer<CliServices> = Layer.mergeAll(
   ConsoleLive,
   SecureConfigLive,
   PublicInputLive,
+  PackageCliLive,
   ClockLive,
 );
 

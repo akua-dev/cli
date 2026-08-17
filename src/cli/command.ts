@@ -82,6 +82,11 @@ export function makeAkuaCommand<R>(handler: CommandHandler<R>) {
     Command.withShortDescription("Discover API commands before executing them"),
   );
 
+  const pkg = Command.make("pkg", {}, handler).pipe(
+    Command.withDescription("Run Akua Package commands through the embedded native toolchain"),
+    Command.withShortDescription("Build, render, publish, and inspect Packages"),
+  );
+
   const resources = [...resourceNames]
     .sort()
     .map((resource) =>
@@ -113,6 +118,6 @@ export function makeAkuaCommand<R>(handler: CommandHandler<R>) {
       "Control Akua through generated public API commands and browser/device authentication",
     ),
     Command.withSharedFlags(globalFlags),
-    Command.withSubcommands([auth, commands, ...resources]),
+    Command.withSubcommands([auth, commands, pkg, ...resources]),
   );
 }
