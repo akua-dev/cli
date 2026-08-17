@@ -370,6 +370,12 @@ function packageRelease(
           `--target=${target.bunTarget}`,
           "--no-compile-autoload-dotenv",
           "--no-compile-autoload-bunfig",
+          // Keep @akua-dev/* as a real runtime import instead of bundling
+          // it: @akua-dev/native's platform .node binding is a binary file
+          // the bundler cannot inline. The compiled binary resolves it via
+          // process.execPath at runtime (src/runtime/services-live.ts).
+          "--external",
+          "@akua-dev/*",
           `--outfile=${binaryPath}`,
         ]);
         const bytes = yield* attempt("read compiled executable", () =>
@@ -767,10 +773,15 @@ function stagePackageRuntime(
     const nativeDestination = join(scopeRoot, "native");
     const archiveFiles: string[] = [];
     const runtimeDirectories = new Set<string>();
-    for (const packageName of ["native", "native-engines"]) {
+    for (const packageName of ["native", "native-engines", "sdk"]) {
       const manifest = yield* readPackageManifest(packageRoot, packageName);
       const declaredFiles = yield* packageManifestFiles(manifest, packageName);
-      for (const file of ["package.json", ...declaredFiles]) {
+      const expandedFiles = yield* expandPackageManifestFiles(
+        packageRoot,
+        packageName,
+        declaredFiles,
+      );
+      for (const file of ["package.json", ...expandedFiles]) {
         const destination = join(scopeRoot, packageName, file);
         yield* stagePackageRuntimeFile(
           join(packageRoot, packageName, file),
@@ -854,6 +865,57 @@ function packageManifestFiles(
   return Effect.all(
     value.files.map((file) => safePackageRelativePath(file, packageName)),
   );
+}
+
+// @akua-dev/sdk declares directory entries (e.g. "dist") in package.json's
+// `files`, unlike native/native-engines' flat file lists — expand every
+// directory entry into its individual files so each one gets staged.
+function expandPackageManifestFiles(
+  packageRoot: string,
+  packageName: string,
+  files: string[],
+): Effect.Effect<string[], ReleaseFailure> {
+  return Effect.gen(function* () {
+    const expanded: string[] = [];
+    for (const file of files) {
+      const absolute = join(packageRoot, packageName, file);
+      const info = yield* attempt("stat package runtime file", () =>
+        statSync(absolute),
+      );
+      if (info.isDirectory()) {
+        expanded.push(...(yield* walkPackageDirectory(absolute, file)));
+      } else {
+        expanded.push(file);
+      }
+    }
+    return expanded;
+  });
+}
+
+function walkPackageDirectory(
+  absoluteDirectory: string,
+  relativeDirectory: string,
+): Effect.Effect<string[], ReleaseFailure> {
+  return Effect.gen(function* () {
+    const entries = yield* attempt("read package runtime directory", () =>
+      readdirSync(absoluteDirectory, { withFileTypes: true }),
+    );
+    const files: string[] = [];
+    for (const entry of entries) {
+      const relativePath = join(relativeDirectory, entry.name);
+      if (entry.isDirectory()) {
+        files.push(
+          ...(yield* walkPackageDirectory(
+            join(absoluteDirectory, entry.name),
+            relativePath,
+          )),
+        );
+      } else {
+        files.push(relativePath);
+      }
+    }
+    return files;
+  });
 }
 
 function packageManifestMain(

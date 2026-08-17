@@ -69,7 +69,13 @@ export const RELEASE_TARGETS: readonly ReleaseTarget[] = [
     archive: "tar.gz",
     executable: "akua",
     bindingPackage: "native-linux-x64-gnu",
-    runner: "akua-x64-ci-v2",
+    // GitHub-hosted, matching every other leg in this matrix. The
+    // self-hosted akua-x64-ci-v2 pool's shared egress IP gets
+    // codeload.github.com 429-rate-limited under concurrent CI load
+    // (observed 3x in a row on this exact job), and this leg only
+    // needs a generic Linux x64 execution environment to smoke-test
+    // an already-built artifact.
+    runner: "ubuntu-24.04",
     homebrew: { os: "linux", arch: "intel" },
   },
   {

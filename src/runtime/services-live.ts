@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import {
   chmod,
   mkdir,
@@ -10,7 +11,7 @@ import {
 import { dirname, join } from "node:path";
 
 import { Data, Duration, Effect, Layer } from "effect";
-import { execute as executePackageCommand } from "@akua-dev/sdk/execute";
+import type * as PackageExecuteModule from "@akua-dev/sdk/execute";
 import {
   FetchHttpClient,
   HttpBody,
@@ -180,10 +181,20 @@ export const PublicInputLive = Layer.succeed(PublicInput, {
 });
 
 export const PackageCliLive = Layer.succeed(PackageCli, {
-  execute: (args) => Effect.try({
-    try: () => executePackageCommand(args, { binName: "akua pkg" }),
-    catch: (cause) => new PackageCliFailure({ cause }),
-  }),
+  execute: (args) =>
+    resolvePackageExecute.pipe(
+      Effect.flatMap((execute) =>
+        Effect.try({
+          try: () => execute(args, { binName: "akua pkg" }),
+          catch: (cause) => new PackageCliFailure({ cause }),
+        }),
+      ),
+      Effect.mapError((cause) =>
+        cause instanceof PackageCliFailure
+          ? cause
+          : new PackageCliFailure({ cause }),
+      ),
+    ),
 });
 
 export const CliLive: Layer.Layer<CliServices> = Layer.mergeAll(
@@ -313,3 +324,50 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function isNotFound(error: unknown): boolean {
   return error instanceof Error && "code" in error && error.code === "ENOENT";
 }
+
+// `bun build --compile` cannot statically bundle @akua-dev/sdk/execute: it
+// transitively loads @akua-dev/native's platform .node binding, which is a
+// real binary file, not JS the bundler can inline. Marking the package
+// --external (release-host-live.ts) makes the compiled binary keep a real
+// runtime import instead of inlining it, but a compiled executable resolves
+// bare specifiers against its own embedded virtual filesystem ($bunfs), not
+// the real one — so it never sees the sidecar node_modules staged next to
+// it on disk. process.execPath, unlike module-resolution base paths, does
+// resolve to the executable's real filesystem location even when compiled,
+// so an absolute dynamic import from there reaches the sidecar package.
+// This is the one place in the CLI that needs a dynamic import for that
+// reason; dev/test/build (no compiled sidecar present) fall back to normal
+// package resolution. The result is cached for the process lifetime via
+// Effect.cached rather than a hand-rolled mutable variable.
+const resolvePackageExecute: Effect.Effect<
+  typeof PackageExecuteModule.execute,
+  PackageCliFailure
+> = Effect.runSync(
+  Effect.cached(
+    Effect.sync(() =>
+      join(
+        dirname(process.execPath),
+        "node_modules",
+        "@akua-dev",
+        "sdk",
+        "dist",
+        "execute.js",
+      ),
+    ).pipe(
+      Effect.flatMap((sidecarPath) =>
+        Effect.sync(() => existsSync(sidecarPath)).pipe(
+          Effect.map((exists) =>
+            exists ? sidecarPath : "@akua-dev/sdk/execute",
+          ),
+        ),
+      ),
+      Effect.flatMap((specifier) =>
+        Effect.tryPromise({
+          try: () => import(specifier),
+          catch: (cause) => new PackageCliFailure({ cause }),
+        }),
+      ),
+      Effect.map((loaded: typeof PackageExecuteModule) => loaded.execute),
+    ),
+  ),
+);

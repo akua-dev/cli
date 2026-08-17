@@ -41,6 +41,13 @@ async function makePackageRuntimeFixture(root: string): Promise<string> {
       packageName: "native-engines",
       files: ["index.js", "helm-engine.wasm", "kustomize-engine.wasm"],
     },
+    {
+      // Real @akua-dev/sdk declares a directory entry ("dist") rather than
+      // a flat file list, unlike native/native-engines — this exercises
+      // directory expansion in packageManifestFiles.
+      packageName: "sdk",
+      files: ["dist", "README.md"],
+    },
   ];
   for (const runtimePackage of packages) {
     const { packageName, files } = runtimePackage;
@@ -51,6 +58,15 @@ async function makePackageRuntimeFixture(root: string): Promise<string> {
       `${JSON.stringify({ name: `@akua-dev/${packageName}`, files })}\n`,
     );
     for (const file of files) {
+      if (packageName === "sdk" && file === "dist") {
+        await mkdir(join(directory, "dist"), { recursive: true });
+        await writeFile(join(directory, "dist", "mod.js"), "sdk/dist/mod.js\n");
+        await writeFile(
+          join(directory, "dist", "execute.js"),
+          "sdk/dist/execute.js\n",
+        );
+        continue;
+      }
       await writeFile(join(directory, file), `${packageName}/${file}\n`);
     }
   }
@@ -184,7 +200,7 @@ describe("release target contract", () => {
         archive: "tar.gz",
         executable: "akua",
         bindingPackage: "native-linux-x64-gnu",
-        runner: "akua-x64-ci-v2",
+        runner: "ubuntu-24.04",
         homebrew: { os: "linux", arch: "intel" },
       },
       {
@@ -214,7 +230,7 @@ describe("release target contract", () => {
         { target: "darwin-arm64", runner: "macos-15" },
         { target: "darwin-x64", runner: "macos-15-intel" },
         { target: "linux-arm64", runner: "ubuntu-24.04-arm" },
-        { target: "linux-x64", runner: "akua-x64-ci-v2" },
+        { target: "linux-x64", runner: "ubuntu-24.04" },
         { target: "windows-x64", runner: "windows-2025" },
       ],
     });
@@ -848,6 +864,82 @@ describe("release target contract", () => {
         "pkg render --inputs inputs.example.yaml --out deploy --json",
         "pkg inspect --json",
       ]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("stages the sdk package's runtime files, including directory-listed entries, into the archive", async () => {
+    const release = (await import("../scripts/release")) as Record<
+      string,
+      unknown
+    >;
+    const hostTargetId = release.hostTargetId as () => Effect.Effect<
+      string,
+      Error,
+      ReleaseHost
+    >;
+    const packageExistingExecutables =
+      release.packageExistingExecutables as (input: {
+        version: string;
+        outputDir: string;
+        binaries: Record<string, string>;
+        packageRoot: string;
+      }) => Effect.Effect<void, Error>;
+    const artifactName = release.artifactName as (
+      version: string,
+      target: { id: string },
+    ) => string;
+    const root = await makeReleaseTempDir();
+
+    try {
+      const source = join(root, "akua-fixture");
+      const outputDir = join(root, "release");
+      const packageRoot = await makePackageRuntimeFixture(root);
+      await writeFile(source, "#!/bin/sh\nexit 0\n");
+      await chmod(source, 0o755);
+      const { RELEASE_TARGETS: targets } = release as {
+        RELEASE_TARGETS: Array<{ id: string }>;
+      };
+      runRelease(
+        packageExistingExecutables({
+          version: "1.2.3",
+          outputDir,
+          binaries: Object.fromEntries(
+            targets.map((target) => [target.id, source]),
+          ),
+          packageRoot,
+        }),
+      );
+
+      // The staging directory is cleaned up after packaging, so verify the
+      // real produced archive contents (what an installer actually
+      // extracts), not the intermediate .staging tree.
+      const targetId = runRelease(hostTargetId());
+      const target = targets.find((candidate) => candidate.id === targetId);
+      if (!target) throw new Error(`Unknown host target: ${targetId}`);
+      const archivePath = join(outputDir, artifactName("1.2.3", target));
+      const extractDir = join(root, "extracted");
+      await mkdir(extractDir, { recursive: true });
+      const extract = Bun.spawnSync({
+        cmd: ["tar", "-xzf", archivePath, "-C", extractDir],
+        stderr: "pipe",
+      });
+      expect(extract.exitCode).toBe(0);
+
+      const sdkDir = join(extractDir, "node_modules", "@akua-dev", "sdk");
+      expect(await readFile(join(sdkDir, "dist", "mod.js"), "utf8")).toBe(
+        "sdk/dist/mod.js\n",
+      );
+      expect(await readFile(join(sdkDir, "dist", "execute.js"), "utf8")).toBe(
+        "sdk/dist/execute.js\n",
+      );
+      expect(await readFile(join(sdkDir, "README.md"), "utf8")).toBe(
+        "sdk/README.md\n",
+      );
+      expect(await readFile(join(sdkDir, "package.json"), "utf8")).toContain(
+        '"@akua-dev/sdk"',
+      );
     } finally {
       await rm(root, { recursive: true, force: true });
     }
