@@ -200,7 +200,7 @@ describe("release target contract", () => {
         archive: "tar.gz",
         executable: "akua",
         bindingPackage: "native-linux-x64-gnu",
-        runner: "akua-x64-ci-v2",
+        runner: "ubuntu-24.04",
         homebrew: { os: "linux", arch: "intel" },
       },
       {
@@ -230,7 +230,7 @@ describe("release target contract", () => {
         { target: "darwin-arm64", runner: "macos-15" },
         { target: "darwin-x64", runner: "macos-15-intel" },
         { target: "linux-arm64", runner: "ubuntu-24.04-arm" },
-        { target: "linux-x64", runner: "akua-x64-ci-v2" },
+        { target: "linux-x64", runner: "ubuntu-24.04" },
         { target: "windows-x64", runner: "windows-2025" },
       ],
     });
