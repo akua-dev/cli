@@ -1,8 +1,8 @@
 # Akua CLI
 
 `akua` is the public Akua Cloud command-line interface. It is a self-contained
-Bun/TypeScript executable for humans, automation, and coding agents. The current
-MVP implements local token authentication, browser/device login, adaptive
+Bun/TypeScript executable for humans, automation, and coding agents. It
+implements local token authentication, browser/device login, adaptive
 structured output, and executable public operationId-driven commands. Effect
 CLI renders the interactive command tree and validates its documented flags;
 the generated typed Effect API and its static executor are derived from OpenAPI
@@ -41,12 +41,12 @@ test and all published assets have passed post-upload verification.
 
 ### GitHub Release: macOS or Linux
 
-This copy-paste example installs v0.9.0 into `~/.local/bin`. Change `VERSION`
+This copy-paste example installs v0.10.1 into `~/.local/bin`. Change `VERSION`
 when selecting a newer release.
 
 ```sh
 set -eu
-VERSION=0.9.0
+VERSION=0.10.1
 case "$(uname -s)-$(uname -m)" in
   Darwin-arm64)  TARGET=darwin-arm64 ;;
   Darwin-x86_64) TARGET=darwin-x64 ;;
@@ -78,12 +78,12 @@ newer `VERSION`, replacing `~/.local/bin/akua`. The CLI does not self-update.
 
 ### GitHub Release: Windows x64
 
-Run in PowerShell. This installs v0.9.0 into `%USERPROFILE%\bin`; add that
+Run in PowerShell. This installs v0.10.1 into `%USERPROFILE%\bin`; add that
 directory to the user `PATH` if it is not already present.
 
 ```powershell
 $ErrorActionPreference = "Stop"
-$Version = "0.9.0"
+$Version = "0.10.1"
 $Asset = "akua-v$Version-windows-x64.zip"
 $Base = "https://github.com/akua-dev/cli/releases/download/v$Version"
 Invoke-WebRequest "$Base/$Asset" -OutFile $Asset
@@ -108,11 +108,11 @@ Copy-Item "$InstallRoot\node_modules" "$HOME\bin\node_modules" -Recurse -Force
 
 | Platform | Architecture | Asset | Runtime baseline |
 | --- | --- | --- | --- |
-| macOS | Apple Silicon arm64 | `akua-v0.9.0-darwin-arm64.tar.gz` | Bun darwin arm64 |
-| macOS | Intel x64 | `akua-v0.9.0-darwin-x64.tar.gz` | Bun darwin x64 |
-| Linux | glibc arm64 | `akua-v0.9.0-linux-arm64.tar.gz` | Bun linux arm64 |
-| Linux | glibc x64 | `akua-v0.9.0-linux-x64.tar.gz` | Bun linux x64 baseline |
-| Windows | x64 | `akua-v0.9.0-windows-x64.zip` | Bun windows x64 baseline |
+| macOS | Apple Silicon arm64 | `akua-v0.10.1-darwin-arm64.tar.gz` | Bun darwin arm64 |
+| macOS | Intel x64 | `akua-v0.10.1-darwin-x64.tar.gz` | Bun darwin x64 |
+| Linux | glibc arm64 | `akua-v0.10.1-linux-arm64.tar.gz` | Bun linux arm64 |
+| Linux | glibc x64 | `akua-v0.10.1-linux-x64.tar.gz` | Bun linux x64 baseline |
+| Windows | x64 | `akua-v0.10.1-windows-x64.zip` | Bun windows x64 baseline |
 
 Linux musl, Windows arm64, and other systems are not in the tested release
 contract. x64 Linux and Windows use Bun's baseline target for older CPUs. Unix
