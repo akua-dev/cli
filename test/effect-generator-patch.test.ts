@@ -1,7 +1,10 @@
-import { expect, test } from "bun:test";
+import { expect, test } from "vitest";
+import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+import { resolveBunBinary } from "./bun-binary";
 
 test("patched Effect generator preserves headers and SSE contracts without warnings", () => {
   const directory = mkdtempSync(join(tmpdir(), "akua-effect-generator-"));
@@ -10,9 +13,9 @@ test("patched Effect generator preserves headers and SSE contracts without warni
 
   try {
     writeFileSync(specPath, JSON.stringify(specification()));
-    const result = Bun.spawnSync({
-      cmd: [
-        process.execPath,
+    const result = spawnSync(
+      resolveBunBinary(),
+      [
         "x",
         "--no-install",
         "openapigen",
@@ -23,12 +26,11 @@ test("patched Effect generator preserves headers and SSE contracts without warni
         "--name",
         "PublicApi",
       ],
-      stdout: "pipe",
-      stderr: "pipe",
-    });
+      { encoding: "utf8" },
+    );
 
-    expect(result.exitCode).toBe(0);
-    expect(new TextDecoder().decode(result.stderr)).not.toContain("warning");
+    expect(result.status).toBe(0);
+    expect(result.stderr).not.toContain("warning");
     writeFileSync(outputPath, result.stdout);
     const output = readFileSync(outputPath, "utf8");
     expect(output).toContain("HttpApiSchema.WithHeaders");

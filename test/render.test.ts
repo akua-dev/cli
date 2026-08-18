@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 
 import { AkuaCliError } from "../src/runtime/errors";
 import { renderError, renderSuccess } from "../src/runtime/render";

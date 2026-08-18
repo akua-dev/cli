@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "@effect/vitest";
 import { Clock, Effect, Fiber, Layer } from "effect";
 import { TestClock } from "effect/testing";
 
@@ -35,7 +35,8 @@ const testClockLayer = Layer.succeed(CliClock, {
 });
 
 describe("Effect auth command", () => {
-  test("runs the device flow through injected services and TestClock", async () => {
+  it.effect("runs the device flow through injected services and TestClock", () =>
+    Effect.gen(function* () {
     const requests: Array<{ url: string; body: Readonly<Record<string, string>> }> =
       [];
     const launched: string[] = [];
@@ -91,9 +92,7 @@ describe("Effect auth command", () => {
       return yield* Fiber.join(fiber);
     });
 
-    const envelope = await Effect.runPromise(
-      Effect.provide(program, services) as Effect.Effect<RenderEnvelope>,
-    );
+    const envelope = yield* (Effect.provide(program, services) as Effect.Effect<RenderEnvelope>);
 
     expect(requests).toEqual([
       {
@@ -128,144 +127,145 @@ describe("Effect auth command", () => {
       authenticated: true,
       source: "config",
     });
-  });
+    }),
+  );
 
-  test("renders terminal device authorization failures through runCli", async () => {
-    const render = async (
-      reason: "access_denied" | "expired_token",
-    ): Promise<{ exitCode: number; payload: unknown }> => {
-      const stdout: string[] = [];
-      const responses = [
-        {
-          status: 200,
-          body: {
-            device_code: "device-code",
-            user_code: "ABCD-EFGH",
-            verification_uri: "https://example.test/device",
-            expires_in: 60,
-          },
-        },
-        { status: 400, body: { error: reason } },
-      ];
-      const services = Layer.mergeAll(
-        Layer.succeed(Http, {
-          postJson: () => Effect.sync(() => responses.shift()!),
-        }),
-        Layer.succeed(Browser, { launch: () => Effect.void }),
-        Layer.succeed(Process, { awaitSignal: Effect.never }),
-        Layer.succeed(Console, {
-          stdoutIsTTY: false,
-          writeStderr: () => Effect.void,
-          writeStdout: (value) => Effect.sync(() => stdout.push(value)),
-        }),
-        Layer.succeed(SecureConfig, {
-          readToken: () => Effect.succeed(undefined),
-          saveToken: () => Effect.void,
-          removeToken: () => Effect.succeed(false),
-        }),
-        testClockLayer,
-        TestClock.layer(),
-      );
+  it.effect("renders terminal device authorization failures through runCli", () =>
+    Effect.gen(function* () {
+      const render = (reason: "access_denied" | "expired_token") =>
+        Effect.gen(function* () {
+          const stdout: string[] = [];
+          const responses = [
+            {
+              status: 200,
+              body: {
+                device_code: "device-code",
+                user_code: "ABCD-EFGH",
+                verification_uri: "https://example.test/device",
+                expires_in: 60,
+              },
+            },
+            { status: 400, body: { error: reason } },
+          ];
+          const services = Layer.mergeAll(
+            Layer.succeed(Http, {
+              postJson: () => Effect.sync(() => responses.shift()!),
+            }),
+            Layer.succeed(Browser, { launch: () => Effect.void }),
+            Layer.succeed(Process, { awaitSignal: Effect.never }),
+            Layer.succeed(Console, {
+              stdoutIsTTY: false,
+              writeStderr: () => Effect.void,
+              writeStdout: (value) => Effect.sync(() => stdout.push(value)),
+            }),
+            Layer.succeed(SecureConfig, {
+              readToken: () => Effect.succeed(undefined),
+              saveToken: () => Effect.void,
+              removeToken: () => Effect.succeed(false),
+            }),
+            testClockLayer,
+            TestClock.layer(),
+          );
 
-      const exitCode = await Effect.runPromise(
-        Effect.provide(
-          runCli(
-            authView(["login", "--no-browser"], { HOME: "/test-home" }),
-            { mode: "json" },
-          ),
-          services,
-        ) as Effect.Effect<number>,
-      );
-      return { exitCode, payload: JSON.parse(stdout.join("")) };
-    };
+          const exitCode = yield* (Effect.provide(
+            runCli(
+              authView(["login", "--no-browser"], { HOME: "/test-home" }),
+              { mode: "json" },
+            ),
+            services,
+          ) as Effect.Effect<number>);
+          return { exitCode, payload: JSON.parse(stdout.join("")) };
+        });
 
-    await expect(render("access_denied")).resolves.toMatchObject({
-      exitCode: 3,
-      payload: { error: { code: "AKUA_DEVICE_ACCESS_DENIED" } },
-    });
-    await expect(render("expired_token")).resolves.toMatchObject({
-      exitCode: 3,
-      payload: { error: { code: "AKUA_DEVICE_EXPIRED_TOKEN" } },
-    });
-  });
+      expect(yield* render("access_denied")).toMatchObject({
+        exitCode: 3,
+        payload: { error: { code: "AKUA_DEVICE_ACCESS_DENIED" } },
+      });
+      expect(yield* render("expired_token")).toMatchObject({
+        exitCode: 3,
+        payload: { error: { code: "AKUA_DEVICE_EXPIRED_TOKEN" } },
+      });
+    }),
+  );
 
-  test("maps tagged failures to distinct rendered error envelopes", async () => {
-    const render = async (
-      failure:
-        | UsageFailure
-        | ConfigFailure
-        | DeviceRequestFailure
-        | DeviceCancelledFailure
-        | DeviceAuthorizationFailure,
-    ) => {
-      const stdout: string[] = [];
-      const exitCode = await Effect.runPromise(
-        Effect.provide(
-          runCli(Effect.fail(failure), { mode: "json" }),
-          Layer.succeed(Console, {
-            stdoutIsTTY: false,
-            writeStderr: () => Effect.void,
-            writeStdout: (value) => Effect.sync(() => stdout.push(value)),
+  it.effect("maps tagged failures to distinct rendered error envelopes", () =>
+    Effect.gen(function* () {
+      const render = (
+        failure:
+          | UsageFailure
+          | ConfigFailure
+          | DeviceRequestFailure
+          | DeviceCancelledFailure
+          | DeviceAuthorizationFailure,
+      ) =>
+        Effect.gen(function* () {
+          const stdout: string[] = [];
+          const exitCode = yield* Effect.provide(
+            runCli(Effect.fail(failure), { mode: "json" }),
+            Layer.succeed(Console, {
+              stdoutIsTTY: false,
+              writeStderr: () => Effect.void,
+              writeStdout: (value) => Effect.sync(() => stdout.push(value)),
+            }),
+          );
+          return { exitCode, payload: JSON.parse(stdout.join("")) };
+        });
+
+      expect(
+        yield* render(new UsageFailure({ message: "Bad command." })),
+      ).toMatchObject({
+        exitCode: 2,
+        payload: { error: { type: "usage_error", code: "AKUA_USAGE_ERROR" } },
+      });
+      expect(
+        yield* render(
+          new ConfigFailure({
+            operation: "read",
+            path: "/config",
+            cause: new Error("denied"),
           }),
         ),
-      );
-      return { exitCode, payload: JSON.parse(stdout.join("")) };
-    };
-
-    await expect(
-      render(new UsageFailure({ message: "Bad command." })),
-    ).resolves.toMatchObject({
-      exitCode: 2,
-      payload: { error: { type: "usage_error", code: "AKUA_USAGE_ERROR" } },
-    });
-    await expect(
-      render(
-        new ConfigFailure({
-          operation: "read",
-          path: "/config",
-          cause: new Error("denied"),
-        }),
-      ),
-    ).resolves.toMatchObject({
-      exitCode: 1,
-      payload: { error: { type: "runtime_error", code: "AKUA_CONFIG_ERROR" } },
-    });
-    await expect(render(new DeviceRequestFailure())).resolves.toMatchObject({
-      exitCode: 3,
-      payload: {
-        error: {
-          type: "authentication_error",
-          code: "AKUA_DEVICE_REQUEST_FAILED",
+      ).toMatchObject({
+        exitCode: 1,
+        payload: { error: { type: "runtime_error", code: "AKUA_CONFIG_ERROR" } },
+      });
+      expect(yield* render(new DeviceRequestFailure())).toMatchObject({
+        exitCode: 3,
+        payload: {
+          error: {
+            type: "authentication_error",
+            code: "AKUA_DEVICE_REQUEST_FAILED",
+          },
         },
-      },
-    });
-    await expect(render(new DeviceCancelledFailure())).resolves.toMatchObject({
-      exitCode: 1,
-      payload: {
-        error: { type: "runtime_error", code: "AKUA_DEVICE_CANCELLED" },
-      },
-    });
-    await expect(
-      render(new DeviceAuthorizationFailure({ reason: "access_denied" })),
-    ).resolves.toMatchObject({
-      exitCode: 3,
-      payload: {
-        error: {
-          type: "authentication_error",
-          code: "AKUA_DEVICE_ACCESS_DENIED",
+      });
+      expect(yield* render(new DeviceCancelledFailure())).toMatchObject({
+        exitCode: 1,
+        payload: {
+          error: { type: "runtime_error", code: "AKUA_DEVICE_CANCELLED" },
         },
-      },
-    });
-    await expect(
-      render(new DeviceAuthorizationFailure({ reason: "expired_token" })),
-    ).resolves.toMatchObject({
-      exitCode: 3,
-      payload: {
-        error: {
-          type: "authentication_error",
-          code: "AKUA_DEVICE_EXPIRED_TOKEN",
+      });
+      expect(
+        yield* render(new DeviceAuthorizationFailure({ reason: "access_denied" })),
+      ).toMatchObject({
+        exitCode: 3,
+        payload: {
+          error: {
+            type: "authentication_error",
+            code: "AKUA_DEVICE_ACCESS_DENIED",
+          },
         },
-      },
-    });
-  });
+      });
+      expect(
+        yield* render(new DeviceAuthorizationFailure({ reason: "expired_token" })),
+      ).toMatchObject({
+        exitCode: 3,
+        payload: {
+          error: {
+            type: "authentication_error",
+            code: "AKUA_DEVICE_EXPIRED_TOKEN",
+          },
+        },
+      });
+    }),
+  );
 });

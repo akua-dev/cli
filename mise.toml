@@ -30,7 +30,7 @@ run = "bun run release:smoke"
 
 [tasks.test]
 description = "Run tests"
-run = "bun test"
+run = "bun run test"
 
 [tasks."spec:fetch"]
 description = "Fetch the production OpenAPI spec snapshot"

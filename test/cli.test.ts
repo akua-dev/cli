@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it, test } from "@effect/vitest";
 import {
   chmod,
   mkdir,
@@ -14,7 +14,6 @@ import { Effect } from "effect";
 import { main } from "../src/bin/akua";
 import { authView } from "../src/commands/auth";
 import { renderSuccess, type RenderEnvelope } from "../src/runtime/render";
-import { toCliError } from "../src/runtime/effect-runtime";
 import { CliLive } from "../src/runtime/services-live";
 import {
   Console,
@@ -22,85 +21,92 @@ import {
   PackageCliFailure,
 } from "../src/runtime/services";
 import { runAuthView } from "./auth-test-layer";
+import { runAkua } from "./run-akua";
 
 describe("akua entrypoint", () => {
-  test("embeds package help under the akua pkg invocation", async () => {
-    const calls: Array<readonly string[]> = [];
-    const run = (argv: readonly string[]) => Effect.runPromise(
-      main(argv, {}).pipe(
-        Effect.provideService(PackageCli, {
-          execute: (args) =>
-            Effect.sync(() => {
-              calls.push(args);
-              return 0;
+  it.effect("embeds package help under the akua pkg invocation", () =>
+    Effect.gen(function* () {
+      const calls: Array<readonly string[]> = [];
+      const run = (argv: readonly string[]) =>
+        main(argv, {}).pipe(
+          Effect.provideService(PackageCli, {
+            execute: (args) =>
+              Effect.sync(() => {
+                calls.push(args);
+                return 0;
+              }),
+          }),
+          Effect.provideService(Console, {
+            stdoutIsTTY: true,
+            writeStderr: () => Effect.void,
+            writeStdout: () => Effect.void,
+          }),
+          Effect.provide(CliLive),
+        );
+
+      expect(yield* run(["pkg"])).toBe(0);
+      expect(yield* run(["pkg", "render", "--help"])).toBe(0);
+      expect(calls).toEqual([
+        ["--help"],
+        ["render", "--help"],
+      ]);
+    }),
+  );
+
+  it.effect(
+    "normalizes root output flags before dispatching package commands",
+    () =>
+      Effect.gen(function* () {
+        const calls: Array<readonly string[]> = [];
+        const run = (argv: readonly string[]) =>
+          main(argv, {}).pipe(
+            Effect.provideService(PackageCli, {
+              execute: (args) =>
+                Effect.sync(() => {
+                  calls.push(args);
+                  return 0;
+                }),
             }),
-        }),
-        Effect.provideService(Console, {
-          stdoutIsTTY: true,
-          writeStderr: () => Effect.void,
-          writeStdout: () => Effect.void,
-        }),
-        Effect.provide(CliLive),
-      ),
-    );
+            Effect.provide(CliLive),
+          );
 
-    expect(await run(["pkg"])).toBe(0);
-    expect(await run(["pkg", "render", "--help"])).toBe(0);
-    expect(calls).toEqual([
-      ["--help"],
-      ["render", "--help"],
-    ]);
-  });
+        expect(yield* run(["--json", "pkg", "version"])).toBe(0);
+        expect(yield* run(["pkg", "version", "--output", "json"])).toBe(0);
+        expect(calls).toEqual([
+          ["version", "--json"],
+          ["version", "--json"],
+        ]);
+      }),
+  );
 
-  test("normalizes root output flags before dispatching package commands", async () => {
-    const calls: Array<readonly string[]> = [];
-    const run = (argv: readonly string[]) => Effect.runPromise(
-      main(argv, {}).pipe(
-        Effect.provideService(PackageCli, {
-          execute: (args) =>
-            Effect.sync(() => {
-              calls.push(args);
-              return 0;
-            }),
-        }),
-        Effect.provide(CliLive),
-      ),
-    );
+  it.effect(
+    "renders package loader failures through the Effect error boundary",
+    () =>
+      Effect.gen(function* () {
+        const stdout: string[] = [];
+        const exitCode = yield* main(["pkg", "version"], {}).pipe(
+          Effect.provideService(PackageCli, {
+            execute: () =>
+              Effect.fail(
+                new PackageCliFailure({ cause: new Error("native detail") }),
+              ),
+          }),
+          Effect.provideService(Console, {
+            stdoutIsTTY: false,
+            writeStderr: () => Effect.void,
+            writeStdout: (value) =>
+              Effect.sync(() => {
+                stdout.push(value);
+              }),
+          }),
+          Effect.provide(CliLive),
+        );
 
-    expect(await run(["--json", "pkg", "version"])).toBe(0);
-    expect(await run(["pkg", "version", "--output", "json"])).toBe(0);
-    expect(calls).toEqual([
-      ["version", "--json"],
-      ["version", "--json"],
-    ]);
-  });
-
-  test("renders package loader failures through the Effect error boundary", async () => {
-    const stdout: string[] = [];
-    const exitCode = await Effect.runPromise(
-      main(["pkg", "version"], {}).pipe(
-        Effect.provideService(PackageCli, {
-          execute: () =>
-            Effect.fail(
-              new PackageCliFailure({ cause: new Error("native detail") }),
-            ),
-        }),
-        Effect.provideService(Console, {
-          stdoutIsTTY: false,
-          writeStderr: () => Effect.void,
-          writeStdout: (value) =>
-            Effect.sync(() => {
-              stdout.push(value);
-            }),
-        }),
-        Effect.provide(CliLive),
-      ),
-    );
-
-    expect(exitCode).toBe(1);
-    expect(stdout.join("\n")).toContain("AKUA_PACKAGE_UNAVAILABLE");
-    expect(stdout.join("\n")).not.toContain("native detail");
-  });
+        expect(exitCode).toBe(1);
+        expect(stdout.join("\n")).toContain("AKUA_PACKAGE_UNAVAILABLE");
+        expect(stdout.join("\n")).not.toContain("native detail");
+      }),
+  );
 
   test("uses Effect CLI to describe the interactive command tree", async () => {
     const root = await runAkua([]);
@@ -831,33 +837,33 @@ describe("akua entrypoint", () => {
     }
   });
 
-  test("auth status honors AKUA_API_TOKEN without HOME", async () => {
-    for (const home of [undefined, ""]) {
-      const envelope = await Effect.runPromise(
-        Effect.provide(
+  it.effect("auth status honors AKUA_API_TOKEN without HOME", () =>
+    Effect.gen(function* () {
+      for (const home of [undefined, ""]) {
+        const envelope = yield* (Effect.provide(
           authView(["status"], {
             HOME: home,
             AKUA_API_TOKEN: "sk_akua_env",
           }),
           CliLive,
-        ) as Effect.Effect<RenderEnvelope>,
-      );
-      const stdout = renderSuccess(envelope, "json");
-      const payload = JSON.parse(stdout);
+        ) as Effect.Effect<RenderEnvelope>);
+        const stdout = renderSuccess(envelope, "json");
+        const payload = JSON.parse(stdout);
 
-      expect(payload).toMatchObject({
-        status: "ok",
-        command: "akua auth status",
-        observations: ["Authenticated with AKUA_API_TOKEN."],
-        data: {
-          authenticated: true,
-          source: "env",
-        },
-      });
-      expect(payload.data).not.toHaveProperty("config_path");
-      expect(stdout).not.toContain("sk_akua_env");
-    }
-  });
+        expect(payload).toMatchObject({
+          status: "ok",
+          command: "akua auth status",
+          observations: ["Authenticated with AKUA_API_TOKEN."],
+          data: {
+            authenticated: true,
+            source: "env",
+          },
+        });
+        expect(payload.data).not.toHaveProperty("config_path");
+        expect(stdout).not.toContain("sk_akua_env");
+      }
+    }),
+  );
 
   test("auth logout removes stored token without clearing AKUA_API_TOKEN", async () => {
     const home = await makeTempHome();
@@ -1074,35 +1080,6 @@ describe("akua entrypoint", () => {
   });
 
 });
-
-async function runAkua(
-  args: readonly string[],
-  env: Record<string, string> = {},
-) {
-  const childEnv = { ...process.env, ...env };
-  if (!("AKUA_OUTPUT" in env)) {
-    delete childEnv.AKUA_OUTPUT;
-  }
-  if (!("AKUA_API_TOKEN" in env)) {
-    delete childEnv.AKUA_API_TOKEN;
-  }
-
-  const proc = Bun.spawn({
-    // Use this Bun process directly: the CI PATH can be a mise shim, while
-    // tests need a deterministic executable for each isolated child process.
-    cmd: [process.execPath, "src/bin/akua.ts", ...args],
-    stdout: "pipe",
-    stderr: "pipe",
-    env: childEnv,
-  });
-
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
-  return { stdout, stderr, exitCode };
-}
 
 async function makeTempHome(): Promise<string> {
   return mkdtemp(join(process.cwd(), ".tmp-akua-home-"));

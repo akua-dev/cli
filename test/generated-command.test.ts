@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { Effect, Layer, Stream } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
 

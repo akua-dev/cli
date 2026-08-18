@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 
 const EFFECT_SKILL_PATH = "skills/effect-v4/SKILL.md";
@@ -47,7 +47,7 @@ describe("Effect v4 CLI quality guidance", () => {
       "fiber",
       "## Red flags",
       "mise run check",
-      "bun test",
+      "bun run test",
     ]) {
       expect(skill).toContain(rule);
     }

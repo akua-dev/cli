@@ -1,5 +1,7 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it, test } from "@effect/vitest";
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import {
   chmod,
   copyFile,
@@ -12,6 +14,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { parse, join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { Console, Effect, Layer } from "effect";
 import { Command } from "effect/unstable/cli";
 
@@ -86,8 +89,8 @@ async function makePackageRuntimeFixture(root: string): Promise<string> {
   return packageRoot;
 }
 
-test("release packaging has a dedicated implementation module", async () => {
-  expect(await Bun.file("scripts/release.ts").exists()).toBe(true);
+test("release packaging has a dedicated implementation module", () => {
+  expect(existsSync("scripts/release.ts")).toBe(true);
 });
 
 test("keeps exported release contract helpers free of host APIs", async () => {
@@ -96,32 +99,30 @@ test("keeps exported release contract helpers free of host APIs", async () => {
   expect(helpers).not.toContain('from "node:crypto"');
   expect(helpers).not.toContain("process.platform");
   expect(helpers).not.toContain("process.arch");
-  expect(await Bun.file("scripts/runtime/release-host-live.ts").exists()).toBe(
-    true,
-  );
+  expect(existsSync("scripts/runtime/release-host-live.ts")).toBe(true);
 });
 
 describe("release target contract", () => {
-  test("renders the release matrix as JSON through the matrix subcommand", async () => {
-    const stdout: string[] = [];
-    const testConsole = Object.assign(Object.create(console), {
-      log: (value: string) => stdout.push(value),
-    }) as Console.Console;
+  it.effect("renders the release matrix as JSON through the matrix subcommand", () =>
+    Effect.gen(function* () {
+      const stdout: string[] = [];
+      const testConsole = Object.assign(Object.create(console), {
+        log: (value: string) => stdout.push(value),
+      }) as Console.Console;
 
-    await Effect.runPromise(
-      Command.runWith(releaseCommand, { version: "test" })(["matrix"]).pipe(
+      yield* Command.runWith(releaseCommand, { version: "test" })(["matrix"]).pipe(
         Effect.provide(Layer.mergeAll(cliTestLayer, ReleaseHostLive)),
         Effect.provideService(Console.Console, testConsole),
-      ),
-    );
+      );
 
-    expect(JSON.parse(stdout.join("\n"))).toEqual({
-      include: RELEASE_TARGETS.map((target) => ({
-        target: target.id,
-        runner: target.runner,
-      })),
-    });
-  });
+      expect(JSON.parse(stdout.join("\n"))).toEqual({
+        include: RELEASE_TARGETS.map((target) => ({
+          target: target.id,
+          runner: target.runner,
+        })),
+      });
+    }),
+  );
 
   test("public release operations require ReleaseHost and never provide its live layer", async () => {
     const release = await import("../scripts/release");
@@ -475,22 +476,17 @@ describe("release target contract", () => {
 
       const extractDir = join(root, "extract");
       await mkdir(extractDir);
-      const proc = Bun.spawn({
-        cmd: [
-          "tar",
+      const extract = spawnSync(
+        "tar",
+        [
           "-xzf",
           join(outputDir, "akua-v1.2.3-linux-x64.tar.gz"),
           "-C",
           extractDir,
         ],
-        stdout: "pipe",
-        stderr: "pipe",
-      });
-      const [exitCode] = await Promise.all([
-        proc.exited,
-        new Response(proc.stderr).text(),
-      ]);
-      expect(exitCode).toBe(0);
+        { encoding: "utf8" },
+      );
+      expect(extract.status).toBe(0);
       expect((await stat(join(extractDir, "akua"))).mode & 0o777).toBe(0o755);
       expect(await readFile(join(extractDir, "akua"))).toEqual(
         await readFile(source),
@@ -564,7 +560,7 @@ describe("release target contract", () => {
           packageRoot,
         }),
       );
-      await Bun.sleep(2100);
+      await sleep(2100);
       runRelease(
         packageExistingExecutables({
           version: "1.2.3",
@@ -921,11 +917,10 @@ describe("release target contract", () => {
       const archivePath = join(outputDir, artifactName("1.2.3", target));
       const extractDir = join(root, "extracted");
       await mkdir(extractDir, { recursive: true });
-      const extract = Bun.spawnSync({
-        cmd: ["tar", "-xzf", archivePath, "-C", extractDir],
-        stderr: "pipe",
+      const extract = spawnSync("tar", ["-xzf", archivePath, "-C", extractDir], {
+        encoding: "utf8",
       });
-      expect(extract.exitCode).toBe(0);
+      expect(extract.status).toBe(0);
 
       const sdkDir = join(extractDir, "node_modules", "@akua-dev", "sdk");
       expect(await readFile(join(sdkDir, "dist", "mod.js"), "utf8")).toBe(

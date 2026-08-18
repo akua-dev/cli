@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   chmodSync,
@@ -42,6 +43,9 @@ import type {
 const RELEASE_REPOSITORY = "akua-dev/cli";
 const ARCHIVE_TIMESTAMP_SECONDS = 315532800;
 const ARCHIVE_TIMESTAMP = new Date(ARCHIVE_TIMESTAMP_SECONDS * 1000);
+// Node's default `maxBuffer` (1 MB) is too tight for `tar`/executable
+// listing output; match Bun.spawnSync's effectively unbounded behavior.
+const RELEASE_COMMAND_MAX_BUFFER = 64 * 1024 * 1024;
 
 function attempt<A>(
   operation: string,
@@ -744,20 +748,19 @@ function runCommand(
 ): Effect.Effect<string, ReleaseFailure> {
   return Effect.gen(function* () {
     const proc = yield* attempt("run release command", () =>
-      Bun.spawnSync({
-        cmd: command,
-        stdout: "pipe",
-        stderr: "pipe",
+      spawnSync(command[0], command.slice(1), {
         env: { ...process.env, ...extraEnv },
         cwd,
+        encoding: "utf8",
+        maxBuffer: RELEASE_COMMAND_MAX_BUFFER,
       }),
     );
-    const decoder = new TextDecoder();
-    const stdout = decoder.decode(proc.stdout);
-    const stderr = decoder.decode(proc.stderr);
+    const stdout = proc.stdout;
+    const stderr = proc.stderr;
+    const exitCode = proc.status ?? -1;
     yield* check(
-      proc.exitCode === 0,
-      `${command[0]} failed (${proc.exitCode}): ${stderr.trim()}`,
+      exitCode === 0,
+      `${command[0]} failed (${exitCode}): ${stderr.trim()}`,
     );
     return stdout;
   });

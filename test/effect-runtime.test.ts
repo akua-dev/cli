@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it, test } from "@effect/vitest";
 import { readFileSync } from "node:fs";
 import { Clock, Effect, Layer, Stream } from "effect";
 import { TestClock } from "effect/testing";
@@ -20,10 +20,10 @@ describe("Effect CLI runtime", () => {
     expect(runtime).not.toContain("function rendererMode");
   });
 
-  test("runs an Effect command through the central render boundary", async () => {
-    const stdout: string[] = [];
-    const exitCode = await Effect.runPromise(
-      Effect.provide(
+  it.effect("runs an Effect command through the central render boundary", () =>
+    Effect.gen(function* () {
+      const stdout: string[] = [];
+      const exitCode = yield* Effect.provide(
         runCli(
           Effect.succeed({
             command: "akua test",
@@ -37,21 +37,21 @@ describe("Effect CLI runtime", () => {
           writeStderr: () => Effect.void,
           writeStdout: (value) => Effect.sync(() => stdout.push(value)),
         }),
-      ),
-    );
+      );
 
-    expect(exitCode).toBe(0);
-    expect(JSON.parse(stdout.join(""))).toMatchObject({
-      status: "ok",
-      command: "akua test",
-      data: { runtime: "effect-v4" },
-    });
-  });
+      expect(exitCode).toBe(0);
+      expect(JSON.parse(stdout.join(""))).toMatchObject({
+        status: "ok",
+        command: "akua test",
+        data: { runtime: "effect-v4" },
+      });
+    }),
+  );
 
-  test("renders streaming command results incrementally", async () => {
-    const stdout: string[] = [];
-    const exitCode = await Effect.runPromise(
-      Effect.provide(
+  it.effect("renders streaming command results incrementally", () =>
+    Effect.gen(function* () {
+      const stdout: string[] = [];
+      const exitCode = yield* Effect.provide(
         runCli(
           Effect.succeed({
             command: "akua installs get-logs",
@@ -67,50 +67,54 @@ describe("Effect CLI runtime", () => {
           writeStderr: () => Effect.void,
           writeStdout: (value) => Effect.sync(() => stdout.push(value)),
         }),
-      ),
-    );
+      );
 
-    expect(exitCode).toBe(0);
-    expect(stdout.map((value) => JSON.parse(value))).toEqual([
-      {
-        status: "ok",
-        command: "akua installs get-logs",
-        data: { event: "message", data: "first" },
-      },
-      {
-        status: "ok",
-        command: "akua installs get-logs",
-        data: { event: "end", data: "{}" },
-      },
-    ]);
-  });
+      expect(exitCode).toBe(0);
+      expect(stdout.map((value) => JSON.parse(value))).toEqual([
+        {
+          status: "ok",
+          command: "akua installs get-logs",
+          data: { event: "message", data: "first" },
+        },
+        {
+          status: "ok",
+          command: "akua installs get-logs",
+          data: { event: "end", data: "{}" },
+        },
+      ]);
+    }),
+  );
 
-  test("uses service tags and TestClock layers without host dependencies", async () => {
-    const services = Layer.mergeAll(
-      Layer.succeed(Http, { postJson: () => Effect.die("not used") }),
-      Layer.succeed(Browser, { launch: () => Effect.void }),
-      Layer.succeed(Process, { awaitSignal: Effect.never }),
-      Layer.succeed(Console, {
-        stdoutIsTTY: false,
-        writeStderr: () => Effect.void,
-        writeStdout: () => Effect.void,
+  it.effect(
+    "uses service tags and TestClock layers without host dependencies",
+    () =>
+      Effect.gen(function* () {
+        const services = Layer.mergeAll(
+          Layer.succeed(Http, { postJson: () => Effect.die("not used") }),
+          Layer.succeed(Browser, { launch: () => Effect.void }),
+          Layer.succeed(Process, { awaitSignal: Effect.never }),
+          Layer.succeed(Console, {
+            stdoutIsTTY: false,
+            writeStderr: () => Effect.void,
+            writeStdout: () => Effect.void,
+          }),
+          Layer.succeed(SecureConfig, {
+            readToken: () => Effect.succeed(undefined),
+            saveToken: () => Effect.void,
+            removeToken: () => Effect.succeed(false),
+          }),
+          TestClock.layer(),
+        );
+        const program = Effect.gen(function* () {
+          yield* Http;
+          yield* Browser;
+          yield* Process;
+          yield* Console;
+          yield* SecureConfig;
+          return yield* Clock.currentTimeMillis;
+        });
+
+        expect(yield* Effect.provide(program, services)).toBe(0);
       }),
-      Layer.succeed(SecureConfig, {
-        readToken: () => Effect.succeed(undefined),
-        saveToken: () => Effect.void,
-        removeToken: () => Effect.succeed(false),
-      }),
-      TestClock.layer(),
-    );
-    const program = Effect.gen(function* () {
-      yield* Http;
-      yield* Browser;
-      yield* Process;
-      yield* Console;
-      yield* SecureConfig;
-      return yield* Clock.currentTimeMillis;
-    });
-
-    expect(await Effect.runPromise(Effect.provide(program, services))).toBe(0);
-  });
+  );
 });

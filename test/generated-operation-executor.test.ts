@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, test } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import ts from "typescript";
 import { commandRegistry } from "../src/generated/commands.gen";
