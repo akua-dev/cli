@@ -35,9 +35,6 @@ describe("distribution documentation", () => {
       "AGENT=true",
       "AGENT=<name>",
       "non-TTY",
-      "mise run spec:fetch",
-      "mise run generate",
-      "mise run generate:check",
       "operationId",
       "generated directly from Akua's public API",
       "akua workspaces list --input -",
@@ -60,6 +57,44 @@ describe("distribution documentation", () => {
 
     expect(readme).not.toMatch(/\bEffect\b/);
     expect(readme).toContain("humans, CI, and agents");
+  });
+
+  test("README stays user-facing and defers repo development to CONTRIBUTING.md", async () => {
+    const readme = await text("README.md");
+
+    expect(readme).toContain("docs.akua.dev");
+    expect(readme).toContain("Contributing to this repo? See [CONTRIBUTING.md](CONTRIBUTING.md).");
+    expect(readme).not.toContain("mise run spec:fetch");
+    expect(readme).not.toContain("mise run generate");
+    expect(readme).not.toContain("mise run generate:check");
+    expect(readme).not.toContain("mise run release:package");
+    expect(readme).not.toContain("mise run release:smoke");
+    expect(readme).not.toContain("mise install");
+    expect(readme).not.toContain("Release Please");
+    expect(readme).not.toContain("HOMEBREW_TAP_TOKEN");
+  });
+
+  test("CONTRIBUTING documents generation, testing, and release mechanics", async () => {
+    const contributing = await text("CONTRIBUTING.md");
+
+    for (const value of [
+      "mise install",
+      "mise run check",
+      "mise run spec:fetch",
+      "mise run generate",
+      "mise run generate:check",
+      "bun test",
+      "mise run release:package",
+      "mise run release:verify",
+      "mise run release:smoke",
+      "Release Please",
+      "HOMEBREW_TAP_TOKEN",
+      "src/generated/commands.gen.ts",
+      "docs/architecture.md",
+      "AGENTS.md",
+    ]) {
+      expect(contributing).toContain(value);
+    }
   });
 
   test("architecture records device authentication and all generated API artifacts", async () => {

@@ -17,8 +17,7 @@ The canonical executable is `akua`; there is no `cnap` compatibility binary.
 GitHub Releases and Homebrew are the supported install channels. Every GitHub
 archive contains the `akua` executable and its adjacent target-native package
 runtime, and has an adjacent SHA-256 file. A release also publishes
-`checksums.txt`, a complete release manifest, and the exact Homebrew
-artifact/checksum mapping.
+`checksums.txt` and a complete release manifest.
 
 ### Homebrew
 
@@ -37,9 +36,7 @@ brew update
 brew upgrade akua
 ```
 
-The formula is maintained in `akua-dev/homebrew-tap`. A CLI release requests a
-reviewed formula PR only after every archive has passed a native install smoke
-test and all published assets have passed post-upload verification.
+The formula is maintained in `akua-dev/homebrew-tap`.
 
 ### GitHub Release: macOS or Linux
 
@@ -230,48 +227,9 @@ diagnostics. The CLI stays provider-neutral: it has no provider-specific command
 flags, environment variables, or credential loaders. Provider-specific values
 belong only in the generated request body.
 
-## Development
+## Learn more
 
-Prerequisites are [mise](https://mise.jdx.dev/) and the pinned Bun toolchain:
+The full command reference and platform guides live at
+[docs.akua.dev](https://docs.akua.dev).
 
-```sh
-mise install
-bun install --frozen-lockfile
-mise run check
-mise run build:binary
-./dist/akua --version
-./dist/akua --help
-./dist/akua commands --limit 1
-```
-
-The command surface is generated from the public source of truth,
-`https://api.akua.dev/v1/openapi.json`:
-
-```sh
-mise run spec:fetch       # fetch and stably format openapi/public.json
-mise run generate         # regenerate the command registry and typed API bindings
-mise run generate:check   # fail if committed generated output has drifted
-mise run check            # drift check, typecheck/build, and tests
-```
-
-Generation is deterministic and operationId-driven; only operations marked
-`x-platform-visibility: PUBLIC` are included, and registry rows are sorted by
-operationId. The generated outputs are `src/generated/commands.gen.ts`,
-`src/generated/openapi-api.gen.ts`, and
-`src/generated/public-operation-executor.gen.ts`.
-
-`mise run release:package` cross-compiles all five targets, creates archives and
-checksums in `dist/release`, and verifies their manifest. `mise run
-release:smoke` extracts and runs the artifact for the current supported host.
-CI repeats native smoke tests on every platform in the table.
-
-Release Please creates the version tag and GitHub Release. Its own workflow then
-calls artifact publication directly, so publication does not depend on a tag
-event that GitHub may suppress for job-token-created tags. Uploads do not
-clobber existing assets. Only after downloading and re-verifying the published
-assets does the workflow dispatch the Homebrew manifest URL. The
-`HOMEBREW_TAP_TOKEN` secret must be a fine-grained credential scoped only to the
-tap repository's dispatch permission; failures remain visible as release job
-failures.
-
-See [docs/architecture.md](docs/architecture.md) for the broader CLI contract.
+Contributing to this repo? See [CONTRIBUTING.md](CONTRIBUTING.md).
