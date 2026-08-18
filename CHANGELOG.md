@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.1](https://github.com/akua-dev/cli/compare/v0.10.0...v0.10.1) (2026-08-17)
+
+
+### Bug Fixes
+
+* **release:** resolve the embedded package runtime from process.execPath ([#44](https://github.com/akua-dev/cli/issues/44)) ([c827efe](https://github.com/akua-dev/cli/commit/c827efec6680d81aa3acdf3318dc1b084752dd51))
+
 ## [0.10.0](https://github.com/akua-dev/cli/compare/v0.9.0...v0.10.0) (2026-08-17)
 
 
