@@ -1,59 +1,73 @@
-import { expect, test } from "vitest";
-import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { expect, it } from "@effect/vitest";
+import { NodeServices } from "@effect/platform-node";
+import { Effect, FileSystem, Path, Stream } from "effect";
+import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
 import { resolveBunBinary } from "./bun-binary";
 
-test("patched Effect generator preserves headers and SSE contracts without warnings", () => {
-  const directory = mkdtempSync(join(tmpdir(), "akua-effect-generator-"));
-  const specPath = join(directory, "public.json");
-  const outputPath = join(directory, "public-api.gen.ts");
+it.effect(
+  "patched Effect generator preserves headers and SSE contracts without warnings",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+      const directory = yield* fs.makeTempDirectoryScoped({
+        prefix: "akua-effect-generator-",
+      });
+      const specPath = path.join(directory, "public.json");
+      const outputPath = path.join(directory, "public-api.gen.ts");
 
-  try {
-    writeFileSync(specPath, JSON.stringify(specification()));
-    const result = spawnSync(
-      resolveBunBinary(),
-      [
-        "x",
-        "--no-install",
-        "openapigen",
-        "--spec",
-        specPath,
-        "--format",
-        "httpapi",
-        "--name",
-        "PublicApi",
-      ],
-      { encoding: "utf8" },
-    );
+      yield* fs.writeFileString(specPath, JSON.stringify(specification()));
+      const handle = yield* spawner.spawn(
+        ChildProcess.make(resolveBunBinary(), [
+          "x",
+          "--no-install",
+          "openapigen",
+          "--spec",
+          specPath,
+          "--format",
+          "httpapi",
+          "--name",
+          "PublicApi",
+        ]),
+      );
+      const [stdout, stderr, exitCode] = yield* Effect.all(
+        [
+          handle.stdout.pipe(Stream.decodeText(), Stream.mkString),
+          handle.stderr.pipe(Stream.decodeText(), Stream.mkString),
+          handle.exitCode,
+        ],
+        { concurrency: "unbounded" },
+      );
 
-    expect(result.status).toBe(0);
-    expect(result.stderr).not.toContain("warning");
-    writeFileSync(outputPath, result.stdout);
-    const output = readFileSync(outputPath, "utf8");
-    expect(output).toContain("HttpApiSchema.WithHeaders");
-    expect(output).toContain("WidgetsCreate201Headers");
-    expect(output).toContain("HttpApiSchema.StreamSse({ events:");
-    expect(output).toContain(
-      "payload: [WidgetsCreateRequestJson, HttpApiSchema.NoContent]",
-    );
-    expect(output).toContain("readonly [x: string]: Schema.Json | undefined");
-  } finally {
-    rmSync(directory, { force: true, recursive: true });
-  }
-});
+      expect(exitCode).toBe(ChildProcessSpawner.ExitCode(0));
+      expect(stderr).not.toContain("warning");
+      yield* fs.writeFileString(outputPath, stdout);
+      const output = yield* fs.readFileString(outputPath);
+      expect(output).toContain("HttpApiSchema.WithHeaders");
+      expect(output).toContain("WidgetsCreate201Headers");
+      expect(output).toContain("HttpApiSchema.StreamSse({ events:");
+      expect(output).toContain(
+        "payload: [WidgetsCreateRequestJson, HttpApiSchema.NoContent]",
+      );
+      expect(output).toContain("readonly [x: string]: Schema.Json | undefined");
+    }).pipe(Effect.provide(NodeServices.layer)),
+);
 
-test("patched Effect client preserves optional multipart as FormData or void", () => {
-  const clientTypes = readFileSync(
-    "node_modules/effect/dist/unstable/httpapi/HttpApiEndpoint.d.ts",
-    "utf8",
-  );
+it.effect(
+  "patched Effect client preserves optional multipart as FormData or void",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const clientTypes = yield* fs.readFileString(
+        "node_modules/effect/dist/unstable/httpapi/HttpApiEndpoint.d.ts",
+      );
 
-  expect(clientTypes).toContain('Extract<Payload["Type"], Brand<');
-  expect(clientTypes).toContain('Exclude<Payload["Type"], Brand<');
-});
+      expect(clientTypes).toContain('Extract<Payload["Type"], Brand<');
+      expect(clientTypes).toContain('Exclude<Payload["Type"], Brand<');
+    }).pipe(Effect.provide(NodeServices.layer)),
+);
 
 function specification() {
   return {

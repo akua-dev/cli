@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test } from "@effect/vitest";
 import { existsSync, readFileSync } from "node:fs";
 
 const EFFECT_SKILL_PATH = "skills/effect-v4/SKILL.md";

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test } from "@effect/vitest";
 import { readFile } from "node:fs/promises";
 
 async function text(path: string): Promise<string> {

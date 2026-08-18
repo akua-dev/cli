@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test } from "@effect/vitest";
 import { Effect } from "effect";
 
 import { detectOutputMode } from "../src/runtime/mode";

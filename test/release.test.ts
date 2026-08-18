@@ -1,7 +1,17 @@
 import { describe, expect, it, test } from "@effect/vitest";
-import { spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
+// This file's remaining node:fs/promises and node:path imports (below) are
+// deliberate: they build/inspect ~20 independent temp-directory fixtures
+// around the production release pipeline (writing fake binaries and
+// package.json manifests, then reading packaged output back out for
+// assertions). They never exercise release-host-live.ts's own FileSystem
+// service — converting them would mean rewriting every test in this
+// describe block into an Effect.gen body for no behavior-relevant gain, since
+// none of this is part of the Effect pipeline under test. This matches the
+// "process-boundary test helper" carve-out already documented in
+// AGENTS.md/skills/effect-v4/SKILL.md for test/. Where a call *does*
+// independently exercise the same class of host API the production code
+// under test now uses (subprocess spawn, SHA-256 hashing, sleeping,
+// existence checks), it's routed through Effect below instead.
 import {
   chmod,
   copyFile,
@@ -14,17 +24,61 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { parse, join } from "node:path";
-import { setTimeout as sleep } from "node:timers/promises";
-import { Console, Effect, Layer } from "effect";
+import { NodeServices } from "@effect/platform-node";
+import { Console, Crypto, Effect, FileSystem, Layer } from "effect";
 import { Command } from "effect/unstable/cli";
+import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
 import { RELEASE_TARGETS, releaseCommand } from "../scripts/release";
-import { ReleaseHost } from "../scripts/runtime/release-services";
+import { bytesToHex, ReleaseHost } from "../scripts/runtime/release-services";
 import { ReleaseHostLive } from "../scripts/runtime/release-host-live";
 import { cliTestLayer } from "./cli-test-layer";
 
-function runRelease<A, E>(program: Effect.Effect<A, E, ReleaseHost>): A {
-  return Effect.runSync(Effect.provide(program, ReleaseHostLive));
+function runRelease<A, E>(
+  program: Effect.Effect<A, E, ReleaseHost>,
+): Promise<A> {
+  return Effect.runPromise(Effect.provide(program, ReleaseHostLive));
+}
+
+// Shared runner for the handful of independent-oracle/verification host
+// calls below that do have a real Effect equivalent (crypto digest,
+// subprocess spawn, file existence).
+function runNode<A, E>(
+  effect: Effect.Effect<A, E, NodeServices.NodeServices>,
+): Promise<A> {
+  return Effect.runPromise(Effect.provide(effect, NodeServices.layer));
+}
+
+function sha256Oracle(bytes: Uint8Array): Promise<string> {
+  return runNode(
+    Effect.gen(function* () {
+      const crypto = yield* Crypto.Crypto;
+      const digest = yield* crypto.digest("SHA-256", bytes);
+      return bytesToHex(digest);
+    }),
+  );
+}
+
+function fileExists(path: string): Promise<boolean> {
+  return runNode(Effect.flatMap(FileSystem.FileSystem, (fs) => fs.exists(path)));
+}
+
+function extractTarSync(
+  archivePath: string,
+  extractDir: string,
+): Promise<{ status: number }> {
+  return runNode(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+        const handle = yield* spawner.spawn(
+          ChildProcess.make("tar", ["-xzf", archivePath, "-C", extractDir]),
+        );
+        const exitCode = yield* handle.exitCode;
+        return { status: exitCode };
+      }),
+    ),
+  );
 }
 
 async function makeReleaseTempDir(): Promise<string> {
@@ -89,8 +143,8 @@ async function makePackageRuntimeFixture(root: string): Promise<string> {
   return packageRoot;
 }
 
-test("release packaging has a dedicated implementation module", () => {
-  expect(existsSync("scripts/release.ts")).toBe(true);
+test("release packaging has a dedicated implementation module", async () => {
+  expect(await fileExists("scripts/release.ts")).toBe(true);
 });
 
 test("keeps exported release contract helpers free of host APIs", async () => {
@@ -99,7 +153,7 @@ test("keeps exported release contract helpers free of host APIs", async () => {
   expect(helpers).not.toContain('from "node:crypto"');
   expect(helpers).not.toContain("process.platform");
   expect(helpers).not.toContain("process.arch");
-  expect(existsSync("scripts/runtime/release-host-live.ts")).toBe(true);
+  expect(await fileExists("scripts/runtime/release-host-live.ts")).toBe(true);
 });
 
 describe("release target contract", () => {
@@ -273,9 +327,9 @@ describe("release target contract", () => {
       digest: string,
     ) => string;
     const bytes = new TextEncoder().encode("akua\n");
-    const digest = createHash("sha256").update(bytes).digest("hex");
+    const digest = await sha256Oracle(bytes);
 
-    expect(runRelease(sha256(bytes))).toBe(digest);
+    expect(await runRelease(sha256(bytes))).toBe(digest);
     expect(checksumLine("akua-v1.2.3-linux-x64.tar.gz", digest)).toBe(
       `${digest}  akua-v1.2.3-linux-x64.tar.gz\n`,
     );
@@ -347,7 +401,7 @@ describe("release target contract", () => {
       );
 
       expect(
-        runRelease(planReleaseUploads(candidateDir, existingDir, "1.2.3")),
+        await runRelease(planReleaseUploads(candidateDir, existingDir, "1.2.3")),
       ).toEqual(
         assetNames
           .filter((_, index) => index !== 0 && index !== 4)
@@ -388,9 +442,9 @@ describe("release target contract", () => {
       }
       await writeFile(join(existingDir, assetNames[0]), "different bytes\n");
 
-      expect(() =>
+      await expect(
         runRelease(planReleaseUploads(candidateDir, existingDir, "1.2.3")),
-      ).toThrow(
+      ).rejects.toThrow(
         `Existing release asset does not match candidate: ${assetNames[0]}`,
       );
     } finally {
@@ -426,7 +480,7 @@ describe("release target contract", () => {
       const packageRoot = await makePackageRuntimeFixture(root);
       await writeFile(source, "#!/bin/sh\necho akua fixture\n");
       await chmod(source, 0o755);
-      runRelease(
+      await runRelease(
         packageExistingExecutables({
           version: "1.2.3",
           outputDir,
@@ -438,7 +492,7 @@ describe("release target contract", () => {
       );
 
       expect(
-        runRelease(verifyReleaseDirectory(outputDir, "1.2.3")),
+        await runRelease(verifyReleaseDirectory(outputDir, "1.2.3")),
       ).toBeUndefined();
       const manifest = JSON.parse(
         await readFile(join(outputDir, "akua-v1.2.3-manifest.json"), "utf8"),
@@ -476,15 +530,9 @@ describe("release target contract", () => {
 
       const extractDir = join(root, "extract");
       await mkdir(extractDir);
-      const extract = spawnSync(
-        "tar",
-        [
-          "-xzf",
-          join(outputDir, "akua-v1.2.3-linux-x64.tar.gz"),
-          "-C",
-          extractDir,
-        ],
-        { encoding: "utf8" },
+      const extract = await extractTarSync(
+        join(outputDir, "akua-v1.2.3-linux-x64.tar.gz"),
+        extractDir,
       );
       expect(extract.status).toBe(0);
       expect((await stat(join(extractDir, "akua"))).mode & 0o777).toBe(0o755);
@@ -552,7 +600,7 @@ describe("release target contract", () => {
       await writeFile(source, "#!/bin/sh\necho akua fixture\n");
       await chmod(source, 0o755);
 
-      runRelease(
+      await runRelease(
         packageExistingExecutables({
           version: "1.2.3",
           outputDir: firstOutputDir,
@@ -560,8 +608,8 @@ describe("release target contract", () => {
           packageRoot,
         }),
       );
-      await sleep(2100);
-      runRelease(
+      await Effect.runPromise(Effect.sleep("2100 millis"));
+      await runRelease(
         packageExistingExecutables({
           version: "1.2.3",
           outputDir: secondOutputDir,
@@ -609,7 +657,7 @@ describe("release target contract", () => {
       const packageRoot = await makePackageRuntimeFixture(root);
       await writeFile(source, "#!/bin/sh\necho akua fixture\n");
       await chmod(source, 0o755);
-      runRelease(
+      await runRelease(
         packageExistingExecutables({
           version: "1.2.3",
           outputDir,
@@ -624,9 +672,9 @@ describe("release target contract", () => {
         "tampered",
       );
 
-      expect(() =>
+      await expect(
         runRelease(verifyReleaseDirectory(outputDir, "1.2.3")),
-      ).toThrow("checksum mismatch");
+      ).rejects.toThrow("checksum mismatch");
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -641,23 +689,23 @@ describe("release target contract", () => {
       outputDir: string,
     ) => Effect.Effect<void, Error>;
 
-    expect(() => runRelease(assertSafeOutputDirectory(process.cwd()))).toThrow(
-      "Unsafe release output directory",
-    );
-    expect(() =>
+    await expect(
+      runRelease(assertSafeOutputDirectory(process.cwd())),
+    ).rejects.toThrow("Unsafe release output directory");
+    await expect(
       runRelease(assertSafeOutputDirectory(parse(process.cwd()).root)),
-    ).toThrow("Unsafe release output directory");
-    expect(() =>
+    ).rejects.toThrow("Unsafe release output directory");
+    await expect(
       runRelease(assertSafeOutputDirectory(join(process.cwd(), "src"))),
-    ).toThrow("Unsafe release output directory");
-    expect(() =>
+    ).rejects.toThrow("Unsafe release output directory");
+    await expect(
       runRelease(assertSafeOutputDirectory(join(process.cwd(), "docs"))),
-    ).toThrow("Unsafe release output directory");
-    expect(() =>
+    ).rejects.toThrow("Unsafe release output directory");
+    await expect(
       runRelease(assertSafeOutputDirectory(join(process.cwd(), "dist", "js"))),
-    ).toThrow("Unsafe release output directory");
+    ).rejects.toThrow("Unsafe release output directory");
     expect(
-      runRelease(
+      await runRelease(
         assertSafeOutputDirectory(join(process.cwd(), "dist", "release")),
       ),
     ).toBeUndefined();
@@ -679,9 +727,9 @@ describe("release target contract", () => {
 
     try {
       await symlink(target, linkedDirectory, "dir");
-      expect(() =>
+      await expect(
         runRelease(assertSafeOutputDirectory(join(linkedDirectory, "release"))),
-      ).toThrow("symlink");
+      ).rejects.toThrow("symlink");
     } finally {
       await rm(root, { recursive: true, force: true });
       await rm(target, { recursive: true, force: true });
@@ -713,7 +761,7 @@ describe("release target contract", () => {
       const packageRoot = await makePackageRuntimeFixture(root);
       await writeFile(source, "#!/bin/sh\necho akua fixture\n");
       await chmod(source, 0o755);
-      runRelease(
+      await runRelease(
         packageExistingExecutables({
           version: "1.2.3",
           outputDir,
@@ -728,9 +776,9 @@ describe("release target contract", () => {
       homebrew.platforms.linux_intel.sha256 = "0".repeat(64);
       await writeFile(manifestPath, `${JSON.stringify(homebrew, null, 2)}\n`);
 
-      expect(() =>
+      await expect(
         runRelease(verifyReleaseDirectory(outputDir, "1.2.3")),
-      ).toThrow("Homebrew manifest mismatch");
+      ).rejects.toThrow("Homebrew manifest mismatch");
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -830,7 +878,7 @@ describe("release target contract", () => {
         `#!/bin/sh\nprintf '%s\\n' "$*" >> '${smokeLog}'\ncase "$1" in\n  --version) echo '{"status":"ok","data":{"version":"1.2.3"}}' ;;\n  --help) echo 'Usage: akua' ;;\n  commands) echo 'commands[1]' ;;\n  pkg)\n    case "$2" in\n      version) echo '{"version":"0.8.26"}' ;;\n      init) mkdir -p demo; echo '{}' ;;\n      check) echo '{}' ;;\n      render) mkdir -p deploy; echo manifest > deploy/manifest.yaml; echo '{}' ;;\n      inspect) echo '{}' ;;\n      *) exit 2 ;;\n    esac\n    ;;\n  *) exit 2 ;;\nesac\n`,
       );
       await chmod(source, 0o755);
-      runRelease(
+      await runRelease(
         packageExistingExecutables({
           version: "1.2.3",
           outputDir,
@@ -841,12 +889,13 @@ describe("release target contract", () => {
         }),
       );
 
+      const targetId = await runRelease(hostTargetId());
       expect(
-        runRelease(
+        await runRelease(
           smokeReleaseArtifact({
             version: "1.2.3",
             outputDir,
-            targetId: runRelease(hostTargetId()),
+            targetId,
           }),
         ),
       ).toBeUndefined();
@@ -897,7 +946,7 @@ describe("release target contract", () => {
       const { RELEASE_TARGETS: targets } = release as {
         RELEASE_TARGETS: Array<{ id: string }>;
       };
-      runRelease(
+      await runRelease(
         packageExistingExecutables({
           version: "1.2.3",
           outputDir,
@@ -911,15 +960,13 @@ describe("release target contract", () => {
       // The staging directory is cleaned up after packaging, so verify the
       // real produced archive contents (what an installer actually
       // extracts), not the intermediate .staging tree.
-      const targetId = runRelease(hostTargetId());
+      const targetId = await runRelease(hostTargetId());
       const target = targets.find((candidate) => candidate.id === targetId);
       if (!target) throw new Error(`Unknown host target: ${targetId}`);
       const archivePath = join(outputDir, artifactName("1.2.3", target));
       const extractDir = join(root, "extracted");
       await mkdir(extractDir, { recursive: true });
-      const extract = spawnSync("tar", ["-xzf", archivePath, "-C", extractDir], {
-        encoding: "utf8",
-      });
+      const extract = await extractTarSync(archivePath, extractDir);
       expect(extract.status).toBe(0);
 
       const sdkDir = join(extractDir, "node_modules", "@akua-dev", "sdk");
@@ -974,7 +1021,7 @@ describe("release target contract", () => {
         '#!/bin/sh\ncase "$1" in\n  --version) echo \'{"status":"ok","data":{"version":"11.2.3"}}\' ;;\n  --help) echo \'Usage: akua\' ;;\n  commands) echo \'commands[1]\' ;;\n  *) exit 2 ;;\nesac\n',
       );
       await chmod(source, 0o755);
-      runRelease(
+      await runRelease(
         packageExistingExecutables({
           version: "1.2.3",
           outputDir,
@@ -985,15 +1032,16 @@ describe("release target contract", () => {
         }),
       );
 
-      expect(() =>
+      const targetId = await runRelease(hostTargetId());
+      await expect(
         runRelease(
           smokeReleaseArtifact({
             version: "1.2.3",
             outputDir,
-            targetId: runRelease(hostTargetId()),
+            targetId,
           }),
         ),
-      ).toThrow("unexpected version");
+      ).rejects.toThrow("unexpected version");
     } finally {
       await rm(root, { recursive: true, force: true });
     }

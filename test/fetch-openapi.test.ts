@@ -16,7 +16,7 @@ import {
   ScriptFiles,
   ScriptHttp,
 } from "../scripts/runtime/services";
-import { ScriptLive } from "../scripts/runtime/services-live";
+import { ScriptFilesLive } from "../scripts/runtime/services-live";
 import { cliTestLayer } from "./cli-test-layer";
 
 describe("OpenAPI fetch guard", () => {
@@ -80,7 +80,6 @@ describe("OpenAPI fetch guard", () => {
     "writes stable output when an unchanged spec is fetched repeatedly",
     () =>
       Effect.gen(function* () {
-        const originalFetch = globalThis.fetch;
         const root = yield* Effect.promise(() =>
           mkdtemp(join(process.cwd(), ".tmp-akua-openapi-")),
         );
@@ -89,20 +88,26 @@ describe("OpenAPI fetch guard", () => {
           paths: { "/health": { get: { operationId: "health" } } },
           openapi: "3.1.0",
         };
-        // Mocks the `fetch` global's Promise-returning contract; no Effect
-        // replacement exists for this interop shape.
-        globalThis.fetch = (async () =>
-          Response.json(spec)) as unknown as typeof fetch;
+        // Test double for the ScriptHttp service (the seam fetchOpenApi
+        // already depends on), paired with the real ScriptFilesLive so this
+        // test still exercises real disk writes/reads for the stable-output
+        // assertion. No global fetch mutation, no unsafe cast.
+        const services = Layer.mergeAll(
+          Layer.succeed(ScriptHttp, {
+            getJson: () => Effect.succeed(spec),
+          }),
+          ScriptFilesLive,
+        );
 
         yield* Effect.gen(function* () {
           yield* Effect.provide(
             fetchOpenApi(new URL(DEFAULT_OPENAPI_URL), output),
-            ScriptLive,
+            services,
           );
           const first = yield* Effect.promise(() => readFile(output, "utf8"));
           yield* Effect.provide(
             fetchOpenApi(new URL(DEFAULT_OPENAPI_URL), output),
-            ScriptLive,
+            services,
           );
           const second = yield* Effect.promise(() => readFile(output, "utf8"));
 
@@ -110,15 +115,7 @@ describe("OpenAPI fetch guard", () => {
           expect(second).toBe(`${JSON.stringify(spec, null, 2)}\n`);
         }).pipe(
           Effect.ensuring(
-            Effect.sync(() => {
-              globalThis.fetch = originalFetch;
-            }).pipe(
-              Effect.andThen(
-                Effect.promise(() =>
-                  rm(root, { recursive: true, force: true }),
-                ),
-              ),
-            ),
+            Effect.promise(() => rm(root, { recursive: true, force: true })),
           ),
         );
       }),

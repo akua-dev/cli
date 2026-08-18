@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test } from "@effect/vitest";
 
 import { AkuaCliError } from "../src/runtime/errors";
 import { renderError, renderSuccess } from "../src/runtime/render";

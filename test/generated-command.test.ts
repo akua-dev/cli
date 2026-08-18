@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test } from "@effect/vitest";
 import { Effect, Layer, Stream } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
 

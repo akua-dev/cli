@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { expect, test } from "@effect/vitest";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import ts from "typescript";
@@ -205,6 +205,50 @@ test("runtime handoff inspection requires a block-bodied import.meta.main guard"
       rule: "Runtime.makeRunMain outside import.meta.main",
     },
   ]);
+});
+
+test("test files import vitest primitives only through @effect/vitest", () => {
+  const violations = collectTypeScriptFiles("test").flatMap((file) => {
+    const source = readFileSync(file, "utf8");
+    const sourceFile = ts.createSourceFile(
+      file,
+      source,
+      ts.ScriptTarget.Latest,
+      true,
+    );
+    const found: Violation[] = [];
+    visit(sourceFile, (node) => {
+      if (
+        ts.isImportDeclaration(node) &&
+        ts.isStringLiteral(node.moduleSpecifier) &&
+        node.moduleSpecifier.text === "vitest"
+      ) {
+        found.push({
+          file,
+          rule: 'import from "vitest" instead of "@effect/vitest"',
+        });
+      }
+    });
+    return found;
+  });
+
+  expect(violations).toEqual([]);
+});
+
+test("test files never monkey-patch globalThis.fetch", () => {
+  const violations = collectTypeScriptFiles("test").flatMap((file) => {
+    const source = readFileSync(file, "utf8");
+    return /globalThis\.fetch\s*=/.test(source)
+      ? [
+          {
+            file,
+            rule: "globalThis.fetch assignment; use FetchHttpClient.Fetch or a service test layer instead",
+          },
+        ]
+      : [];
+  });
+
+  expect(violations).toEqual([]);
 });
 
 function productionFiles(): string[] {

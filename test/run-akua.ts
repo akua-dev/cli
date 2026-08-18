@@ -7,6 +7,15 @@ import { resolveBunBinary } from "./bun-binary";
  * entrypoint end to end. Genuine process-boundary glue: it necessarily spawns
  * an OS process and is exempt from this repo's Effect-only rule for `src/`
  * and `scripts/` (test/ is not covered by that rule; see AGENTS.md).
+ *
+ * Deliberately kept on raw node:child_process rather than
+ * effect/unstable/process's ChildProcessSpawner: this helper black-box
+ * tests the compiled CLI entrypoint from outside the Effect pipeline it
+ * spawns (that's the point — it never touches the runtime under test), and
+ * it is called synchronously from 45+ plain (non-Effect) assertions across
+ * test/cli.test.ts and test/strict-effect-control-flow.test.ts. Converting
+ * it to an Effect-returning spawn would force every one of those call sites
+ * into an Effect.gen/it.effect body for no behavior-relevant gain.
  */
 export interface RunAkuaResult {
   readonly stdout: string;
