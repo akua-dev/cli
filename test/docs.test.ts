@@ -6,17 +6,36 @@ async function text(path: string): Promise<string> {
 }
 
 describe("distribution documentation", () => {
-  test("README documents only the implemented GitHub Release and Homebrew channels", async () => {
+  test("README documents Homebrew as the primary install channel", async () => {
     const readme = await text("README.md");
 
     expect(readme).toContain("brew install akua-dev/tap/akua");
-    expect(readme).toContain("https://github.com/akua-dev/cli/releases/download/");
-    expect(readme).toContain("akua-v0.10.1-darwin-arm64.tar.gz");
-    expect(readme).toContain("akua-v0.10.1-windows-x64.zip");
-    expect(readme).toContain("checksums.txt");
-    expect(readme).toContain("sha256sum");
-    expect(readme).toContain("Get-FileHash");
+    expect(readme).toContain("brew upgrade akua");
     expect(readme).not.toMatch(/npm (?:install|i)|bun add|npx .*@akua-dev\/cli/);
+  });
+
+  test("README points to docs/install.md instead of inlining GitHub Release steps", async () => {
+    const readme = await text("README.md");
+
+    expect(readme).toContain("[manual install](docs/install.md)");
+    expect(readme).not.toContain("https://github.com/akua-dev/cli/releases/download/");
+    expect(readme).not.toContain("akua-v0.10.1-darwin-arm64.tar.gz");
+    expect(readme).not.toContain("akua-v0.10.1-windows-x64.zip");
+    expect(readme).not.toContain("checksums.txt");
+    expect(readme).not.toContain("sha256sum");
+    expect(readme).not.toContain("Get-FileHash");
+  });
+
+  test("docs/install.md documents the checksummed GitHub Release fallback", async () => {
+    const install = await text("docs/install.md");
+
+    expect(install).toContain("https://github.com/akua-dev/cli/releases/download/");
+    expect(install).toContain("akua-v0.10.1-darwin-arm64.tar.gz");
+    expect(install).toContain("akua-v0.10.1-windows-x64.zip");
+    expect(install).toContain("checksums.txt");
+    expect(install).toContain("sha256sum");
+    expect(install).toContain("Get-FileHash");
+    expect(install).toContain("Homebrew");
   });
 
   test("README explains auth, adaptive output, generated API status, and upgrades honestly", async () => {
