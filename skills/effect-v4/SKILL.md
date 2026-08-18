@@ -5,7 +5,7 @@ description: Use when creating, refactoring, reviewing, or debugging production 
 
 # Effect v4 CLI quality
 
-Use the audited dependency exactly as locked: `effect@4.0.0-beta.106`. Do not
+Use the audited dependency exactly as locked: `effect@4.0.0-rc.109`. Do not
 apply Effect v3 examples or upgrade guidance without a separate dependency
 audit.
 

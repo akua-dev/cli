@@ -26,7 +26,7 @@ describe("Effect v4 CLI quality guidance", () => {
 
     expect(skill).toMatch(/^---\nname: effect-v4\ndescription: Use when .*Effect v4.*CLI/m);
     for (const rule of [
-      "effect@4.0.0-beta.106",
+      "effect@4.0.0-rc.109",
       "Effect services and layers",
       "Data.TaggedError",
       "TestClock",

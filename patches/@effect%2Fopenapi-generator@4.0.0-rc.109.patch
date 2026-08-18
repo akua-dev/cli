@@ -1,6 +1,3 @@
-diff --git a/node_modules/@effect/openapi-generator/.bun-tag-d2163dbfd250c038 b/.bun-tag-d2163dbfd250c038
-new file mode 100644
-index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
 diff --git a/dist/HttpApiTransformer.js b/dist/HttpApiTransformer.js
 index aad332ba5abf58db21178942761dee147b382235..4c062f5928cc75c85de4186d60c32d221242668d 100644
 --- a/dist/HttpApiTransformer.js

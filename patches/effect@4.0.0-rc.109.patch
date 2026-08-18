@@ -1,8 +1,8 @@
 diff --git a/dist/internal/schema/toCodeDocument.js b/dist/internal/schema/toCodeDocument.js
-index 59399d367e3b0755e2394e384e3b1586e5032363..c3d282057f7d7d4c788b5495b7f96d41005da418 100644
+index 9600dfc7693953a58a79b2f13abe4f414859022d..0dd9af5ddd95dff7dede3344cf93af31a9f29e4c 100644
 --- a/dist/internal/schema/toCodeDocument.js
 +++ b/dist/internal/schema/toCodeDocument.js
-@@ -418,7 +418,8 @@
+@@ -418,7 +418,8 @@ export function toCodeDocument(document) {
              return makeCode(`Schema.Record(${signature.parameter.runtime}, ${signature.type.runtime})`, `{ readonly [x: ${signature.parameter.Type}]: ${signature.type.Type} }`);
            }
            const indexRuntimes = indexSignatures.map(signature => `Schema.Record(${signature.parameter.runtime}, ${signature.type.runtime})`).join(", ");
@@ -11,8 +11,22 @@ index 59399d367e3b0755e2394e384e3b1586e5032363..c3d282057f7d7d4c788b5495b7f96d41
 +          const indexTypes = indexSignatures.map(signature => `readonly [x: ${signature.parameter.Type}]: ${signature.type.Type}${indexValueType}`).join(", ");
            return makeCode(`Schema.StructWithRest(Schema.Struct({ ${propertyRuntimes} }), [${indexRuntimes}])`, `{ ${propertyTypes}${properties.length > 0 ? ", " : ""}${indexTypes} }`);
          }
-      case "Union":
+       case "Union":
+diff --git a/dist/unstable/cli/CliOutput.js b/dist/unstable/cli/CliOutput.js
+index 874e19f9968cd1f1a072803730ef3e46ffbb808c..7230a334b76f5c201d6f6fd7225ab6338eafd146 100644
+--- a/dist/unstable/cli/CliOutput.js
++++ b/dist/unstable/cli/CliOutput.js
+@@ -195,7 +195,7 @@ const renderTable = (rows, widthCap) => {
+   return rows.map(({
+     left,
+     right
+-  }) => `  ${pad(left, col)}${right}`).join("\n");
++  }) => `  ${pad(left, Math.max(col, visualLength(left) + 2))}${right}`).join("\n");
+ };
+ const formatSubcommandName = (name, alias) => alias ? `${name}, ${alias}` : name;
+ /**
 diff --git a/dist/unstable/httpapi/HttpApiEndpoint.d.ts b/dist/unstable/httpapi/HttpApiEndpoint.d.ts
+index e95cfc448c7fd374d1781c59b601dec9703fd9a1..e2047691b17e9a16fbaa86b752161f8c6e89b000 100644
 --- a/dist/unstable/httpapi/HttpApiEndpoint.d.ts
 +++ b/dist/unstable/httpapi/HttpApiEndpoint.d.ts
 @@ -283,12 +283,10 @@ export type ClientRequest<Params extends Schema.Constraint, Query extends Schema
@@ -30,7 +44,23 @@ diff --git a/dist/unstable/httpapi/HttpApiEndpoint.d.ts b/dist/unstable/httpapi/
  })) extends infer Req ? keyof Req extends never ? (void | {
      readonly responseMode?: ResponseMode;
  }) : Req & {
+diff --git a/src/unstable/cli/CliOutput.ts b/src/unstable/cli/CliOutput.ts
+index 13cc142d69796ce24d5155fdd263f53772be972a..98455abaec5b9fdfce25867578e674b7315b4789 100644
+--- a/src/unstable/cli/CliOutput.ts
++++ b/src/unstable/cli/CliOutput.ts
+@@ -411,7 +411,9 @@ interface Row {
+ const renderTable = (rows: ReadonlyArray<Row>, widthCap?: number) => {
+   const maxColumn = Math.max(...rows.map((r) => visualLength(r.left))) + 4
+   const col = widthCap === undefined ? maxColumn : Math.min(maxColumn, widthCap)
+-  return rows.map(({ left, right }) => `  ${pad(left, col)}${right}`).join("\n")
++  return rows
++    .map(({ left, right }) => `  ${pad(left, Math.max(col, visualLength(left) + 2))}${right}`)
++    .join("\n")
+ }
+ 
+ const formatSubcommandName = (name: string, alias: string | undefined): string => alias ? `${name}, ${alias}` : name
 diff --git a/src/unstable/httpapi/HttpApiEndpoint.ts b/src/unstable/httpapi/HttpApiEndpoint.ts
+index 331b4ff84e85e70193eda8371ce63ebed659b9b9..c30c0fc94cb3751b8b6a43f551e3999c7d10d04d 100644
 --- a/src/unstable/httpapi/HttpApiEndpoint.ts
 +++ b/src/unstable/httpapi/HttpApiEndpoint.ts
 @@ -502,11 +502,18 @@ export type ClientRequest<
@@ -57,28 +87,3 @@ diff --git a/src/unstable/httpapi/HttpApiEndpoint.ts b/src/unstable/httpapi/Http
  ) extends infer Req ? keyof Req extends never ? (void | { readonly responseMode?: ResponseMode }) :
    Req & { readonly responseMode?: ResponseMode } :
    void
-diff --git a/dist/unstable/cli/CliOutput.js b/dist/unstable/cli/CliOutput.js
---- a/dist/unstable/cli/CliOutput.js
-+++ b/dist/unstable/cli/CliOutput.js
-@@ -192,8 +192,8 @@ const renderTable = (rows, widthCap) => {
- const renderTable = (rows, widthCap) => {
-   const maxColumn = Math.max(...rows.map(r => visualLength(r.left))) + 4;
-   const col = widthCap === undefined ? maxColumn : Math.min(maxColumn, widthCap);
-   return rows.map(({
-     left,
-     right
--  }) => `  ${pad(left, col)}${right}`).join("\n");
-+  }) => `  ${pad(left, Math.max(col, visualLength(left) + 2))}${right}`).join("\n");
- };
-diff --git a/src/unstable/cli/CliOutput.ts b/src/unstable/cli/CliOutput.ts
---- a/src/unstable/cli/CliOutput.ts
-+++ b/src/unstable/cli/CliOutput.ts
-@@ -411,5 +411,7 @@ const renderTable = (rows: ReadonlyArray<Row>, widthCap?: number) => {
- const renderTable = (rows: ReadonlyArray<Row>, widthCap?: number) => {
-   const maxColumn = Math.max(...rows.map((r) => visualLength(r.left))) + 4
-   const col = widthCap === undefined ? maxColumn : Math.min(maxColumn, widthCap)
--  return rows.map(({ left, right }) => `  ${pad(left, col)}${right}`).join("\n")
-+  return rows
-+    .map(({ left, right }) => `  ${pad(left, Math.max(col, visualLength(left) + 2))}${right}`)
-+    .join("\n")
- }
