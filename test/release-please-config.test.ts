@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "@effect/vitest";
 import { readFileSync } from "node:fs";
 
 interface ReleasePleaseConfig {

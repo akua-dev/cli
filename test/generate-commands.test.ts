@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it, test } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { Command } from "effect/unstable/cli";
 
@@ -10,28 +10,36 @@ import { ScriptFiles } from "../scripts/runtime/services";
 import { cliTestLayer } from "./cli-test-layer";
 
 describe("collectPublicCommands", () => {
-  test("parses --check and fails when the generated registry is stale", async () => {
-    let reads = 0;
-    const services = Layer.mergeAll(
-      cliTestLayer,
-      Layer.succeed(ScriptFiles, {
-        readText: () =>
-          Effect.sync(() => {
-            reads += 1;
-            return reads === 1 ? JSON.stringify({ paths: {} }) : "out of date";
+  it.effect(
+    "parses --check and fails when the generated registry is stale",
+    () =>
+      Effect.gen(function* () {
+        let reads = 0;
+        const services = Layer.mergeAll(
+          cliTestLayer,
+          Layer.succeed(ScriptFiles, {
+            readText: () =>
+              Effect.sync(() => {
+                reads += 1;
+                return reads === 1
+                  ? JSON.stringify({ paths: {} })
+                  : "out of date";
+              }),
+            writeText: () => Effect.void,
           }),
-        writeText: () => Effect.void,
-      }),
-    );
+        );
 
-    await expect(
-      Effect.runPromise(
-        Command.runWith(generateCommandsCommand, { version: "test" })([
-          "--check",
-        ]).pipe(Effect.provide(services)),
-      ),
-    ).rejects.toThrow("src/generated/commands.gen.ts is out of date");
-  });
+        const failure = yield* Effect.flip(
+          Command.runWith(generateCommandsCommand, { version: "test" })([
+            "--check",
+          ]).pipe(Effect.provide(services)),
+        );
+
+        expect(failure.message).toContain(
+          "src/generated/commands.gen.ts is out of date",
+        );
+      }),
+  );
 
   test("includes public operations and excludes non-public operations", () => {
     const commands = Effect.runSync(

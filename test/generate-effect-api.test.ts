@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, it } from "@effect/vitest";
 import { readFileSync } from "node:fs";
 import { Effect, Layer } from "effect";
 import ts from "typescript";
@@ -14,138 +14,167 @@ const sourcePath = "openapi/public.json";
 const outputPath = "src/generated/openapi-api.gen.ts";
 const executorPath = "src/generated/public-operation-executor.gen.ts";
 
-test("generates a typed HttpApi module from the public OpenAPI contract", async () => {
-  let writtenApi = "";
-  let writtenExecutor = "";
-  const layer = Layer.succeed(ScriptFiles, {
-    readText: () => Effect.succeed(JSON.stringify(publicSpec())),
-    writeText: (path, contents) =>
-      Effect.sync(() => {
-        if (path === outputPath) writtenApi = contents;
-        if (path === executorPath) writtenExecutor = contents;
-      }),
-  });
+it.effect(
+  "generates a typed HttpApi module from the public OpenAPI contract",
+  () =>
+    Effect.gen(function* () {
+      let writtenApi = "";
+      let writtenExecutor = "";
+      const layer = Layer.succeed(ScriptFiles, {
+        readText: () => Effect.succeed(JSON.stringify(publicSpec())),
+        writeText: (path, contents) =>
+          Effect.sync(() => {
+            if (path === outputPath) writtenApi = contents;
+            if (path === executorPath) writtenExecutor = contents;
+          }),
+      });
 
-  const generated = await Effect.runPromise(
-    generateEffectApi(sourcePath, outputPath).pipe(Effect.provide(layer)),
-  );
+      const generated = yield* generateEffectApi(sourcePath, outputPath).pipe(
+        Effect.provide(layer),
+      );
 
-  expect(writtenApi).toBe(generated);
-  expect(writtenExecutor).toContain('case "secrets.create":');
-  expect(generated).toContain(
-    'HttpApiEndpoint.post("secretsCreate", "/v1/secrets"',
-  );
-  expect(generated).toContain('annotate(OpenApi.Identifier, "secrets.create")');
-  expect(typeAssertions(generated)).toEqual([]);
-  expect(generated).not.toMatch(/[ \t]+$/m);
-});
+      expect(writtenApi).toBe(generated);
+      expect(writtenExecutor).toContain('case "secrets.create":');
+      expect(generated).toContain(
+        'HttpApiEndpoint.post("secretsCreate", "/v1/secrets"',
+      );
+      expect(generated).toContain(
+        'annotate(OpenApi.Identifier, "secrets.create")',
+      );
+      expect(typeAssertions(generated)).toEqual([]);
+      expect(generated).not.toMatch(/[ \t]+$/m);
+    }),
+);
 
-test("generates only PUBLIC operations", async () => {
-  const layer = Layer.succeed(ScriptFiles, {
-    readText: () => Effect.succeed(JSON.stringify(specWithMixedVisibility())),
-    writeText: () => Effect.void,
-  });
+it.effect("generates only PUBLIC operations", () =>
+  Effect.gen(function* () {
+    const layer = Layer.succeed(ScriptFiles, {
+      readText: () => Effect.succeed(JSON.stringify(specWithMixedVisibility())),
+      writeText: () => Effect.void,
+    });
 
-  const generated = await Effect.runPromise(
-    generateEffectApi(sourcePath, outputPath).pipe(Effect.provide(layer)),
-  );
+    const generated = yield* generateEffectApi(sourcePath, outputPath).pipe(
+      Effect.provide(layer),
+    );
 
-  expect(generated).toContain(
-    'HttpApiEndpoint.get("secretsList", "/v1/secrets"',
-  );
-  expect(generated).toContain("pageSize");
-  expect(generated).not.toContain("adminListSecrets");
-});
+    expect(generated).toContain(
+      'HttpApiEndpoint.get("secretsList", "/v1/secrets"',
+    );
+    expect(generated).toContain("pageSize");
+    expect(generated).not.toContain("adminListSecrets");
+  }),
+);
 
-test("fails with a typed error when the generator reports a public contract warning", async () => {
-  const layer = Layer.succeed(ScriptFiles, {
-    readText: () => Effect.succeed(JSON.stringify(specWithUnannotatedSse())),
-    writeText: () => Effect.void,
-  });
+it.effect(
+  "fails with a typed error when the generator reports a public contract warning",
+  () =>
+    Effect.gen(function* () {
+      const layer = Layer.succeed(ScriptFiles, {
+        readText: () => Effect.succeed(JSON.stringify(specWithUnannotatedSse())),
+        writeText: () => Effect.void,
+      });
 
-  await expect(
-    Effect.runPromise(
+      const failure = yield* Effect.flip(
+        generateEffectApi(sourcePath, outputPath).pipe(Effect.provide(layer)),
+      );
+
+      expect(failure).toBeInstanceOf(EffectApiGenerationFailure);
+    }),
+);
+
+it.effect("maps generator defects to a typed generation error", () =>
+  Effect.gen(function* () {
+    const layer = Layer.succeed(ScriptFiles, {
+      readText: () => Effect.succeed(JSON.stringify(specWithInvalidPattern())),
+      writeText: () => Effect.void,
+    });
+
+    const failure = yield* Effect.flip(
       generateEffectApi(sourcePath, outputPath).pipe(Effect.provide(layer)),
-    ),
-  ).rejects.toBeInstanceOf(EffectApiGenerationFailure);
-});
+    );
 
-test("maps generator defects to a typed generation error", async () => {
-  const layer = Layer.succeed(ScriptFiles, {
-    readText: () => Effect.succeed(JSON.stringify(specWithInvalidPattern())),
-    writeText: () => Effect.void,
-  });
+    expect(failure).toBeInstanceOf(EffectApiGenerationFailure);
+  }),
+);
 
-  await expect(
-    Effect.runPromise(
-      generateEffectApi(sourcePath, outputPath).pipe(Effect.provide(layer)),
-    ),
-  ).rejects.toBeInstanceOf(EffectApiGenerationFailure);
-});
+it.effect(
+  "detects generated API drift without overwriting the checked-in artifact",
+  () =>
+    Effect.gen(function* () {
+      let writes = 0;
+      const layer = Layer.succeed(ScriptFiles, {
+        readText: (path) =>
+          Effect.succeed(
+            path === sourcePath
+              ? JSON.stringify(publicSpec())
+              : "stale artifact",
+          ),
+        writeText: () =>
+          Effect.sync(() => {
+            writes += 1;
+          }),
+      });
 
-test("detects generated API drift without overwriting the checked-in artifact", async () => {
-  let writes = 0;
-  const layer = Layer.succeed(ScriptFiles, {
-    readText: (path) =>
-      Effect.succeed(
-        path === sourcePath ? JSON.stringify(publicSpec()) : "stale artifact",
-      ),
-    writeText: () =>
-      Effect.sync(() => {
-        writes += 1;
-      }),
-  });
+      const failure = yield* Effect.flip(
+        checkEffectApi(sourcePath, outputPath).pipe(Effect.provide(layer)),
+      );
 
-  await expect(
-    Effect.runPromise(
-      checkEffectApi(sourcePath, outputPath).pipe(Effect.provide(layer)),
-    ),
-  ).rejects.toBeInstanceOf(EffectApiGenerationFailure);
+      expect(failure).toBeInstanceOf(EffectApiGenerationFailure);
+      expect(writes).toBe(0);
+    }),
+);
 
-  expect(writes).toBe(0);
-});
+it.effect(
+  "propagates generated artifact read failures instead of treating them as drift",
+  () =>
+    Effect.gen(function* () {
+      const layer = Layer.succeed(ScriptFiles, {
+        readText: (path) =>
+          path === sourcePath
+            ? Effect.succeed(JSON.stringify(publicSpec()))
+            : Effect.fail(
+                new ScriptHostFailure({ cause: "permission denied" }),
+              ),
+        writeText: () => Effect.void,
+      });
 
-test("propagates generated artifact read failures instead of treating them as drift", async () => {
-  const layer = Layer.succeed(ScriptFiles, {
-    readText: (path) =>
-      path === sourcePath
-        ? Effect.succeed(JSON.stringify(publicSpec()))
-        : Effect.fail(new ScriptHostFailure({ cause: "permission denied" })),
-    writeText: () => Effect.void,
-  });
+      const failure = yield* Effect.flip(
+        checkEffectApi(sourcePath, outputPath).pipe(Effect.provide(layer)),
+      );
 
-  await expect(
-    Effect.runPromise(
-      checkEffectApi(sourcePath, outputPath).pipe(Effect.provide(layer)),
-    ),
-  ).rejects.toBeInstanceOf(ScriptHostFailure);
-});
+      expect(failure).toBeInstanceOf(ScriptHostFailure);
+    }),
+);
 
-test("checked-in public contract produces the committed strict Effect API artifact", async () => {
-  const source = readFileSync(sourcePath, "utf8");
-  const artifact = readFileSync(outputPath, "utf8");
-  const executor = readFileSync(executorPath, "utf8");
-  const layer = Layer.succeed(ScriptFiles, {
-    readText: (path) =>
-      Effect.succeed(
-        path === sourcePath
-          ? source
-          : path === outputPath
-            ? artifact
-            : executor,
-      ),
-    writeText: () => Effect.void,
-  });
+it.effect(
+  "checked-in public contract produces the committed strict Effect API artifact",
+  () =>
+    Effect.gen(function* () {
+      const source = readFileSync(sourcePath, "utf8");
+      const artifact = readFileSync(outputPath, "utf8");
+      const executor = readFileSync(executorPath, "utf8");
+      const layer = Layer.succeed(ScriptFiles, {
+        readText: (path) =>
+          Effect.succeed(
+            path === sourcePath
+              ? source
+              : path === outputPath
+                ? artifact
+                : executor,
+          ),
+        writeText: () => Effect.void,
+      });
 
-  await Effect.runPromise(
-    checkEffectApi(sourcePath, outputPath).pipe(Effect.provide(layer)),
-  );
+      yield* checkEffectApi(sourcePath, outputPath).pipe(Effect.provide(layer));
 
-  expect(artifact).toContain('annotate(OpenApi.Identifier, "secrets.create")');
-  expect(typeAssertions(artifact)).toEqual([]);
-  expect(artifact).not.toMatch(/[ \t]+$/m);
-  expect(executor).toContain('case "machines.create":');
-});
+      expect(artifact).toContain(
+        'annotate(OpenApi.Identifier, "secrets.create")',
+      );
+      expect(typeAssertions(artifact)).toEqual([]);
+      expect(artifact).not.toMatch(/[ \t]+$/m);
+      expect(executor).toContain('case "machines.create":');
+    }),
+);
 
 function publicSpec() {
   return {

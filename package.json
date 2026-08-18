@@ -17,23 +17,25 @@
     "release:package": "bun scripts/release.ts package --version $npm_package_version --output dist/release",
     "release:verify": "bun scripts/release.ts verify --version $npm_package_version --output dist/release",
     "release:smoke": "bun scripts/release.ts smoke --version $npm_package_version --output dist/release",
-    "test": "bun test"
+    "test": "vitest run"
   },
   "devDependencies": {
-    "@effect/openapi-generator": "4.0.0-beta.106",
-    "@effect/platform-node": "4.0.0-beta.106",
+    "@effect/openapi-generator": "4.0.0-rc.109",
+    "@effect/platform-node": "4.0.0-rc.109",
+    "@effect/vitest": "4.0.0-rc.109",
     "@types/bun": "^1.3.0",
-    "typescript": "^5.9.0"
+    "typescript": "^5.9.0",
+    "vitest": "^4.1.0"
   },
   "engines": {
     "bun": ">=1.3.7"
   },
   "dependencies": {
     "@akua-dev/sdk": "^0.9.4",
-    "effect": "4.0.0-beta.106"
+    "effect": "4.0.0-rc.109"
   },
   "patchedDependencies": {
-    "effect@4.0.0-beta.106": "patches/effect@4.0.0-beta.106.patch",
-    "@effect/openapi-generator@4.0.0-beta.106": "patches/@effect%2Fopenapi-generator@4.0.0-beta.106.patch"
+    "@effect/openapi-generator@4.0.0-rc.109": "patches/@effect%2Fopenapi-generator@4.0.0-rc.109.patch",
+    "effect@4.0.0-rc.109": "patches/effect@4.0.0-rc.109.patch"
   }
 }

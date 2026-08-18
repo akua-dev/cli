@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "@effect/vitest";
 import { Effect, Layer, Stream } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
 
@@ -71,6 +71,54 @@ describe("generated public commands", () => {
       "quickstart-worker",
     );
     expect(await received?.json()).toEqual(body);
+  });
+
+  test("clusters.resume builds the literal :action-suffixed request path", async () => {
+    let received: Request | undefined;
+    const operation = clusterOperation();
+    const result = await runGenerated(
+      "clusters.resume",
+      ["--input", "-"],
+      JSON.stringify({
+        path: { id: "clu_123" },
+        headers: { "if-match": "etag-1" },
+      }),
+      (input, init) => {
+        received = new Request(input, init);
+        return Promise.resolve(Response.json(operation, { status: 202 }));
+      },
+    );
+
+    expect(result.data).toEqual(operation);
+    expect(received?.method).toBe("POST");
+    expect(received?.url).toBe(
+      "https://api.akua.dev/v1/clusters/clu_123%3Aresume",
+    );
+    expect(received?.headers.get("if-match")).toBe("etag-1");
+  });
+
+  test("machines.resume builds the literal :action-suffixed request path", async () => {
+    let received: Request | undefined;
+    const operation = machineOperation();
+    const result = await runGenerated(
+      "machines.resume",
+      ["--input", "-"],
+      JSON.stringify({
+        path: { id: "mch_123" },
+        headers: { "if-match": "etag-1", "idempotency-key": "resume-once" },
+      }),
+      (input, init) => {
+        received = new Request(input, init);
+        return Promise.resolve(Response.json(operation, { status: 202 }));
+      },
+    );
+
+    expect(result.data).toEqual(operation);
+    expect(received?.method).toBe("POST");
+    expect(received?.url).toBe(
+      "https://api.akua.dev/v1/machines/mch_123%3Aresume",
+    );
+    expect(received?.headers.get("if-match")).toBe("etag-1");
   });
 
   test("rejects malformed and excess input before transport", async () => {
@@ -653,6 +701,29 @@ function runAnonymousOffer(options: RunGeneratedOptions) {
       },
       options,
     ),
+  };
+}
+
+function clusterOperation() {
+  return {
+    id: "op_456",
+    workspace_id: "ws_123",
+    organization_id: null,
+    owner_type: "cluster",
+    owner_id: "clu_123",
+    parent_operation_id: null,
+    state: "RUNNING",
+    done: false,
+    html_url: "https://akua.dev/clusters/clu_123",
+    metadata: {
+      type: "cluster.resume",
+      cluster_id: "clu_123",
+    },
+    response: null,
+    error: null,
+    last_error: null,
+    started_at: 1,
+    completed_at: null,
   };
 }
 

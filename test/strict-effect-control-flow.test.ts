@@ -1,8 +1,10 @@
-import { expect, test } from "bun:test";
+import { expect, test } from "@effect/vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 import ts from "typescript";
+
+import { runAkua } from "./run-akua";
 
 const productionFiles = [
   ...findTypeScriptFiles("src"),
@@ -96,32 +98,4 @@ function findAliasedImports(file: string): string[] {
   };
   visit(source);
   return aliases;
-}
-
-async function runAkua(
-  args: readonly string[],
-  env: Record<string, string> = {},
-) {
-  const childEnv = { ...process.env, ...env };
-  if (!("AKUA_OUTPUT" in env)) {
-    delete childEnv.AKUA_OUTPUT;
-  }
-  if (!("AKUA_API_TOKEN" in env)) {
-    delete childEnv.AKUA_API_TOKEN;
-  }
-
-  const proc = Bun.spawn({
-    cmd: ["bun", "src/bin/akua.ts", ...args],
-    stdout: "pipe",
-    stderr: "pipe",
-    env: childEnv,
-  });
-
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
-
-  return { stdout, stderr, exitCode };
 }
