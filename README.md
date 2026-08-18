@@ -1,12 +1,14 @@
 # Akua CLI
 
-`akua` is the public Akua Cloud command-line interface. It is a self-contained
-Bun/TypeScript executable for humans, automation, and coding agents. It
-implements local token authentication, browser/device login, adaptive
-structured output, and executable public operationId-driven commands. Effect
-CLI renders the interactive command tree and validates its documented flags;
-the generated typed Effect API and its static executor are derived from OpenAPI
-for every public operation.
+`akua` drives Akua Cloud from a terminal: create Kubernetes clusters, add
+machines, package an application, and install it, all from one command. It is
+a single self-contained executable, built for three audiences — a person
+typing commands interactively, a CI pipeline calling it non-interactively, and
+a coding agent driving it programmatically — and every command adapts its
+output to whichever one is running it.
+
+Every command is generated directly from Akua's public API, so the CLI never
+drifts out of sync with what the platform can actually do.
 
 The canonical executable is `akua`; there is no `cnap` compatibility binary.
 
@@ -127,23 +129,16 @@ checksums.txt` on macOS. The adjacent `<asset>.sha256` files support single-asse
 verification. Release assets are never replaced in place; a changed binary
 requires a new version.
 
-## First use and authentication
-
-Inspect the installed surface first:
+## First commands
 
 ```sh
 akua                         # complete interactive command tree
 akua auth --help              # authentication subcommands and options
 akua workspaces --help        # generated resource commands
-akua commands --limit 5
+akua commands --limit 5       # discover the full command surface
 ```
 
-For CI and coding agents, prefer an ephemeral environment credential:
-
-```sh
-export AKUA_API_TOKEN='sk_akua_...'
-akua auth status
-```
+## Sign in
 
 For an interactive browser/device login:
 
@@ -157,6 +152,14 @@ the verification in any browser instead.
 
 ```sh
 akua auth login --no-browser
+```
+
+For CI and coding agents, prefer an ephemeral environment credential instead of
+an interactive login:
+
+```sh
+export AKUA_API_TOKEN='sk_akua_...'
+akua auth status
 ```
 
 For a local persisted token without an interactive login:
@@ -173,10 +176,11 @@ akua auth logout
 removes only the stored `token`, also preserving unknown config keys, and cannot
 clear `AKUA_API_TOKEN` from the parent process.
 
-## Human and agent output
+## Built for humans, CI, and agents
 
-An interactive TTY defaults to human prose. The CLI defaults to compact agent
-output when any of these signals are active:
+An interactive TTY defaults to human prose. The CLI switches to compact agent
+output automatically when any of these signals are active, so an agent gets
+usable output without extra flags:
 
 - `AGENT=true` or `AGENT=<name>` (for example `AGENT=codex`);
 - a detected provider environment such as Codex, Claude Code, Cursor, Aider,
@@ -200,40 +204,33 @@ The supported modes are `human`, `agent`, `json`, and `quiet`. Success data is
 written to stdout; progress and warnings belong on stderr. Unknown commands,
 flags, and output modes fail loudly with stable nonzero exit codes.
 
-## OpenAPI command generation
+## Discover and run commands
 
-The public source of truth is
-`https://api.akua.dev/v1/openapi.json`. The workflow is deliberately explicit:
+Every public Akua operation is available as a generated command, kept current
+with the API automatically. Discover the current surface instead of relying on
+a fixed list:
 
 ```sh
-mise run spec:fetch       # fetch and stably format openapi/public.json
-mise run generate         # derive command registry and typed Effect API
-mise run generate:check   # fail if committed generated output has drifted
-mise run check            # drift check, typecheck/build, and tests
+akua commands --json
+akua commands --resource workspaces
+akua commands --operation-id workspaces.list
 ```
 
-Generation is deterministic and operationId-driven. Only operations marked
-`x-platform-visibility: PUBLIC` are included. For example,
-`operationId: workspaces.list` becomes `akua workspaces list`; registry rows are
-sorted by operationId. The generated outputs are
-`src/generated/commands.gen.ts`, `src/generated/openapi-api.gen.ts`, and
-`src/generated/public-operation-executor.gen.ts`.
-
-Generated API commands execute through the typed Effect client and accept one
-JSON object from stdin or a named file. Its only keys are `path`, `query`,
-`headers`, and `body`:
+For example, `operationId: workspaces.list` becomes `akua workspaces list`.
+Generated commands accept one JSON object from stdin or a named file. Its only
+keys are `path`, `query`, `headers`, and `body`:
 
 ```sh
 printf '{"query":{"limit":5}}' | akua workspaces list --input -
 akua machines create --input - < ./machine.json
 ```
 
-Request input is schema-validated before transport and never included in
-diagnostics. The CLI remains provider-neutral: it has no provider-specific commands,
+Request input is schema-validated before it is sent and never included in
+diagnostics. The CLI stays provider-neutral: it has no provider-specific commands,
 flags, environment variables, or credential loaders. Provider-specific values
-belong only in the generated public API request body.
+belong only in the generated request body.
 
-## Development and release validation
+## Development
 
 Prerequisites are [mise](https://mise.jdx.dev/) and the pinned Bun toolchain:
 
@@ -246,6 +243,22 @@ mise run build:binary
 ./dist/akua --help
 ./dist/akua commands --limit 1
 ```
+
+The command surface is generated from the public source of truth,
+`https://api.akua.dev/v1/openapi.json`:
+
+```sh
+mise run spec:fetch       # fetch and stably format openapi/public.json
+mise run generate         # regenerate the command registry and typed API bindings
+mise run generate:check   # fail if committed generated output has drifted
+mise run check            # drift check, typecheck/build, and tests
+```
+
+Generation is deterministic and operationId-driven; only operations marked
+`x-platform-visibility: PUBLIC` are included, and registry rows are sorted by
+operationId. The generated outputs are `src/generated/commands.gen.ts`,
+`src/generated/openapi-api.gen.ts`, and
+`src/generated/public-operation-executor.gen.ts`.
 
 `mise run release:package` cross-compiles all five targets, creates archives and
 checksums in `dist/release`, and verifies their manifest. `mise run

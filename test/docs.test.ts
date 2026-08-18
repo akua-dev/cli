@@ -39,7 +39,7 @@ describe("distribution documentation", () => {
       "mise run generate",
       "mise run generate:check",
       "operationId",
-      "generated typed Effect API",
+      "generated directly from Akua's public API",
       "akua workspaces list --input -",
       "akua machines create --input -",
       "provider-specific commands",
@@ -49,10 +49,17 @@ describe("distribution documentation", () => {
     }
     expect(readme).not.toContain("skills/akua/");
     expect(readme).not.toContain("akua-dev/skills");
-    expect(readme).toContain("Generated API commands execute");
+    expect(readme).toContain("Generated commands accept one JSON object");
     expect(readme).not.toContain("generic executor is not yet wired");
     expect(readme).not.toContain("agent-skills-standard-following");
     expect(readme).not.toContain("skills add akua-dev/skills");
+  });
+
+  test("README treats the underlying framework as an implementation detail", async () => {
+    const readme = await text("README.md");
+
+    expect(readme).not.toMatch(/\bEffect\b/);
+    expect(readme).toContain("humans, CI, and agents");
   });
 
   test("architecture records device authentication and all generated API artifacts", async () => {
