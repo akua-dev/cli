@@ -1,7 +1,19 @@
+diff --git a/node_modules/@effect/openapi-generator/.bun-tag-d2163dbfd250c038 b/.bun-tag-d2163dbfd250c038
+new file mode 100644
+index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
 diff --git a/dist/HttpApiTransformer.js b/dist/HttpApiTransformer.js
-index aad332ba5abf58db21178942761dee147b382235..49c363e2070a2e8ab21b42f83706fc6241e5c683 100644
+index aad332ba5abf58db21178942761dee147b382235..4c062f5928cc75c85de4186d60c32d221242668d 100644
 --- a/dist/HttpApiTransformer.js
 +++ b/dist/HttpApiTransformer.js
+@@ -149,7 +149,7 @@ const renderPayload = operation => {
+     return;
+   }
+   if (operation.requestBody?.required === false) {
+-    payloads.unshift("HttpApiSchema.NoContent");
++    payloads.push("HttpApiSchema.NoContent");
+   }
+   return joinSchemas(payloads);
+ };
 @@ -165,11 +165,11 @@ const renderResponseSet = (responses, target) => {
        continue;
      }
@@ -29,6 +41,15 @@ index aad332ba5abf58db21178942761dee147b382235..49c363e2070a2e8ab21b42f83706fc62
      return `HttpApiSchema.StreamSse(${options})`;
    }
    if (media.effectStream === "uint8array") {
+@@ -359,7 +361,7 @@ const renderSecurityScheme = securityScheme => {
+   return source;
+ };
+ const toOperationKey = operation => `${operation.method}:${operation.path}`;
+-const toHttpApiPath = path => path.replace(/{([^}]+)}/g, ":$1");
++const toHttpApiPath = path => path.replace(/:/g, "%3A").replace(/{([^}]+)}/g, ":$1");
+ const toStatus = status => {
+   if (!/^\d{3}$/.test(status)) {
+     return;
 diff --git a/dist/OpenApiGenerator.js b/dist/OpenApiGenerator.js
 index a1c2dce0a23131373824e1a0f11fdfb361faabb5..4207d1022f8b6741ddcd47ed95b875dc20ec3529 100644
 --- a/dist/OpenApiGenerator.js
@@ -123,23 +144,35 @@ index a1c2dce0a23131373824e1a0f11fdfb361faabb5..4207d1022f8b6741ddcd47ed95b875dc
            return true;
          }
          continue;
-diff --git a/dist/HttpApiTransformer.js b/dist/HttpApiTransformer.js
---- a/dist/HttpApiTransformer.js
-+++ b/dist/HttpApiTransformer.js
-@@ -149,7 +149,7 @@ const renderPayload = operation => {
-     return;
-   }
-   if (operation.requestBody?.required === false) {
--    payloads.unshift("HttpApiSchema.NoContent");
-+    payloads.push("HttpApiSchema.NoContent");
-   }
-   return joinSchemas(payloads);
- };
 diff --git a/src/HttpApiTransformer.ts b/src/HttpApiTransformer.ts
+index 02be5759b1bcbc48da4a3e72cb2a852c9143558e..b71826d7f02e66659737d726327656d032cd2203 100644
 --- a/src/HttpApiTransformer.ts
 +++ b/src/HttpApiTransformer.ts
-@@ -252,3 +252,3 @@ const renderPayload = (operation: ParsedOperation): string | undefined => {
+@@ -250,7 +250,7 @@ const renderPayload = (operation: ParsedOperation): string | undefined => {
+   }
+ 
    if (operation.requestBody?.required === false) {
 -    payloads.unshift("HttpApiSchema.NoContent")
 +    payloads.push("HttpApiSchema.NoContent")
    }
+ 
+   return joinSchemas(payloads)
+@@ -513,7 +513,17 @@ const renderSecurityScheme = (securityScheme: ParsedOpenApiSecurityScheme): stri
+ 
+ const toOperationKey = (operation: ParsedOperation): string => `${operation.method}:${operation.path}`
+ 
+-const toHttpApiPath = (path: string): string => path.replace(/{([^}]+)}/g, ":$1")
++// REST-RPC-style OpenAPI paths (e.g. `/clusters/{id}:resume`) embed a literal
++// `:action` suffix alongside the `{param}` placeholder. Effect's HttpApiClient
++// path compiler treats every `:word` occurrence in a compiled endpoint path as
++// an Express-style path parameter, with no way to distinguish a literal colon
++// from a parameter marker. Percent-encoding literal colons before rewriting
++// `{param}` to `:param` keeps the parameter rewrite unambiguous: only colons
++// we just introduced remain unescaped, so the client compiler no longer
++// mistakes the literal action suffix for a second path parameter. The server
++// (and any RFC 3986-compliant router) decodes `%3A` back to `:` before route
++// matching, so the request is unchanged on the wire.
++const toHttpApiPath = (path: string): string => path.replace(/:/g, "%3A").replace(/{([^}]+)}/g, ":$1")
+ 
+ const toStatus = (status: string): number | undefined => {
+   if (!/^\d{3}$/.test(status)) {
