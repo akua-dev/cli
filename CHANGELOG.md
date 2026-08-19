@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.2](https://github.com/akua-dev/cli/compare/v0.10.1...v0.10.2) (2026-08-19)
+
+
+### Bug Fixes
+
+* **cli:** percent-encode literal colons in :action-suffixed paths ([#47](https://github.com/akua-dev/cli/issues/47)) ([599cbc4](https://github.com/akua-dev/cli/commit/599cbc462de311aafb48db20297a6b8db693e769))
+
 ## [0.10.1](https://github.com/akua-dev/cli/compare/v0.10.0...v0.10.1) (2026-08-17)
 
 

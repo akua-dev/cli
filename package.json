@@ -1,6 +1,6 @@
 {
   "name": "@akua-dev/cli",
-  "version": "0.10.1",
+  "version": "0.10.2",
   "private": false,
   "type": "module",
   "description": "Akua Cloud CLI",
