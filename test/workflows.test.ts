@@ -2,17 +2,19 @@ import { describe, expect, test } from "@effect/vitest";
 import { readFile } from "node:fs/promises";
 
 describe("distribution workflows", () => {
-  test("Linux x64 jobs use the audited AgentOS ARC pools", async () => {
-    const workflows = await Promise.all([
-      readFile(".github/workflows/ci.yml", "utf8"),
-      readFile(".github/workflows/release-please.yml", "utf8"),
-      readFile(".github/workflows/release.yml", "utf8"),
-      readFile(".github/workflows/update-openapi.yml", "utf8"),
-    ]);
+  test("pull request CI uses available GitHub-hosted Linux runners", async () => {
+    const workflow = await readFile(".github/workflows/ci.yml", "utf8");
+    const checkJob = workflow.slice(
+      workflow.indexOf("  check:"),
+      workflow.indexOf("  package-release:"),
+    );
+    const packageJob = workflow.slice(
+      workflow.indexOf("  package-release:"),
+      workflow.indexOf("  install-smoke:"),
+    );
 
-    for (const workflow of workflows) {
-      expect(workflow).not.toMatch(/^\s+runs-on: (?:ubuntu-latest|ubuntu-24\.04|ubuntu-22\.04)$/m);
-    }
+    expect(checkJob).toContain("runs-on: ubuntu-latest");
+    expect(packageJob).toContain("runs-on: ubuntu-24.04");
   });
 
   test("the release workflow consumes the complete release target matrix", async () => {
