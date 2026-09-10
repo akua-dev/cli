@@ -1,6 +1,12 @@
 import { describe, expect, test } from "@effect/vitest";
-import { Effect, Layer, Stream } from "effect";
+import { Effect, Layer, Schema, Stream } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
+import {
+  HttpApi,
+  HttpApiClient,
+  HttpApiEndpoint,
+  HttpApiGroup,
+} from "effect/unstable/httpapi";
 
 import { generatedCommandView } from "../src/commands/generated";
 import { GeneratedCommandFailure } from "../src/commands/generated";
@@ -15,6 +21,68 @@ import {
 } from "../src/runtime/services";
 
 describe("generated public commands", () => {
+  test("compiles brace templates without breaking legacy colon parameters", () => {
+    const params = Schema.Struct({
+      id: Schema.optional(Schema.String),
+      format: Schema.optional(Schema.String),
+      path: Schema.optional(Schema.String),
+    });
+    const api = HttpApi.make("pathCompatibility").add(
+      HttpApiGroup.make("paths")
+        .add(
+          HttpApiEndpoint.get("legacy", "/documents/:id.:format", {
+            params,
+            success: Schema.Void,
+          }),
+        )
+        .add(
+          HttpApiEndpoint.get("optional", "/documents/:id?", {
+            params,
+            success: Schema.Void,
+          }),
+        )
+        .add(
+          HttpApiEndpoint.get(
+            "template",
+            "/documents/{id}.{format}:selectWorkspace",
+            { params, success: Schema.Void },
+          ),
+        )
+        .add(
+          HttpApiEndpoint.get("wildcard", "/documents/{path:*}", {
+            params,
+            success: Schema.Void,
+          }),
+        )
+        .add(
+          HttpApiEndpoint.get("customVerb", "/offers:resolve", {
+            success: Schema.Void,
+          }),
+        ),
+    );
+    const urls = HttpApiClient.urlBuilder(api, {
+      baseUrl: "https://api.example.test/v1",
+    });
+
+    expect(
+      urls.paths.legacy({ params: { id: "document/id", format: "json" } }),
+    ).toBe("https://api.example.test/documents/document%2Fid.json");
+    expect(urls.paths.optional({ params: {} })).toBe(
+      "https://api.example.test/documents",
+    );
+    expect(
+      urls.paths.template({ params: { id: "document/id", format: "json" } }),
+    ).toBe(
+      "https://api.example.test/documents/document%2Fid.json:selectWorkspace",
+    );
+    expect(urls.paths.wildcard({ params: { path: "api/v1/node:name" } })).toBe(
+      "https://api.example.test/documents/api/v1/node%3Aname",
+    );
+    expect(urls.paths.customVerb()).toBe(
+      "https://api.example.test/offers:resolve",
+    );
+  });
+
   test("workspaces.list sends the decoded query and bearer token", async () => {
     let received: Request | undefined;
     const result = await runGenerated(

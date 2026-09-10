@@ -34,7 +34,7 @@ index 9036e8e06ff04fbf3b2e42e085bb8bfcedf16b68..ec31b9ff1eceb5dac5b0954e601037c6
  };
  // ----------------------------------------------------------------------------
 -const paramsRegExp = /(\/?):(\w+)(\?)?/g;
-+const paramsRegExp = /(\/):(\w+)(\?)?|\{([^}:]+)(:\*)?\}/g;
++const paramsRegExp = /(^|[/.]):(\w+)(\?)?(?=\/|\.|$)|\{([^}:]+)(:\*)?\}/g;
  const compilePath = path => {
    if (!paramsRegExp.test(path)) {
      return _ => path;
@@ -98,7 +98,7 @@ index 365329af41ab4f3e4ec462baadf905c31cc24cf2..8c9466bcc496e4e247f2181bcf7d74b5
 +++ b/src/unstable/httpapi/HttpApiClient.ts
 @@ -707 +707 @@
 -const paramsRegExp = /(\/?):(\w+)(\?)?/g
-+const paramsRegExp = /(\/):(\w+)(\?)?|\{([^}:]+)(:\*)?\}/g
++const paramsRegExp = /(^|[/.]):(\w+)(\?)?(?=\/|\.|$)|\{([^}:]+)(:\*)?\}/g
 @@ -713,7 +713,8 @@ const compilePath = (path: string) => {
    paramsRegExp.lastIndex = 0
    return (params: Record<string, string | undefined>) => {
