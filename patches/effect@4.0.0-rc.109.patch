@@ -25,6 +25,39 @@ index 874e19f9968cd1f1a072803730ef3e46ffbb808c..7230a334b76f5c201d6f6fd7225ab633
  };
  const formatSubcommandName = (name, alias) => alias ? `${name}, ${alias}` : name;
  /**
+diff --git a/dist/unstable/httpapi/HttpApiClient.js b/dist/unstable/httpapi/HttpApiClient.js
+index 9036e8e06ff04fbf3b2e42e085bb8bfcedf16b68..ec31b9ff1eceb5dac5b0954e601037c60d772442 100644
+--- a/dist/unstable/httpapi/HttpApiClient.js
++++ b/dist/unstable/httpapi/HttpApiClient.js
+@@ -298,7 +298,7 @@ export const urlBuilder = (api, options) => {
+   return builder;
+ };
+ // ----------------------------------------------------------------------------
+-const paramsRegExp = /(\/?):(\w+)(\?)?/g;
++const paramsRegExp = /(\/):(\w+)(\?)?|\{([^}:]+)(:\*)?\}/g;
+ const compilePath = path => {
+   if (!paramsRegExp.test(path)) {
+     return _ => path;
+@@ -306,7 +306,8 @@ const compilePath = path => {
+   paramsRegExp.lastIndex = 0;
+   return params => {
+     paramsRegExp.lastIndex = 0;
+-    return path.replace(paramsRegExp, (_, slash, key, optional) => {
++    return path.replace(paramsRegExp, (_, slash, colonKey, optional, templateKey, wildcard) => {
++      const key = colonKey ?? templateKey;
+       const value = params[key];
+       if (value === undefined) {
+         if (optional !== undefined) {
+@@ -314,7 +315,8 @@ const compilePath = path => {
+         }
+         throw new Error(`Missing path parameter: ${key}`);
+       }
+-      return `${slash}${encodeURIComponent(value)}`;
++      const encoded = wildcard === undefined ? encodeURIComponent(value) : value.split("/").map(encodeURIComponent).join("/");
++      return colonKey === undefined ? encoded : `${slash}${encoded}`;
+     });
+   };
+ };
 diff --git a/dist/unstable/httpapi/HttpApiEndpoint.d.ts b/dist/unstable/httpapi/HttpApiEndpoint.d.ts
 index e95cfc448c7fd374d1781c59b601dec9703fd9a1..e2047691b17e9a16fbaa86b752161f8c6e89b000 100644
 --- a/dist/unstable/httpapi/HttpApiEndpoint.d.ts
@@ -59,6 +92,33 @@ index 13cc142d69796ce24d5155fdd263f53772be972a..98455abaec5b9fdfce25867578e674b7
  }
  
  const formatSubcommandName = (name: string, alias: string | undefined): string => alias ? `${name}, ${alias}` : name
+diff --git a/src/unstable/httpapi/HttpApiClient.ts b/src/unstable/httpapi/HttpApiClient.ts
+index 365329af41ab4f3e4ec462baadf905c31cc24cf2..8c9466bcc496e4e247f2181bcf7d74b5699fac3d 100644
+--- a/src/unstable/httpapi/HttpApiClient.ts
++++ b/src/unstable/httpapi/HttpApiClient.ts
+@@ -707 +707 @@
+-const paramsRegExp = /(\/?):(\w+)(\?)?/g
++const paramsRegExp = /(\/):(\w+)(\?)?|\{([^}:]+)(:\*)?\}/g
+@@ -713,7 +713,8 @@ const compilePath = (path: string) => {
+   paramsRegExp.lastIndex = 0
+   return (params: Record<string, string | undefined>) => {
+     paramsRegExp.lastIndex = 0
+-    return path.replace(paramsRegExp, (_, slash: string, key: string, optional: string | undefined) => {
++    return path.replace(paramsRegExp, (_, slash: string | undefined, colonKey: string | undefined, optional: string | undefined, templateKey: string | undefined, wildcard: string | undefined) => {
++      const key = colonKey ?? templateKey
+       const value = params[key]
+       if (value === undefined) {
+         if (optional !== undefined) {
+@@ -721,7 +722,8 @@ const compilePath = (path: string) => {
+         }
+         throw new Error(`Missing path parameter: ${key}`)
+       }
+-      return `${slash}${encodeURIComponent(value)}`
++      const encoded = wildcard === undefined ? encodeURIComponent(value) : value.split("/").map(encodeURIComponent).join("/")
++      return colonKey === undefined ? encoded : `${slash}${encoded}`
+     })
+   }
+ }
 diff --git a/src/unstable/httpapi/HttpApiEndpoint.ts b/src/unstable/httpapi/HttpApiEndpoint.ts
 index 331b4ff84e85e70193eda8371ce63ebed659b9b9..c30c0fc94cb3751b8b6a43f551e3999c7d10d04d 100644
 --- a/src/unstable/httpapi/HttpApiEndpoint.ts

@@ -92,7 +92,7 @@ describe("generated public commands", () => {
     expect(result.data).toEqual(operation);
     expect(received?.method).toBe("POST");
     expect(received?.url).toBe(
-      "https://api.akua.dev/v1/clusters/clu_123%3Aresume",
+      "https://api.akua.dev/v1/clusters/clu_123:resume",
     );
     expect(received?.headers.get("if-match")).toBe("etag-1");
   });
@@ -116,9 +116,62 @@ describe("generated public commands", () => {
     expect(result.data).toEqual(operation);
     expect(received?.method).toBe("POST");
     expect(received?.url).toBe(
-      "https://api.akua.dev/v1/machines/mch_123%3Aresume",
+      "https://api.akua.dev/v1/machines/mch_123:resume",
     );
     expect(received?.headers.get("if-match")).toBe("etag-1");
+  });
+
+  test("order-drafts select-workspace sends a literal custom verb suffix", async () => {
+    let received: Request | undefined;
+    await expect(
+      runGenerated(
+        "orderDrafts.selectWorkspace",
+        ["--input", "-"],
+        JSON.stringify({
+          path: { id: "odft:123" },
+          headers: { "if-match": "0" },
+          body: { kind: "existing", workspace_id: "ws_123" },
+        }),
+        (input, init) => {
+          received = new Request(input, init);
+          return Promise.resolve(
+            Response.json(
+              {
+                success: false,
+                errors: [{ code: 5, message: "Order draft not found." }],
+                result: {},
+              },
+              { status: 404 },
+            ),
+          );
+        },
+      ),
+    ).rejects.toMatchObject({ reason: "api", status: 404 });
+
+    expect(received?.method).toBe("POST");
+    expect(received?.url).toBe(
+      "https://api.akua.dev/v1/order_drafts/odft%3A123:selectWorkspace",
+    );
+  });
+
+  test("clusters proxy-kube preserves wildcard path separators", async () => {
+    let received: Request | undefined;
+    const result = await runGenerated(
+      "clusters.proxyKube",
+      ["--input", "-"],
+      JSON.stringify({
+        path: { id: "clu:123", path: "api/v1/nodes" },
+      }),
+      (input, init) => {
+        received = new Request(input, init);
+        return Promise.resolve(new Response(null, { status: 200 }));
+      },
+    );
+
+    expect(result.data).toBeUndefined();
+    expect(received?.url).toBe(
+      "https://api.akua.dev/v1/clusters/clu%3A123/kube_proxy/api/v1/nodes",
+    );
   });
 
   test("rejects malformed and excess input before transport", async () => {
