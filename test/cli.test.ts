@@ -168,6 +168,35 @@ describe("akua entrypoint", () => {
     expect(stdout).not.toContain("akua auth login");
   });
 
+  test("discovers generated input requirements before executing an operation", () => {
+    const { stdout, exitCode } = runAkua([
+      "commands",
+      "--operation-id",
+      "offers.resolve",
+      "--json",
+    ]);
+
+    expect(exitCode).toBe(0);
+    const payload = JSON.parse(stdout);
+    expect(payload).toMatchObject({
+      data: [
+        {
+          operation_id: "offers.resolve",
+          input: {
+            parameters: [
+              { name: "short_hash", in: "query", required: true },
+            ],
+            example: { query: { short_hash: "<short_hash>" } },
+          },
+        },
+      ],
+    });
+    expect(payload.next_steps[0]).toEqual({
+      command:
+        "echo '{\"query\":{\"short_hash\":\"<short_hash>\"}}' | akua offers resolve --input -",
+    });
+  });
+
   test("shows browser/device login options in auth help", async () => {
     const { stdout, exitCode } = await runAkua([
       "auth",
