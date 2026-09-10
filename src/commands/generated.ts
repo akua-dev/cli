@@ -10,7 +10,10 @@ import {
 import * as Api from "../generated/openapi-api.gen";
 import { PublicApiClient } from "../runtime/public-api";
 import type { RenderEnvelope } from "../runtime/render";
-import type { CommandDefinition } from "../runtime/registry";
+import {
+  commandInputExampleJson,
+  type CommandDefinition,
+} from "../runtime/registry";
 import { PublicInput } from "../runtime/services";
 
 type ApiErrorResponse = typeof Api.ApiErrorResponse.Type;
@@ -122,7 +125,7 @@ function parsePublicInput(
                 : "Input is not valid JSON",
           },
         ],
-        inputExample: inputExampleFor(definition),
+        inputExample: commandInputExampleJson(definition),
       }),
   });
 }
@@ -242,7 +245,7 @@ function mapGeneratedFailure(
       reason: "input",
       command: definition.command,
       issues: schemaIssues(failure),
-      inputExample: inputExampleFor(definition),
+      inputExample: commandInputExampleJson(definition),
     });
   }
   return new GeneratedCommandFailure({ operationId, reason: "internal" });
@@ -263,35 +266,6 @@ function pathSegmentToString(
   segment: PropertyKey | { readonly key: PropertyKey },
 ): string {
   return typeof segment === "object" ? String(segment.key) : String(segment);
-}
-
-function inputExampleFor(
-  definition: CommandDefinition<PublicOperationId>,
-): string {
-  const sections: {
-    path?: Record<string, string>;
-    query?: Record<string, string>;
-    headers?: Record<string, string>;
-    body?: Readonly<Record<string, unknown>>;
-  } = {};
-  for (const parameter of definition.parameters) {
-    if (!parameter.required) continue;
-    if (parameter.in === "path") {
-      (sections.path ??= {})[parameter.name] = `<${parameter.name}>`;
-    } else if (parameter.in === "query") {
-      (sections.query ??= {})[parameter.name] = `<${parameter.name}>`;
-    } else if (parameter.in === "header") {
-      (sections.headers ??= {})[parameter.name] = `<${parameter.name}>`;
-    }
-  }
-  const body = definition.body;
-  if (
-    body !== undefined &&
-    (body.required || Object.keys(body.example).length > 0)
-  ) {
-    sections.body = body.example;
-  }
-  return JSON.stringify(sections);
 }
 
 function readResponseBody(

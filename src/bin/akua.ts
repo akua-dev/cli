@@ -29,6 +29,7 @@ import {
   PublicApiAuthenticationFailure,
   PublicApiClientLive,
 } from "../runtime/public-api";
+import { commandInputExample, commandInputExampleJson } from "../runtime/registry";
 
 const VERSION = "0.10.1"; // x-release-please-version
 
@@ -430,22 +431,37 @@ function commandsView(
       const filtered = commandRegistry
         .filter((command) => !operationId || command.operation_id === operationId)
         .filter((command) => !resource || command.resource === resource)
-        .slice(0, Number.isFinite(limit) && limit > 0 ? limit : 20)
-        .map((command) => ({
+        .slice(0, Number.isFinite(limit) && limit > 0 ? limit : 20);
+      const data = filtered.map((command) => ({
           operation_id: command.operation_id,
           command: command.command,
           method: command.method,
           path: command.path,
           summary: command.summary,
+          input: {
+            parameters: command.parameters,
+            ...(command.body === undefined ? {} : { body: command.body }),
+            example: commandInputExample(command),
+          },
         }));
+      const selected = operationId === undefined ? undefined : filtered[0];
+      const inputStep =
+        selected === undefined
+          ? []
+          : [
+              {
+                command: `echo '${commandInputExampleJson(selected)}' | akua ${selected.command} --input -`,
+              },
+            ];
 
       return {
         command: "akua commands",
         observations: [
           `${filtered.length} of ${commandRegistry.length} public operations shown.`,
         ],
-        data: filtered,
+        data,
         next_steps: [
+          ...inputStep,
           { command: "akua commands --resource workspaces" },
           { command: "akua commands --operation-id <operation_id>" },
         ],

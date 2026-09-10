@@ -23,3 +23,45 @@ export interface CommandParameter {
   in: "path" | "query" | "header" | "cookie";
   required: boolean;
 }
+
+export interface CommandInputExample {
+  readonly path?: Readonly<Record<string, string>>;
+  readonly query?: Readonly<Record<string, string>>;
+  readonly headers?: Readonly<Record<string, string>>;
+  readonly body?: Readonly<Record<string, unknown>>;
+}
+
+export function commandInputExample(
+  definition: CommandDefinition,
+): CommandInputExample {
+  const sections: {
+    path?: Record<string, string>;
+    query?: Record<string, string>;
+    headers?: Record<string, string>;
+    body?: Readonly<Record<string, unknown>>;
+  } = {};
+  for (const parameter of definition.parameters) {
+    if (!parameter.required) continue;
+    if (parameter.in === "path") {
+      (sections.path ??= {})[parameter.name] = `<${parameter.name}>`;
+    } else if (parameter.in === "query") {
+      (sections.query ??= {})[parameter.name] = `<${parameter.name}>`;
+    } else if (parameter.in === "header") {
+      (sections.headers ??= {})[parameter.name] = `<${parameter.name}>`;
+    }
+  }
+  const body = definition.body;
+  if (
+    body !== undefined &&
+    (body.required || Object.keys(body.example).length > 0)
+  ) {
+    sections.body = body.example;
+  }
+  return sections;
+}
+
+export function commandInputExampleJson(
+  definition: CommandDefinition,
+): string {
+  return JSON.stringify(commandInputExample(definition));
+}
