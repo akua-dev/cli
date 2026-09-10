@@ -65,6 +65,27 @@ it.effect("generates only PUBLIC operations", () =>
   }),
 );
 
+it.effect("preserves OpenAPI path templates for the client", () =>
+  Effect.gen(function* () {
+    const layer = Layer.succeed(ScriptFiles, {
+      readText: () =>
+        Effect.succeed(JSON.stringify(specWithEmbeddedPathParameters())),
+      writeText: () => Effect.void,
+    });
+
+    const generated = yield* generateEffectApi(sourcePath, outputPath).pipe(
+      Effect.provide(layer),
+    );
+
+    expect(generated).toContain(
+      'HttpApiEndpoint.post("documentsSelectWorkspace", "/v1/documents/{id}.{format}:selectWorkspace"',
+    );
+    expect(generated).toContain(
+      'HttpApiEndpoint.get("documentsGetPath", "/v1/documents/{path:*}"',
+    );
+  }),
+);
+
 it.effect(
   "fails with a typed error when the generator reports a public contract warning",
   () =>
@@ -300,6 +321,58 @@ function specWithMixedVisibility() {
     components: { schemas: {}, securitySchemes: {} },
     security: [],
     tags: [{ name: "Secrets" }, { name: "Admin" }],
+  };
+}
+
+function specWithEmbeddedPathParameters() {
+  return {
+    openapi: "3.1.0",
+    info: { title: "Public API", version: "1.0.0" },
+    paths: {
+      "/v1/documents/{id}.{format}:selectWorkspace": {
+        post: {
+          operationId: "documents.selectWorkspace",
+          "x-platform-visibility": "PUBLIC",
+          tags: ["Documents"],
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" },
+            },
+            {
+              name: "format",
+              in: "path",
+              required: true,
+              schema: { type: "string" },
+            },
+          ],
+          security: [],
+          responses: { 204: { description: "Selected" } },
+        },
+      },
+      "/v1/documents/{path:*}": {
+        get: {
+          operationId: "documents.getPath",
+          "x-platform-visibility": "PUBLIC",
+          tags: ["Documents"],
+          parameters: [
+            {
+              name: "path",
+              in: "path",
+              required: true,
+              schema: { type: "string" },
+            },
+          ],
+          security: [],
+          responses: { 204: { description: "Found" } },
+        },
+      },
+    },
+    components: { schemas: {}, securitySchemes: {} },
+    security: [],
+    tags: [{ name: "Documents" }],
   };
 }
 

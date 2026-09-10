@@ -1,6 +1,12 @@
 import { describe, expect, test } from "@effect/vitest";
-import { Effect, Layer, Stream } from "effect";
+import { Effect, Layer, Schema, Stream } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
+import {
+  HttpApi,
+  HttpApiClient,
+  HttpApiEndpoint,
+  HttpApiGroup,
+} from "effect/unstable/httpapi";
 
 import { generatedCommandView } from "../src/commands/generated";
 import { GeneratedCommandFailure } from "../src/commands/generated";
@@ -15,6 +21,68 @@ import {
 } from "../src/runtime/services";
 
 describe("generated public commands", () => {
+  test("compiles brace templates without breaking legacy colon parameters", () => {
+    const params = Schema.Struct({
+      id: Schema.optional(Schema.String),
+      format: Schema.optional(Schema.String),
+      path: Schema.optional(Schema.String),
+    });
+    const api = HttpApi.make("pathCompatibility").add(
+      HttpApiGroup.make("paths")
+        .add(
+          HttpApiEndpoint.get("legacy", "/documents/:id.:format", {
+            params,
+            success: Schema.Void,
+          }),
+        )
+        .add(
+          HttpApiEndpoint.get("optional", "/documents/:id?", {
+            params,
+            success: Schema.Void,
+          }),
+        )
+        .add(
+          HttpApiEndpoint.get(
+            "template",
+            "/documents/{id}.{format}:selectWorkspace",
+            { params, success: Schema.Void },
+          ),
+        )
+        .add(
+          HttpApiEndpoint.get("wildcard", "/documents/{path:*}", {
+            params,
+            success: Schema.Void,
+          }),
+        )
+        .add(
+          HttpApiEndpoint.get("customVerb", "/offers:resolve", {
+            success: Schema.Void,
+          }),
+        ),
+    );
+    const urls = HttpApiClient.urlBuilder(api, {
+      baseUrl: "https://api.example.test/v1",
+    });
+
+    expect(
+      urls.paths.legacy({ params: { id: "document/id", format: "json" } }),
+    ).toBe("https://api.example.test/documents/document%2Fid.json");
+    expect(urls.paths.optional({ params: {} })).toBe(
+      "https://api.example.test/documents",
+    );
+    expect(
+      urls.paths.template({ params: { id: "document/id", format: "json" } }),
+    ).toBe(
+      "https://api.example.test/documents/document%2Fid.json:selectWorkspace",
+    );
+    expect(urls.paths.wildcard({ params: { path: "api/v1/node:name" } })).toBe(
+      "https://api.example.test/documents/api/v1/node%3Aname",
+    );
+    expect(urls.paths.customVerb()).toBe(
+      "https://api.example.test/offers:resolve",
+    );
+  });
+
   test("workspaces.list sends the decoded query and bearer token", async () => {
     let received: Request | undefined;
     const result = await runGenerated(
@@ -92,7 +160,7 @@ describe("generated public commands", () => {
     expect(result.data).toEqual(operation);
     expect(received?.method).toBe("POST");
     expect(received?.url).toBe(
-      "https://api.akua.dev/v1/clusters/clu_123%3Aresume",
+      "https://api.akua.dev/v1/clusters/clu_123:resume",
     );
     expect(received?.headers.get("if-match")).toBe("etag-1");
   });
@@ -116,9 +184,62 @@ describe("generated public commands", () => {
     expect(result.data).toEqual(operation);
     expect(received?.method).toBe("POST");
     expect(received?.url).toBe(
-      "https://api.akua.dev/v1/machines/mch_123%3Aresume",
+      "https://api.akua.dev/v1/machines/mch_123:resume",
     );
     expect(received?.headers.get("if-match")).toBe("etag-1");
+  });
+
+  test("order-drafts select-workspace sends a literal custom verb suffix", async () => {
+    let received: Request | undefined;
+    await expect(
+      runGenerated(
+        "orderDrafts.selectWorkspace",
+        ["--input", "-"],
+        JSON.stringify({
+          path: { id: "odft:123" },
+          headers: { "if-match": "0" },
+          body: { kind: "existing", workspace_id: "ws_123" },
+        }),
+        (input, init) => {
+          received = new Request(input, init);
+          return Promise.resolve(
+            Response.json(
+              {
+                success: false,
+                errors: [{ code: 5, message: "Order draft not found." }],
+                result: {},
+              },
+              { status: 404 },
+            ),
+          );
+        },
+      ),
+    ).rejects.toMatchObject({ reason: "api", status: 404 });
+
+    expect(received?.method).toBe("POST");
+    expect(received?.url).toBe(
+      "https://api.akua.dev/v1/order_drafts/odft%3A123:selectWorkspace",
+    );
+  });
+
+  test("clusters proxy-kube preserves wildcard path separators", async () => {
+    let received: Request | undefined;
+    const result = await runGenerated(
+      "clusters.proxyKube",
+      ["--input", "-"],
+      JSON.stringify({
+        path: { id: "clu:123", path: "api/v1/nodes" },
+      }),
+      (input, init) => {
+        received = new Request(input, init);
+        return Promise.resolve(new Response(null, { status: 200 }));
+      },
+    );
+
+    expect(result.data).toBeUndefined();
+    expect(received?.url).toBe(
+      "https://api.akua.dev/v1/clusters/clu%3A123/kube_proxy/api/v1/nodes",
+    );
   });
 
   test("rejects malformed and excess input before transport", async () => {
