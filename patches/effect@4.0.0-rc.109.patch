@@ -58,6 +58,12 @@ index 9036e8e06ff04fbf3b2e42e085bb8bfcedf16b68..ec31b9ff1eceb5dac5b0954e601037c6
      });
    };
  };
+@@ -109,1 +109,2 @@ export const makeClient = (api, options) => Effect.gen(function* () {
+       const encodeHeaders = UndefinedOr.map(endpoint.headers, Schema.encodeUnknownEffect);
++      const payloadCanBeOmitted = payloadSchemas.some(schema => HttpApiSchema.isNoContent(schema.ast));
+@@ -121,1 +122,1 @@ export const makeClient = (api, options) => Effect.gen(function* () {
+-          if (encodePayload !== undefined) {
++          if (encodePayload !== undefined && !(payloadCanBeOmitted && request.payload === undefined)) {
 diff --git a/dist/unstable/httpapi/HttpApiEndpoint.d.ts b/dist/unstable/httpapi/HttpApiEndpoint.d.ts
 index e95cfc448c7fd374d1781c59b601dec9703fd9a1..e2047691b17e9a16fbaa86b752161f8c6e89b000 100644
 --- a/dist/unstable/httpapi/HttpApiEndpoint.d.ts
@@ -119,6 +125,12 @@ index 365329af41ab4f3e4ec462baadf905c31cc24cf2..8c9466bcc496e4e247f2181bcf7d74b5
      })
    }
  }
+@@ -396,1 +396,2 @@ export const makeClient = <ApiId extends string, Groups extends HttpApiGroup.Con
++        const payloadCanBeOmitted = payloadSchemas.some((schema) => HttpApiSchema.isNoContent(schema.ast))
+         const encodeHeaders = UndefinedOr.map(endpoint.headers, Schema.encodeUnknownEffect)
+@@ -419,1 +420,1 @@ export const makeClient = <ApiId extends string, Groups extends HttpApiGroup.Con
+-            if (encodePayload !== undefined) {
++            if (encodePayload !== undefined && !(payloadCanBeOmitted && request.payload === undefined)) {
 diff --git a/src/unstable/httpapi/HttpApiEndpoint.ts b/src/unstable/httpapi/HttpApiEndpoint.ts
 index 331b4ff84e85e70193eda8371ce63ebed659b9b9..c30c0fc94cb3751b8b6a43f551e3999c7d10d04d 100644
 --- a/src/unstable/httpapi/HttpApiEndpoint.ts

@@ -242,6 +242,72 @@ describe("generated public commands", () => {
     );
   });
 
+  test("optional request bodies are omitted from the request", async () => {
+    let received: Request | undefined;
+    await expect(
+      runGenerated(
+        "orderDrafts.createWorkerBootstrap",
+        ["--input", "-"],
+        '{"path":{"id":"odft_123"}}',
+        (input, init) => {
+          received = new Request(input, init);
+          return Promise.resolve(orderDraftNotFoundResponse());
+        },
+      ),
+    ).rejects.toMatchObject({
+      _tag: "GeneratedCommandFailure",
+      reason: "api",
+      status: 404,
+    });
+
+    expect(received?.headers.get("content-type")).toBeNull();
+    expect(await received?.text()).toBe("");
+  });
+
+  test("optional request bodies preserve explicit JSON values", async () => {
+    let received: Request | undefined;
+    await expect(
+      runGenerated(
+        "orderDrafts.createWorkerBootstrap",
+        ["--input", "-"],
+        '{"path":{"id":"odft_123"},"body":{"ttl_seconds":60}}',
+        (input, init) => {
+          received = new Request(input, init);
+          return Promise.resolve(orderDraftNotFoundResponse());
+        },
+      ),
+    ).rejects.toMatchObject({
+      _tag: "GeneratedCommandFailure",
+      reason: "api",
+      status: 404,
+    });
+
+    expect(received?.headers.get("content-type")).toContain(
+      "application/json",
+    );
+    expect(await received?.json()).toEqual({ ttl_seconds: 60 });
+  });
+
+  test("explicit null optional request bodies are rejected before transport", async () => {
+    let requests = 0;
+    await expect(
+      runGenerated(
+        "orderDrafts.createWorkerBootstrap",
+        ["--input", "-"],
+        '{"path":{"id":"odft_123"},"body":null}',
+        () => {
+          requests += 1;
+          return Promise.resolve(Response.json({}));
+        },
+      ),
+    ).rejects.toMatchObject({
+      _tag: "GeneratedCommandFailure",
+      reason: "input",
+    });
+
+    expect(requests).toBe(0);
+  });
+
   test("rejects malformed and excess input before transport", async () => {
     let requests = 0;
     const transport = () => {
@@ -875,4 +941,15 @@ function machineOperation() {
     started_at: 1,
     completed_at: null,
   };
+}
+
+function orderDraftNotFoundResponse() {
+  return Response.json(
+    {
+      success: false,
+      errors: [{ code: 7002, message: "Order draft not found." }],
+      result: {},
+    },
+    { status: 404 },
+  );
 }
