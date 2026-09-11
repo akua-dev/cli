@@ -33468,7 +33468,8 @@
                   "compute_config_id": {
                     "type": "string",
                     "minLength": 1,
-                    "maxLength": 54
+                    "maxLength": 54,
+                    "description": "Compute config that supplies the provider account for this machine. Omit it to explicitly request an Akua system-managed machine on platform infrastructure; free-tier instance types and machine quotas then apply."
                   },
                   "name": {
                     "type": "string",
@@ -33481,8 +33482,7 @@
                 },
                 "required": [
                   "cluster_id",
-                  "instance_type",
-                  "compute_config_id"
+                  "instance_type"
                 ],
                 "additionalProperties": false
               }
@@ -37341,6 +37341,19 @@
             "description": "Required when `owner_type` is set. Ignored otherwise.",
             "name": "owner_id",
             "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 53,
+              "description": "Optional workspace/scope context for the request. Carries a single workspace wire id (`ws_…`) today. Only needed for broad tokens — a workspace-owned token implies its workspace.",
+              "example": "ws_j572abc123def456"
+            },
+            "required": false,
+            "description": "Optional workspace/scope context for the request. Carries a single workspace wire id (`ws_…`) today. Only needed for broad tokens — a workspace-owned token implies its workspace.",
+            "name": "akua-context",
+            "in": "header"
           }
         ],
         "responses": {
