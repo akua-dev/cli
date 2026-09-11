@@ -12417,7 +12417,8 @@
           "compute_config_id": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 54
+            "maxLength": 54,
+            "description": "Compute config the machine runs against. Absent for Akua system-managed machines."
           },
           "provider_id": {
             "type": "string",
@@ -12829,7 +12830,6 @@
           "id",
           "workspace_id",
           "cluster_id",
-          "compute_config_id",
           "provider_id",
           "provider_resource",
           "node_name",

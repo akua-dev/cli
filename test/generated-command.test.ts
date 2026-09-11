@@ -140,6 +140,43 @@ describe("generated public commands", () => {
     expect(await received?.json()).toEqual(body);
   });
 
+  test("machines.list accepts a system-managed machine without a compute config", async () => {
+    const machines = {
+      data: [
+        {
+          id: "mch_system-managed",
+          workspace_id: "ws_123",
+          cluster_id: "clu_123",
+          provider_id: "compute://hcloud/server-1234",
+          provider_resource: {
+            identity_kind: "recyclable",
+            public_ip: null,
+          },
+          node_name: null,
+          state: "PROVISIONING",
+          reconciling: true,
+          created_at: 1_789_133_184,
+          updated_at: 1_789_133_184,
+          etag: "0",
+        },
+      ],
+      has_more: false,
+      next_cursor: null,
+    };
+
+    const result = await runGenerated(
+      "machines.list",
+      ["--input", "-"],
+      JSON.stringify({
+        headers: { "akua-context": "ws_123" },
+        query: { cluster_id: "clu_123" },
+      }),
+      () => Promise.resolve(Response.json(machines)),
+    );
+
+    expect(result.data).toEqual(machines);
+  });
+
   test("operations.list forwards the workspace context header", async () => {
     let received: Request | undefined;
     const result = await runGenerated(
