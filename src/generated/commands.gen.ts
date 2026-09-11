@@ -2947,8 +2947,7 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
       "required": false,
       "example": {
         "cluster_id": "<cluster_id>",
-        "instance_type": "<instance_type>",
-        "compute_config_id": "<compute_config_id>"
+        "instance_type": "<instance_type>"
       }
     }
   },
@@ -3657,6 +3656,11 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
       {
         "name": "owner_id",
         "in": "query",
+        "required": false
+      },
+      {
+        "name": "akua-context",
+        "in": "header",
         "required": false
       }
     ]

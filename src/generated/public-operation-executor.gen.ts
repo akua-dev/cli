@@ -2683,14 +2683,18 @@ function executeOperation(
     case "operations.list":
       return Effect.gen(function* () {
         const input = yield* Schema.decodeUnknownEffect(
-          Schema.Struct({ query: Schema.optionalKey(Schema.Unknown) }),
+          Schema.Struct({ query: Schema.optionalKey(Schema.Unknown), headers: Schema.optionalKey(Schema.Unknown) }),
           strictParseOptions,
         )(rawInput);
         const query = yield* atEnvelopeKey("query", Schema.decodeUnknownEffect(
           Api.OperationsListQuery,
           strictParseOptions,
         )(input.query ?? {}));
-        const value = yield* executeClientOperation(client, client.client["Operations"]["operationsList"]({ query }));
+        const headers = yield* atEnvelopeKey("headers", Schema.decodeUnknownEffect(
+          Api.OperationsListHeaders,
+          strictParseOptions,
+        )(input.headers ?? {}));
+        const value = yield* executeClientOperation(client, client.client["Operations"]["operationsList"]({ query, headers }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
     case "operations.wait":

@@ -107,12 +107,11 @@ describe("generated public commands", () => {
     expect(received?.headers.get("authorization")).toBe("Bearer test-token");
   });
 
-  test("machines.create sends exact headers and JSON body and decodes 202", async () => {
+  test("machines.create permits an omitted optional compute config and decodes 202", async () => {
     let received: Request | undefined;
     const body = {
       cluster_id: "clu_123",
       instance_type: "cx23",
-      compute_config_id: "ccfg_123",
     };
     const operation = machineOperation();
     const result = await runGenerated(
@@ -139,6 +138,29 @@ describe("generated public commands", () => {
       "quickstart-worker",
     );
     expect(await received?.json()).toEqual(body);
+  });
+
+  test("operations.list forwards the workspace context header", async () => {
+    let received: Request | undefined;
+    const result = await runGenerated(
+      "operations.list",
+      ["--input", "-"],
+      JSON.stringify({ headers: { "akua-context": "ws_123" } }),
+      (input, init) => {
+        received = new Request(input, init);
+        return Promise.resolve(
+          Response.json({ data: [], has_more: false, next_cursor: null }),
+        );
+      },
+    );
+
+    expect(result.data).toEqual({
+      data: [],
+      has_more: false,
+      next_cursor: null,
+    });
+    expect(received?.url).toBe("https://api.akua.dev/v1/operations");
+    expect(received?.headers.get("akua-context")).toBe("ws_123");
   });
 
   test("clusters.resume builds the literal :action-suffixed request path", async () => {
@@ -537,7 +559,7 @@ describe("generated public commands", () => {
         { path: ["body", "secret"], message: "Expected no excess property" },
       ],
       inputExample:
-        '{"body":{"cluster_id":"<cluster_id>","instance_type":"<instance_type>","compute_config_id":"<compute_config_id>"}}',
+        '{"body":{"cluster_id":"<cluster_id>","instance_type":"<instance_type>"}}',
     });
   });
 
