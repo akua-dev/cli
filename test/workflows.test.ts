@@ -17,6 +17,19 @@ describe("distribution workflows", () => {
     expect(packageJob).toContain("runs-on: ubuntu-24.04");
   });
 
+  test("release control-plane jobs use available GitHub-hosted Linux runners", async () => {
+    const [releasePlease, release] = await Promise.all([
+      readFile(".github/workflows/release-please.yml", "utf8"),
+      readFile(".github/workflows/release.yml", "utf8"),
+    ]);
+
+    expect(releasePlease).toContain("runs-on: ubuntu-latest");
+    expect(release).toContain("runs-on: ubuntu-24.04");
+    expect(`${releasePlease}\n${release}`).not.toMatch(
+      /^\s+runs-on: akua-(?:x64|heavy)-ci-v2$/m,
+    );
+  });
+
   test("the release workflow consumes the complete release target matrix", async () => {
     const workflow = await readFile(".github/workflows/release.yml", "utf8");
 
