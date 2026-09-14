@@ -22515,17 +22515,28 @@
           "metric": {
             "type": "string",
             "example": "compute/machines",
-            "description": "Metric: service/resource"
+            "description": "Metric: service/resource. Not unique on its own — see the `scope` field. Index by `(metric, scope)`."
           },
           "type": {
             "type": "string",
             "enum": [
               "allocation",
               "rate",
-              "concurrency"
+              "concurrency",
+              "lifetime"
             ],
-            "description": "Allocation = max owned, rate = max per time window, concurrency = max in-flight.",
+            "description": "Allocation = max owned, rate = max per time window, concurrency = max in-flight, lifetime = a one-time grant. Only `rate` has a `resets_at`: a lifetime entitlement has no period, is never released by deleting the resource it funded, and reports its position in that one-way lifecycle as `grant_state`.",
             "example": "allocation"
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "workspace",
+              "principal",
+              "cluster"
+            ],
+            "description": "Identity the limit/usage numbers are bound to, and the second half of an entry's key. `workspace` is occupancy inside the workspace; `principal` aggregates across every workspace and organization owned by the same authenticated identity, so a new workspace does not grant fresh free capacity; `cluster` bounds in-flight work for one cluster. A metric enforced against more than one identity — every free-tier allocation, for example — returns one entry per scope, so `(metric, scope)` is the composite key. Indexing a listing by `metric` alone silently drops entries.",
+            "example": "workspace"
           },
           "display_name": {
             "type": "string",
@@ -22560,12 +22571,23 @@
           "resets_at": {
             "type": "integer",
             "minimum": 0,
-            "description": "For rate quotas: Unix timestamp (seconds) reset time"
+            "description": "For rate quotas only: Unix timestamp (seconds) at which the window resets. Absent on every other type, including `lifetime`, which has no period."
+          },
+          "grant_state": {
+            "type": "string",
+            "enum": [
+              "available",
+              "consumed",
+              "revoked"
+            ],
+            "description": "For `lifetime` quotas only: state of the one-time grant.",
+            "example": "available"
           }
         },
         "required": [
           "metric",
           "type",
+          "scope",
           "display_name",
           "unit",
           "limit",
