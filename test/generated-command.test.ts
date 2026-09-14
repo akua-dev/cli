@@ -229,6 +229,54 @@ describe("generated public commands", () => {
     expect(result.data).toEqual(quotas);
   });
 
+  test("operations.wait preserves its literal custom method suffix", async () => {
+    let received: Request | undefined;
+    const operation = clusterOperation();
+    const result = await runGenerated(
+      "operations.wait",
+      ["--input", "-"],
+      JSON.stringify({ path: { id: "op:123" }, query: { timeout: 60 } }),
+      (input, init) => {
+        received = new Request(input, init);
+        return Promise.resolve(Response.json(operation));
+      },
+    );
+
+    expect(result.data).toEqual(operation);
+    expect(received?.method).toBe("POST");
+    expect(received?.url).toBe(
+      "https://api.akua.dev/v1/operations/op%3A123:wait?timeout=60",
+    );
+  });
+
+  test("clusters.refreshCapabilities preserves a nested literal custom method suffix", async () => {
+    let received: Request | undefined;
+    const operation = clusterOperation();
+    const result = await runGenerated(
+      "clusters.refreshCapabilities",
+      ["--input", "-"],
+      JSON.stringify({
+        path: { id: "clu:123" },
+        headers: {
+          "akua-context": "ws_123",
+          "idempotency-key": "refresh-once",
+        },
+      }),
+      (input, init) => {
+        received = new Request(input, init);
+        return Promise.resolve(Response.json(operation, { status: 202 }));
+      },
+    );
+
+    expect(result.data).toEqual(operation);
+    expect(received?.method).toBe("POST");
+    expect(received?.url).toBe(
+      "https://api.akua.dev/v1/clusters/clu%3A123/capabilities:refresh",
+    );
+    expect(received?.headers.get("akua-context")).toBe("ws_123");
+    expect(received?.headers.get("idempotency-key")).toBe("refresh-once");
+  });
+
   test("clusters.resume builds the literal :action-suffixed request path", async () => {
     let received: Request | undefined;
     const operation = clusterOperation();
