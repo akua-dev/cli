@@ -200,6 +200,35 @@ describe("generated public commands", () => {
     expect(received?.headers.get("akua-context")).toBe("ws_123");
   });
 
+  test("quotas.list accepts a lifetime quota response", async () => {
+    const quotas = {
+      data: [
+        {
+          metric: "compute/managed_vm_trial",
+          type: "lifetime",
+          scope: "principal",
+          display_name: "Managed VM trial",
+          unit: "count",
+          limit: 1,
+          usage: 0,
+          remaining: 1,
+          grant_state: "available",
+        },
+      ],
+      has_more: false,
+      next_cursor: null,
+    };
+
+    const result = await runGenerated(
+      "quotas.list",
+      ["--input", "-"],
+      JSON.stringify({ headers: { "akua-context": "ws_123" } }),
+      () => Promise.resolve(Response.json(quotas)),
+    );
+
+    expect(result.data).toEqual(quotas);
+  });
+
   test("clusters.resume builds the literal :action-suffixed request path", async () => {
     let received: Request | undefined;
     const operation = clusterOperation();
