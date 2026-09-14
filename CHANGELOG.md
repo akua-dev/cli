@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.11.0](https://github.com/akua-dev/cli/compare/v0.10.1...v0.11.0) (2026-09-14)
+
+
+### Features
+
+* **cli:** expose generated input discovery ([8ab9a5c](https://github.com/akua-dev/cli/commit/8ab9a5cb63c5dfded1ab5490998fcc5935f5c221))
+* **cli:** expose generated input discovery ([cf46b16](https://github.com/akua-dev/cli/commit/cf46b1602460da246ecc5ad822edae496a987c50)), closes [#53](https://github.com/akua-dev/cli/issues/53)
+
+
+### Bug Fixes
+
+* **ci:** restore runnable CLI pull request checks ([#56](https://github.com/akua-dev/cli/issues/56)) ([05c5261](https://github.com/akua-dev/cli/commit/05c52616023fa3d19e091f93f3c813218d999756))
+* **ci:** restore runnable CLI release automation ([9fb8943](https://github.com/akua-dev/cli/commit/9fb89438535511b090fb965bc26d5041dcc57ee2))
+* **ci:** restore runnable CLI release automation ([28ba9e1](https://github.com/akua-dev/cli/commit/28ba9e18490a6ef88a7230197de91128ee662cea))
+* **cli:** adopt required product-quality API contract ([2ff18e8](https://github.com/akua-dev/cli/commit/2ff18e80d9f05e3c97503ccdca0b811bed1c27cf))
+* **cli:** adopt required product-quality API contract ([073fc10](https://github.com/akua-dev/cli/commit/073fc109b99b8914a1bca69944862cfda00322da))
+* **cli:** compile OpenAPI path templates correctly ([67777d7](https://github.com/akua-dev/cli/commit/67777d7908896ab5769b789feaaaceb12a17fc61))
+* **cli:** compile OpenAPI path templates correctly ([2313eb9](https://github.com/akua-dev/cli/commit/2313eb906c7a3f1704a577d65582695d103e8919))
+* **cli:** omit absent optional request bodies ([1614694](https://github.com/akua-dev/cli/commit/161469464c66f9a8ecbfe84ba4f4b9856dd36066))
+* **cli:** omit absent optional request bodies ([0e3ab08](https://github.com/akua-dev/cli/commit/0e3ab086caa5283ad316a79d4e568ff57113c415))
+* **cli:** percent-encode literal colons in :action-suffixed paths ([#47](https://github.com/akua-dev/cli/issues/47)) ([599cbc4](https://github.com/akua-dev/cli/commit/599cbc462de311aafb48db20297a6b8db693e769))
+* **cli:** preserve embedded legacy path parameters ([0e005f0](https://github.com/akua-dev/cli/commit/0e005f05395c5e44b08305db0b50ed4082d07bec))
+* **contract:** accept system-managed machine responses ([#59](https://github.com/akua-dev/cli/issues/59)) ([0019e0c](https://github.com/akua-dev/cli/commit/0019e0c52134a838e1774ee053dd7d877f38f7d5))
+* **contract:** sync quota lifetime response ([#61](https://github.com/akua-dev/cli/issues/61)) ([a6c4cf8](https://github.com/akua-dev/cli/commit/a6c4cf81795dd216fb0b1e92751c73ee4b0222e7))
+
 ## [0.10.1](https://github.com/akua-dev/cli/compare/v0.10.0...v0.10.1) (2026-08-17)
 
 

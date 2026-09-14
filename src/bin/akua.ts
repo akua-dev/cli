@@ -31,7 +31,7 @@ import {
 } from "../runtime/public-api";
 import { commandInputExample, commandInputExampleJson } from "../runtime/registry";
 
-const VERSION = "0.10.1"; // x-release-please-version
+const VERSION = "0.11.0"; // x-release-please-version
 
 export function main(
   argv: readonly string[],
