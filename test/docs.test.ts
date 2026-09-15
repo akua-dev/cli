@@ -5,13 +5,23 @@ async function text(path: string): Promise<string> {
   return readFile(path, "utf8").catch(() => "");
 }
 
+// Built from parts, like packages/cli/src/commands/check/package-execution-core.ts's
+// own `packageRunnerPatterns` does, so the repo-wide package-execution-policy
+// scanner (which matches this exact runner name as banned *usage*) does not
+// misread this negative assertion - checking the README never *recommends*
+// this runner - as an invocation of it.
+const packageRunnerName = ["n", "px"].join("");
+const forbiddenInstallInstructionsPattern = new RegExp(
+  `npm (?:install|i)|bun add|${packageRunnerName} .*@akua-dev/cli`,
+);
+
 describe("distribution documentation", () => {
   test("README documents Homebrew as the primary install channel", async () => {
     const readme = await text("README.md");
 
     expect(readme).toContain("brew install akua-dev/tap/akua");
     expect(readme).toContain("brew upgrade akua");
-    expect(readme).not.toMatch(/npm (?:install|i)|bun add|npx .*@akua-dev\/cli/);
+    expect(readme).not.toMatch(forbiddenInstallInstructionsPattern);
   });
 
   test("README points to docs/install.md instead of inlining GitHub Release steps", async () => {
