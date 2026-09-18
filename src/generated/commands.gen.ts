@@ -5117,6 +5117,16 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "name": "metric",
         "in": "path",
         "required": true
+      },
+      {
+        "name": "cluster_id",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "akua-context",
+        "in": "header",
+        "required": false
       }
     ]
   },

@@ -48578,6 +48578,31 @@
             "description": "Quota metric (URL-encoded service/resource).",
             "name": "metric",
             "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 54,
+              "description": "Cluster ID to include cluster-scoped concurrency quotas"
+            },
+            "required": false,
+            "description": "Cluster ID to include cluster-scoped concurrency quotas",
+            "name": "cluster_id",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 53,
+              "description": "Optional workspace/scope context for the request. Carries a single workspace wire id (`ws_…`) today. Only needed for broad tokens — a workspace-owned token implies its workspace.",
+              "example": "ws_j572abc123def456"
+            },
+            "required": false,
+            "description": "Optional workspace/scope context for the request. Carries a single workspace wire id (`ws_…`) today. Only needed for broad tokens — a workspace-owned token implies its workspace.",
+            "name": "akua-context",
+            "in": "header"
           }
         ],
         "responses": {

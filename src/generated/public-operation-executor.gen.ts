@@ -3580,14 +3580,22 @@ function executeOperation(
     case "quotas.get":
       return Effect.gen(function* () {
         const input = yield* Schema.decodeUnknownEffect(
-          Schema.Struct({ path: Schema.optionalKey(Schema.Unknown) }),
+          Schema.Struct({ path: Schema.optionalKey(Schema.Unknown), query: Schema.optionalKey(Schema.Unknown), headers: Schema.optionalKey(Schema.Unknown) }),
           strictParseOptions,
         )(rawInput);
         const path = yield* atEnvelopeKey("path", Schema.decodeUnknownEffect(
           Api.QuotasGetPathParams,
           strictParseOptions,
         )(input.path ?? {}));
-        const value = yield* executeClientOperation(client, client.client["Quotas"]["quotasGet"]({ params: path }));
+        const query = yield* atEnvelopeKey("query", Schema.decodeUnknownEffect(
+          Api.QuotasGetQuery,
+          strictParseOptions,
+        )(input.query ?? {}));
+        const headers = yield* atEnvelopeKey("headers", Schema.decodeUnknownEffect(
+          Api.QuotasGetHeaders,
+          strictParseOptions,
+        )(input.headers ?? {}));
+        const value = yield* executeClientOperation(client, client.client["Quotas"]["quotasGet"]({ params: path, query, headers }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
     case "quotas.list":

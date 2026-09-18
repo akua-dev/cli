@@ -3020,8 +3020,14 @@ export type QuotasList401 = ApiErrorResponse
 export const QuotasList401 = ApiErrorResponse
 export type QuotasList403 = ApiErrorResponse
 export const QuotasList403 = ApiErrorResponse
+export type QuotasGetParams = { readonly "cluster_id"?: string, readonly "akua-context"?: string }
+export const QuotasGetParams = Schema.Struct({ "cluster_id": Schema.optionalKey(Schema.String.annotate({ "description": "Cluster ID to include cluster-scoped concurrency quotas" }).check(Schema.isMinLength(1).annotate({ "expected": "a value with a length of at least 1" })).check(Schema.isMaxLength(54).annotate({ "expected": "a value with a length of at most 54" }))), "akua-context": Schema.optionalKey(Schema.String.annotate({ "description": "Optional workspace/scope context for the request. Carries a single workspace wire id (`ws_…`) today. Only needed for broad tokens — a workspace-owned token implies its workspace." }).check(Schema.isMinLength(1).annotate({ "expected": "a value with a length of at least 1" })).check(Schema.isMaxLength(53).annotate({ "expected": "a value with a length of at most 53" }))) })
 export type QuotasGetPathParams = { readonly "metric": string }
 export const QuotasGetPathParams = Schema.Struct({ "metric": Schema.String.annotate({ "description": "Quota metric (URL-encoded service/resource)." }) })
+export type QuotasGetQuery = { readonly "cluster_id"?: string }
+export const QuotasGetQuery = Schema.Struct({ "cluster_id": Schema.optionalKey(Schema.String.annotate({ "description": "Cluster ID to include cluster-scoped concurrency quotas" }).check(Schema.isMinLength(1).annotate({ "expected": "a value with a length of at least 1" })).check(Schema.isMaxLength(54).annotate({ "expected": "a value with a length of at most 54" }))) })
+export type QuotasGetHeaders = { readonly "akua-context"?: string }
+export const QuotasGetHeaders = Schema.Struct({ "akua-context": Schema.optionalKey(Schema.String.annotate({ "description": "Optional workspace/scope context for the request. Carries a single workspace wire id (`ws_…`) today. Only needed for broad tokens — a workspace-owned token implies its workspace." }).check(Schema.isMinLength(1).annotate({ "expected": "a value with a length of at least 1" })).check(Schema.isMaxLength(53).annotate({ "expected": "a value with a length of at most 53" }))) })
 export type QuotasGet200 = QuotaInfo
 export const QuotasGet200 = QuotaInfo
 export type QuotasGet401 = ApiErrorResponse
@@ -4660,7 +4666,7 @@ class QuotasGroup extends HttpApiGroup.make("Quotas")
       .annotate(OpenApi.Identifier, "quotas.list")
       .annotate(OpenApi.Summary, "List quota usage for the authenticated user")
       .annotate(OpenApi.Description, "Returns current usage and limits for all quota metrics. With workspace context, allocation quotas are scoped to that workspace. Without context, allocation quotas retain the user-wide view. Rate quotas are user-scoped, and concurrency quotas are per-cluster when `cluster_id` is supplied."),
-    HttpApiEndpoint.get("quotasGet", "/quotas/{metric}", { params: QuotasGetPathParams, success: QuotasGet200, error: [QuotasGet401.pipe(HttpApiSchema.status(401)), QuotasGet404.pipe(HttpApiSchema.status(404))] })
+    HttpApiEndpoint.get("quotasGet", "/quotas/{metric}", { params: QuotasGetPathParams, query: QuotasGetQuery, headers: QuotasGetHeaders, success: QuotasGet200, error: [QuotasGet401.pipe(HttpApiSchema.status(401)), QuotasGet404.pipe(HttpApiSchema.status(404))] })
       .middleware(BearerAuthSecurityMiddleware)
       .annotate(OpenApi.Identifier, "quotas.get")
       .annotate(OpenApi.Summary, "Get quota usage for a specific metric")

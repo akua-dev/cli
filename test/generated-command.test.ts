@@ -229,6 +229,40 @@ describe("generated public commands", () => {
     expect(result.data).toEqual(quotas);
   });
 
+  test("quotas.get forwards the workspace context header and cluster_id query", async () => {
+    let received: Request | undefined;
+    const quota = {
+      metric: "kaas/clusters",
+      type: "allocation",
+      scope: "workspace",
+      display_name: "Managed clusters",
+      unit: "count",
+      limit: 3,
+      usage: 1,
+      remaining: 2,
+    };
+
+    const result = await runGenerated(
+      "quotas.get",
+      ["--input", "-"],
+      JSON.stringify({
+        path: { metric: "kaas/clusters" },
+        query: { cluster_id: "clu_123" },
+        headers: { "akua-context": "ws_123" },
+      }),
+      (input, init) => {
+        received = new Request(input, init);
+        return Promise.resolve(Response.json(quota));
+      },
+    );
+
+    expect(result.data).toEqual(quota);
+    expect(received?.url).toBe(
+      "https://api.akua.dev/v1/quotas/kaas%2Fclusters?cluster_id=clu_123",
+    );
+    expect(received?.headers.get("akua-context")).toBe("ws_123");
+  });
+
   test("clusters.resume builds the literal :action-suffixed request path", async () => {
     let received: Request | undefined;
     const operation = clusterOperation();
