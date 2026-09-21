@@ -1421,7 +1421,7 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
     "resource": "clusters",
     "action": "proxy-kube",
     "method": "GET",
-    "path": "/clusters/{id}/kube_proxy/{path:*}",
+    "path": "/clusters/{id}/kube_proxy/{path}",
     "tag": "Clusters",
     "summary": "Proxy cluster API",
     "visibility": "PUBLIC",
@@ -2483,6 +2483,11 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
       {
         "name": "feature",
         "in": "query",
+        "required": false
+      },
+      {
+        "name": "akua-context",
+        "in": "header",
         "required": false
       }
     ]
@@ -3685,6 +3690,11 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
       {
         "name": "timeout",
         "in": "query",
+        "required": false
+      },
+      {
+        "name": "akua-context",
+        "in": "header",
         "required": false
       }
     ]
@@ -5295,6 +5305,69 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
     ]
   },
   {
+    "operation_id": "repositories.create",
+    "command": "repositories create",
+    "resource": "repositories",
+    "action": "create",
+    "method": "POST",
+    "path": "/repositories",
+    "tag": "Repositories",
+    "summary": "Create workspace repository",
+    "visibility": "PUBLIC",
+    "requires_auth": true,
+    "parameters": [
+      {
+        "name": "akua-context",
+        "in": "header",
+        "required": false
+      },
+      {
+        "name": "idempotency-key",
+        "in": "header",
+        "required": true
+      }
+    ],
+    "body": {
+      "required": false,
+      "example": {
+        "purpose": "workspace"
+      }
+    }
+  },
+  {
+    "operation_id": "repositories.createToken",
+    "command": "repositories create-token",
+    "resource": "repositories",
+    "action": "create-token",
+    "method": "POST",
+    "path": "/repositories/{id}:createToken",
+    "tag": "Repositories",
+    "summary": "Create workspace repository write token",
+    "visibility": "PUBLIC",
+    "requires_auth": true,
+    "parameters": [
+      {
+        "name": "id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "akua-context",
+        "in": "header",
+        "required": false
+      },
+      {
+        "name": "idempotency-key",
+        "in": "header",
+        "required": true
+      }
+    ],
+    "body": {
+      "required": false,
+      "example": {}
+    }
+  },
+  {
     "operation_id": "repositories.get",
     "command": "repositories get",
     "resource": "repositories",
@@ -6751,6 +6824,16 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "name": "id",
         "in": "path",
         "required": true
+      },
+      {
+        "name": "cursor",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "limit",
+        "in": "query",
+        "required": false
       },
       {
         "name": "akua-context",

@@ -35,16 +35,17 @@ guide doesn't cover, search through the source code in `node_modules/effect/src`
 
 ## Validation
 
-Run `mise run check` and `mise run generate:check` for every change. Release
+Run `mise run check` and `bazel test //:sdk_generated_drift_test` (or `mise run generate:check`) for every change that touches the public API surface. Release
 changes also require the focused release/workflow tests and a current-host
 compiled archive smoke through `mise run release:smoke`.
 
 ## Public API command contract
 
-- `openapi/public.json` is the only source of truth for public routes,
+- cnap `docs/openapi-public.json` is the only source of truth for public routes,
   request/response schemas, operation IDs, authentication, and error shapes.
-  Do not duplicate endpoint definitions, request types, or status-error maps in
-  handwritten CLI code.
+  Regenerate with `bazel run //tools/cli:write_generated`. Do not duplicate
+  endpoint definitions, request types, or status-error maps in handwritten CLI
+  code.
 - Generate the typed Effect API surface from that contract. Keep handwritten
   code limited to generic command parsing, request assembly, authentication
   composition, rendering, and terminal wiring.

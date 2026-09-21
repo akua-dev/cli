@@ -6,16 +6,15 @@ Status: local authentication and executable generated public API commands.
 
 - Binary: `akua`.
 - Runtime: Bun and TypeScript.
-- Repository: standalone open-source `akua-dev/cli`.
+- Repository: grafted into cnap at `tools/cli/source` (public view `akua-dev/cli` still release authority until S3/S4).
 - Packaging: Bun self-contained executable via `bun build --compile`.
-- API source of truth: `https://api.akua.dev/v1/openapi.json`.
+- API source of truth: cnap `docs/openapi-public.json` (Bazel-generated; no production fetch).
 - First release: local auth/config plus a provider-neutral public API command
   surface generated from OpenAPI.
 - Compatibility: no `cnap` binary, Go module, config path, env var, or command
   compatibility unless a later captain decision changes this.
-- No live infrastructure mutation is required for development or tests. The
-  spec fetch task performs only a read-only OpenAPI GET and rejects non-HTTPS
-  source URLs.
+- No live infrastructure mutation is required for development or tests.
+  OpenAPI generation is hermetic from the committed public spec.
 
 ## Current Repo Boundary
 
@@ -23,8 +22,8 @@ The old Go/CNAP implementation is removed from the active build surface. The
 new repository shape is:
 
 ```text
-openapi/public.json              fetched public OpenAPI snapshot
-scripts/fetch-openapi.ts         guarded production spec fetcher
+docs/openapi-public.json         cnap public OpenAPI (generator input)
+//tools/cli:generate             Bazel hermetic generator
 scripts/generate-commands.ts     operationId-driven command registry generator
 scripts/generate-effect-api.ts   typed Effect API generator
 scripts/release.ts               release target, packaging, and manifest contract
@@ -35,11 +34,6 @@ src/generated/commands.gen.ts    generated public command registry
 src/generated/openapi-api.gen.ts generated typed public Effect API
 src/generated/public-operation-executor.gen.ts
                                  generated static public operation executor
-.github/workflows/update-openapi.yml
-                                 idempotent public OpenAPI update automation
-.github/workflows/release-please.yml
-                                 release PR, tag, and GitHub release automation
-.github/workflows/release.yml    reusable binary publication and tap handoff
 release-please-config.json       Release Please manifest-mode config
 .release-please-manifest.json    Release Please root package version manifest
 docs/architecture.md             this spec
@@ -90,15 +84,14 @@ included in diagnostics. Do not add resource- or provider-specific overlays.
 Generation tasks:
 
 ```sh
-mise run spec:fetch      # writes openapi/public.json
-mise run generate        # writes all generated public API artifacts
-mise run generate:check  # fails on drift in any generated artifact
+bazel run //tools/cli:write_generated   # from cnap root
+mise run generate                       # same via mise
+bazel test //:sdk_generated_drift_test  # fails on drift
 ```
 
-`mise run spec:fetch` defaults to `AKUA_OPENAPI_URL`, which is set to the
-production source in `mise.toml`, and `scripts/fetch-openapi.ts` also accepts an
-explicit URL argument. Any OpenAPI update must regenerate and review all
-artifacts with `mise run generate:check` before it is accepted.
+Any public OpenAPI update in cnap must regenerate and review CLI artifacts with
+`bazel run //tools/cli:write_generated` before it is accepted; CI enforces this
+via `//:sdk_generated_drift_test`.
 
 ## API, Auth, And Config Model
 
@@ -204,17 +197,15 @@ Errors preserve API envelope details instead of collapsing them into strings:
 
 ```json
 {
-  "error": {
-    "type": "validation_error",
-    "code": "INVALID_ARGUMENT",
-    "status": 400,
-    "message": "workspace_id is required",
-    "path": ["body", "workspace_id"],
-    "request_id": "req_123",
-    "next_steps": [
-      {"command": "akua workspaces list --fields id,name"}
-    ]
-  }
+	"error": {
+		"type": "validation_error",
+		"code": "INVALID_ARGUMENT",
+		"status": 400,
+		"message": "workspace_id is required",
+		"path": ["body", "workspace_id"],
+		"request_id": "req_123",
+		"next_steps": [{ "command": "akua workspaces list --fields id,name" }]
+	}
 }
 ```
 
@@ -323,8 +314,8 @@ Current tests cover:
 - native install-smoke and workflow ordering/permission contracts;
 - public install/auth/output/codegen documentation and source-skill ownership.
 
-Current validation also runs `mise run generate:check` to catch drift in all
-generated API artifacts.
+Current validation also runs `bazel test //:sdk_generated_drift_test` (or
+`mise run generate:check`) to catch drift in all generated API artifacts.
 
 Future execution slices should add:
 

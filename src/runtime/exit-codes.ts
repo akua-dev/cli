@@ -1,21 +1,22 @@
-interface ExitCodeValues {
-  readonly Ok: 0;
-  readonly Runtime: 1;
-  readonly Usage: 2;
-  readonly AuthRequired: 3;
-  readonly ConfirmationRequired: 4;
-  readonly Conflict: 5;
-  readonly Retryable: 6;
-}
+import { Schema } from 'effect';
 
-export const ExitCodes: ExitCodeValues = {
-  Ok: 0,
-  Runtime: 1,
-  Usage: 2,
-  AuthRequired: 3,
-  ConfirmationRequired: 4,
-  Conflict: 5,
-  Retryable: 6,
-};
+export const ExitCode = Schema.Union([
+	Schema.Literal(0),
+	Schema.Literal(1),
+	Schema.Literal(2),
+	Schema.Literal(3),
+	Schema.Literal(4),
+	Schema.Literal(5),
+	Schema.Literal(6)
+]);
+export type ExitCode = typeof ExitCode.Type;
 
-export type ExitCode = (typeof ExitCodes)[keyof typeof ExitCodes];
+export const ExitCodes = {
+	Ok: 0,
+	Runtime: 1,
+	Usage: 2,
+	AuthRequired: 3,
+	ConfirmationRequired: 4,
+	Conflict: 5,
+	Retryable: 6
+} as const satisfies Record<string, ExitCode>;

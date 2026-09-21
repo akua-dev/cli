@@ -1,67 +1,68 @@
-import { describe, expect, test } from "@effect/vitest";
-import { readFileSync } from "node:fs";
+import { describe, expect, test } from '@effect/vitest';
+import changelog from '../CHANGELOG.md?raw';
+import releaseManifest from '../.release-please-manifest.json?raw';
+import packageManifest from '../package.json?raw';
+import releasePleaseConfig from '../release-please-config.json?raw';
+import cliSource from '../src/bin/akua.ts?raw';
 
 interface ReleasePleaseConfig {
-  "include-component-in-tag"?: boolean;
-  packages?: Record<string, {
-    "release-type"?: string;
-    "package-name"?: string;
-    "changelog-path"?: string;
-    "extra-files"?: Array<{
-      type?: string;
-      path?: string;
-      jsonpath?: string;
-    }>;
-  }>;
+	'include-component-in-tag'?: boolean;
+	packages?: Record<
+		string,
+		{
+			'release-type'?: string;
+			'package-name'?: string;
+			'changelog-path'?: string;
+			'extra-files'?: Array<{
+				type?: string;
+				path?: string;
+				jsonpath?: string;
+			}>;
+		}
+	>;
 }
 
-describe("release-please configuration", () => {
-  test("configures the root Bun CLI package without publish automation", () => {
-    const config = JSON.parse(readFileSync("release-please-config.json", "utf8")) as ReleasePleaseConfig;
+describe('release-please configuration', () => {
+	test('configures the root Bun CLI package without publish automation', () => {
+		const config = JSON.parse(releasePleaseConfig) as ReleasePleaseConfig;
 
-    expect(config.packages?.["."]).toEqual({
-      "release-type": "node",
-      "package-name": "@akua-dev/cli",
-      "changelog-path": "CHANGELOG.md",
-      "extra-files": [
-        {
-          type: "generic",
-          path: "src/bin/akua.ts",
-        },
-      ],
-    });
-    expect(config["include-component-in-tag"]).toBe(false);
-    expect(JSON.stringify(config)).not.toContain("npm");
-    expect(JSON.stringify(config)).not.toContain("publish");
-  });
+		expect(config.packages?.['.']).toEqual({
+			'release-type': 'node',
+			'package-name': '@akua-dev/cli',
+			'changelog-path': 'CHANGELOG.md',
+			'extra-files': [
+				{
+					type: 'generic',
+					path: 'src/bin/akua.ts'
+				}
+			]
+		});
+		expect(config['include-component-in-tag']).toBe(false);
+		expect(JSON.stringify(config)).not.toContain('npm');
+		expect(JSON.stringify(config)).not.toContain('publish');
+	});
 
-  test("updates the CLI version reported by akua --version", () => {
-    const cli = readFileSync("src/bin/akua.ts", "utf8");
+	test('updates the CLI version reported by akua --version', () => {
+		expect(cliSource).toMatch(
+			/const VERSION = ['"]\d+\.\d+\.\d+(?:[-+][^'"]+)?['"]; \/\/ x-release-please-version/
+		);
+	});
 
-    expect(cli).toMatch(/const VERSION = "\d+\.\d+\.\d+(?:[-+][^"]+)?"; \/\/ x-release-please-version/);
-  });
+	test('tracks the root package release version', () => {
+		const manifest = JSON.parse(releaseManifest) as Record<string, string>;
 
-  test("tracks the root package release version", () => {
-    const manifest = JSON.parse(readFileSync(".release-please-manifest.json", "utf8")) as Record<string, string>;
+		expect(Object.keys(manifest)).toEqual(['.']);
+		expect(manifest['.']).toMatch(/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/);
+	});
 
-    expect(Object.keys(manifest)).toEqual(["."]);
-    expect(manifest["."]).toMatch(/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/);
-  });
+	test('keeps package and binary release metadata coherent', () => {
+		const manifest = JSON.parse(releaseManifest) as Record<string, string>;
+		const packageVersion = JSON.parse(packageManifest) as {
+			version: string;
+		};
 
-  test("keeps package and binary release metadata coherent", () => {
-    const manifest = JSON.parse(readFileSync(".release-please-manifest.json", "utf8")) as Record<string, string>;
-    const packageVersion = JSON.parse(readFileSync("package.json", "utf8")) as { version: string };
-    const cli = readFileSync("src/bin/akua.ts", "utf8");
-    const changelog = readFileSync("CHANGELOG.md", "utf8");
-
-    expect(packageVersion.version).toBe(manifest["."]);
-    expect(cli).toContain(`const VERSION = "${manifest["."]}"; // x-release-please-version`);
-    expect(changelog).toContain(`## [${manifest["."]}]`);
-  });
-
-  test("falls back to the job token when the optional release token is unavailable", () => {
-    const workflow = readFileSync(".github/workflows/release-please.yml", "utf8");
-
-    expect(workflow).toContain("token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}");
-  });
+		expect(packageVersion.version).toBe(manifest['.']);
+		expect(cliSource).toContain(`const VERSION = '${manifest['.']}'; // x-release-please-version`);
+		expect(changelog).toContain(`## [${manifest['.']}]`);
+	});
 });

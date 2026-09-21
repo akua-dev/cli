@@ -23,13 +23,18 @@ gate CI runs. Run it before opening a PR.
 
 ## Command generation
 
-The command surface is generated from the public source of truth,
-`https://api.akua.dev/v1/openapi.json`:
+The command surface is generated from cnap's committed public OpenAPI document,
+`docs/openapi-public.json` (produced in-graph by
+`//packages/sdks/toolchain:generate_all` and drift-gated with the SDKs). There is
+no weekly production fetch.
 
 ```sh
-mise run spec:fetch       # fetch and stably format openapi/public.json
-mise run generate         # regenerate the command registry and typed API bindings
-mise run generate:check   # fail if committed generated output has drifted
+# From the cnap repository root:
+bazel run //tools/cli:write_generated   # regenerate CLI .gen.ts from docs/openapi-public.json
+bazel test //:sdk_generated_drift_test  # fail if committed generated output has drifted
+# Or via mise from tools/cli/source:
+mise run generate
+mise run generate:check
 ```
 
 Generation is deterministic and operationId-driven; only operations marked
@@ -37,7 +42,7 @@ Generation is deterministic and operationId-driven; only operations marked
 operationId. The generated outputs are `src/generated/commands.gen.ts`,
 `src/generated/openapi-api.gen.ts`, and
 `src/generated/public-operation-executor.gen.ts`. Never hand-edit generated
-files; run `mise run generate` and commit the result.
+files; run `bazel run //tools/cli:write_generated` and commit the result.
 
 See [docs/architecture.md](docs/architecture.md) for the full command
 derivation rules, the API/auth/config model, output modes, exit codes, and

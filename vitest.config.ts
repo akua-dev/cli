@@ -1,4 +1,5 @@
-import { defineConfig } from "vitest/config";
+import { Schema } from 'effect';
+import { defineConfig } from 'vitest/config';
 
 /**
  * Vitest replaces `bun test` as this package's test runner. Effect is this
@@ -8,10 +9,12 @@ import { defineConfig } from "vitest/config";
  * (`bun run test` -> `vitest run`), so `Bun.spawn` and other Bun globals used
  * by process-boundary tests remain available.
  */
+const TestInclude = Schema.Array(Schema.String);
+
 export default defineConfig({
-  test: {
-    include: ["test/**/*.test.ts"],
-    environment: "node",
-    testTimeout: 30_000,
-  },
+	test: {
+		include: Schema.decodeUnknownSync(TestInclude)(['test/**/*.test.ts']),
+		environment: 'node',
+		testTimeout: 30_000
+	}
 });

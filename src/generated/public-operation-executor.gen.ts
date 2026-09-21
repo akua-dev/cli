@@ -181,6 +181,8 @@ export type PublicOperationId =
   | "registry.createCredential"
   | "registry.deleteCredential"
   | "registry.listCredentials"
+  | "repositories.create"
+  | "repositories.createToken"
   | "repositories.get"
   | "repositories.list"
   | "repositoryChangeRequests.accept"
@@ -434,6 +436,8 @@ export interface PublicOperationEffectMap {
   readonly "registry.createCredential": WithCommandFailure<ReturnType<PublicApiClientValue["client"]["Registry"]["registryCreateCredential"]>>;
   readonly "registry.deleteCredential": WithCommandFailure<ReturnType<PublicApiClientValue["client"]["Registry"]["registryDeleteCredential"]>>;
   readonly "registry.listCredentials": WithCommandFailure<ReturnType<PublicApiClientValue["client"]["Registry"]["registryListCredentials"]>>;
+  readonly "repositories.create": WithCommandFailure<ReturnType<PublicApiClientValue["client"]["Repositories"]["repositoriesCreate"]>>;
+  readonly "repositories.createToken": WithCommandFailure<ReturnType<PublicApiClientValue["client"]["Repositories"]["repositoriesCreateToken"]>>;
   readonly "repositories.get": WithCommandFailure<ReturnType<PublicApiClientValue["client"]["Repositories"]["repositoriesGet"]>>;
   readonly "repositories.list": WithCommandFailure<ReturnType<PublicApiClientValue["client"]["Repositories"]["repositoriesList"]>>;
   readonly "repositoryChangeRequests.accept": WithCommandFailure<ReturnType<PublicApiClientValue["client"]["Repository change requests"]["repositoryChangeRequestsAccept"]>>;
@@ -2001,14 +2005,18 @@ function executeOperation(
     case "entitlements.list":
       return Effect.gen(function* () {
         const input = yield* Schema.decodeUnknownEffect(
-          Schema.Struct({ query: Schema.optionalKey(Schema.Unknown) }),
+          Schema.Struct({ query: Schema.optionalKey(Schema.Unknown), headers: Schema.optionalKey(Schema.Unknown) }),
           strictParseOptions,
         )(rawInput);
         const query = yield* atEnvelopeKey("query", Schema.decodeUnknownEffect(
           Api.EntitlementsListQuery,
           strictParseOptions,
         )(input.query ?? {}));
-        const value = yield* executeClientOperation(client, client.client["Entitlements"]["entitlementsList"]({ query }));
+        const headers = yield* atEnvelopeKey("headers", Schema.decodeUnknownEffect(
+          Api.EntitlementsListHeaders,
+          strictParseOptions,
+        )(input.headers ?? {}));
+        const value = yield* executeClientOperation(client, client.client["Entitlements"]["entitlementsList"]({ query, headers }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
     case "installs.create":
@@ -2700,7 +2708,7 @@ function executeOperation(
     case "operations.wait":
       return Effect.gen(function* () {
         const input = yield* Schema.decodeUnknownEffect(
-          Schema.Struct({ path: Schema.optionalKey(Schema.Unknown), query: Schema.optionalKey(Schema.Unknown) }),
+          Schema.Struct({ path: Schema.optionalKey(Schema.Unknown), query: Schema.optionalKey(Schema.Unknown), headers: Schema.optionalKey(Schema.Unknown) }),
           strictParseOptions,
         )(rawInput);
         const path = yield* atEnvelopeKey("path", Schema.decodeUnknownEffect(
@@ -2711,7 +2719,11 @@ function executeOperation(
           Api.OperationsWaitQuery,
           strictParseOptions,
         )(input.query ?? {}));
-        const value = yield* executeClientOperation(client, client.client["Operations"]["operationsWait"]({ params: path, query }));
+        const headers = yield* atEnvelopeKey("headers", Schema.decodeUnknownEffect(
+          Api.OperationsWaitHeaders,
+          strictParseOptions,
+        )(input.headers ?? {}));
+        const value = yield* executeClientOperation(client, client.client["Operations"]["operationsWait"]({ params: path, query, headers }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
     case "orderDrafts.cancel":
@@ -3704,6 +3716,48 @@ function executeOperation(
         const value = yield* executeClientOperation(client, client.client["Registry"]["registryListCredentials"]({ query, headers }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
+    case "repositories.create":
+      return Effect.gen(function* () {
+        const input = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ headers: Schema.optionalKey(Schema.Unknown), body: Schema.optionalKey(Schema.Unknown) }),
+          strictParseOptions,
+        )(rawInput);
+        const headers = yield* atEnvelopeKey("headers", Schema.decodeUnknownEffect(
+          Api.RepositoriesCreateHeaders,
+          strictParseOptions,
+        )(input.headers ?? {}));
+        const payload = input.body === undefined
+          ? undefined
+          : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
+          Api.RepositoriesCreateRequestJson,
+          strictParseOptions,
+        )(input.body));
+        const value = yield* executeClientOperation(client, client.client["Repositories"]["repositoriesCreate"]({ headers, payload }));
+        return mode === "raw" ? value : { _tag: "Value", value };
+      });
+    case "repositories.createToken":
+      return Effect.gen(function* () {
+        const input = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ path: Schema.optionalKey(Schema.Unknown), headers: Schema.optionalKey(Schema.Unknown), body: Schema.optionalKey(Schema.Unknown) }),
+          strictParseOptions,
+        )(rawInput);
+        const path = yield* atEnvelopeKey("path", Schema.decodeUnknownEffect(
+          Api.RepositoriesCreateTokenPathParams,
+          strictParseOptions,
+        )(input.path ?? {}));
+        const headers = yield* atEnvelopeKey("headers", Schema.decodeUnknownEffect(
+          Api.RepositoriesCreateTokenHeaders,
+          strictParseOptions,
+        )(input.headers ?? {}));
+        const payload = input.body === undefined
+          ? undefined
+          : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
+          Api.RepositoriesCreateTokenRequestJson,
+          strictParseOptions,
+        )(input.body));
+        const value = yield* executeClientOperation(client, client.client["Repositories"]["repositoriesCreateToken"]({ params: path, headers, payload }));
+        return mode === "raw" ? value : { _tag: "Value", value };
+      });
     case "repositories.get":
       return Effect.gen(function* () {
         const input = yield* Schema.decodeUnknownEffect(
@@ -4567,18 +4621,22 @@ function executeOperation(
     case "workspaces.listMembers":
       return Effect.gen(function* () {
         const input = yield* Schema.decodeUnknownEffect(
-          Schema.Struct({ path: Schema.optionalKey(Schema.Unknown), headers: Schema.optionalKey(Schema.Unknown) }),
+          Schema.Struct({ path: Schema.optionalKey(Schema.Unknown), query: Schema.optionalKey(Schema.Unknown), headers: Schema.optionalKey(Schema.Unknown) }),
           strictParseOptions,
         )(rawInput);
         const path = yield* atEnvelopeKey("path", Schema.decodeUnknownEffect(
           Api.WorkspacesListMembersPathParams,
           strictParseOptions,
         )(input.path ?? {}));
+        const query = yield* atEnvelopeKey("query", Schema.decodeUnknownEffect(
+          Api.WorkspacesListMembersQuery,
+          strictParseOptions,
+        )(input.query ?? {}));
         const headers = yield* atEnvelopeKey("headers", Schema.decodeUnknownEffect(
           Api.WorkspacesListMembersHeaders,
           strictParseOptions,
         )(input.headers ?? {}));
-        const value = yield* executeClientOperation(client, client.client["Workspaces"]["workspacesListMembers"]({ params: path, headers }));
+        const value = yield* executeClientOperation(client, client.client["Workspaces"]["workspacesListMembers"]({ params: path, query, headers }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
     case "workspaces.listSubscriptionChangeRequests":

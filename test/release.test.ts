@@ -1,1049 +1,890 @@
-import { describe, expect, it, test } from "@effect/vitest";
-// This file's remaining node:fs/promises and node:path imports (below) are
-// deliberate: they build/inspect ~20 independent temp-directory fixtures
-// around the production release pipeline (writing fake binaries and
-// package.json manifests, then reading packaged output back out for
-// assertions). They never exercise release-host-live.ts's own FileSystem
-// service — converting them would mean rewriting every test in this
-// describe block into an Effect.gen body for no behavior-relevant gain, since
-// none of this is part of the Effect pipeline under test. This matches the
-// "process-boundary test helper" carve-out already documented in
-// AGENTS.md/skills/effect-v4/SKILL.md for test/. Where a call *does*
-// independently exercise the same class of host API the production code
-// under test now uses (subprocess spawn, SHA-256 hashing, sleeping,
-// existence checks), it's routed through Effect below instead.
+import { describe, expect, it, test } from '@effect/vitest';
+// Temp-directory fixtures for the release pipeline go through ./fs-test
+// (Effect FileSystem + BunServices) so this suite stays off node:builtins.
 import {
-  chmod,
-  copyFile,
-  mkdir,
-  mkdtemp,
-  readFile,
-  rm,
-  stat,
-  symlink,
-  writeFile,
-} from "node:fs/promises";
-import { parse, join } from "node:path";
-import { NodeServices } from "@effect/platform-node";
-import { Console, Crypto, Effect, FileSystem, Layer } from "effect";
-import { Command } from "effect/unstable/cli";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+	chmodPath,
+	copyFilePath,
+	joinPath,
+	mkdirp,
+	mkdtempPath,
+	parsePath,
+	readFileString,
+	removePath,
+	statMode,
+	symlinkPath,
+	writeFileString
+} from './fs-test';
+import { BunServices } from '@effect/platform-bun';
+import { Console, Crypto, Effect, FileSystem, Layer } from 'effect';
+import { Command } from 'effect/unstable/cli';
+import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 
-import { RELEASE_TARGETS, releaseCommand } from "../scripts/release";
-import { bytesToHex, ReleaseHost } from "../scripts/runtime/release-services";
-import { ReleaseHostLive } from "../scripts/runtime/release-host-live";
-import { cliTestLayer } from "./cli-test-layer";
+import { RELEASE_TARGETS, releaseCommand } from '../scripts/release';
+import { bytesToHex, ReleaseHost } from '../scripts/runtime/release-services';
+import { ReleaseHostLive } from '../scripts/runtime/release-host-live';
+import { cliTestLayer } from './cli-test-layer';
 
-function runRelease<A, E>(
-  program: Effect.Effect<A, E, ReleaseHost>,
-): Promise<A> {
-  return Effect.runPromise(Effect.provide(program, ReleaseHostLive));
+function runRelease<A, E>(program: Effect.Effect<A, E, ReleaseHost>): Promise<A> {
+	return Effect.runPromise(Effect.provide(program, ReleaseHostLive));
 }
 
 // Shared runner for the handful of independent-oracle/verification host
 // calls below that do have a real Effect equivalent (crypto digest,
 // subprocess spawn, file existence).
-function runNode<A, E>(
-  effect: Effect.Effect<A, E, NodeServices.NodeServices>,
-): Promise<A> {
-  return Effect.runPromise(Effect.provide(effect, NodeServices.layer));
+function runNode<A, E>(effect: Effect.Effect<A, E>): Promise<A> {
+	return Effect.runPromise(Effect.provide(effect, BunServices.layer));
 }
 
 function sha256Oracle(bytes: Uint8Array): Promise<string> {
-  return runNode(
-    Effect.gen(function* () {
-      const crypto = yield* Crypto.Crypto;
-      const digest = yield* crypto.digest("SHA-256", bytes);
-      return bytesToHex(digest);
-    }),
-  );
+	return runNode(
+		Effect.gen(function* () {
+			const crypto = yield* Crypto.Crypto;
+			const digest = yield* crypto.digest('SHA-256', bytes);
+			return bytesToHex(digest);
+		})
+	);
 }
 
 function fileExists(path: string): Promise<boolean> {
-  return runNode(Effect.flatMap(FileSystem.FileSystem, (fs) => fs.exists(path)));
+	return runNode(Effect.flatMap(FileSystem.FileSystem, (fs) => fs.exists(path)));
 }
 
-function extractTarSync(
-  archivePath: string,
-  extractDir: string,
-): Promise<{ status: number }> {
-  return runNode(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-        const handle = yield* spawner.spawn(
-          ChildProcess.make("tar", ["-xzf", archivePath, "-C", extractDir]),
-        );
-        const exitCode = yield* handle.exitCode;
-        return { status: exitCode };
-      }),
-    ),
-  );
+function extractTarSync(archivePath: string, extractDir: string): Promise<{ status: number }> {
+	return runNode(
+		Effect.scoped(
+			Effect.gen(function* () {
+				const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+				const handle = yield* spawner.spawn(
+					ChildProcess.make('tar', ['-xzf', archivePath, '-C', extractDir])
+				);
+				const exitCode = yield* handle.exitCode;
+				return { status: exitCode };
+			})
+		)
+	);
 }
 
 async function makeReleaseTempDir(): Promise<string> {
-  const releaseRoot = join(process.cwd(), "dist", "release");
-  await mkdir(releaseRoot, { recursive: true });
-  return mkdtemp(join(releaseRoot, ".tmp-akua-release-"));
+	const releaseRoot = joinPath(process.cwd(), 'dist', 'release');
+	await mkdirp(releaseRoot);
+	return await mkdtempPath('.tmp-akua-release-');
 }
 
 async function makePackageRuntimeFixture(root: string): Promise<string> {
-  const packageRoot = join(root, "runtime-packages");
-  const packages = [
-    {
-      packageName: "native",
-      files: ["index.js", "loader.js", "index.d.ts", "extra-runtime.txt"],
-    },
-    {
-      packageName: "native-engines",
-      files: ["index.js", "helm-engine.wasm", "kustomize-engine.wasm"],
-    },
-    {
-      // Real @akua-dev/sdk declares a directory entry ("dist") rather than
-      // a flat file list, unlike native/native-engines — this exercises
-      // directory expansion in packageManifestFiles.
-      packageName: "sdk",
-      files: ["dist", "README.md"],
-    },
-  ];
-  for (const runtimePackage of packages) {
-    const { packageName, files } = runtimePackage;
-    const directory = join(packageRoot, packageName);
-    await mkdir(directory, { recursive: true });
-    await writeFile(
-      join(directory, "package.json"),
-      `${JSON.stringify({ name: `@akua-dev/${packageName}`, files })}\n`,
-    );
-    for (const file of files) {
-      if (packageName === "sdk" && file === "dist") {
-        await mkdir(join(directory, "dist"), { recursive: true });
-        await writeFile(join(directory, "dist", "mod.js"), "sdk/dist/mod.js\n");
-        await writeFile(
-          join(directory, "dist", "execute.js"),
-          "sdk/dist/execute.js\n",
-        );
-        continue;
-      }
-      await writeFile(join(directory, file), `${packageName}/${file}\n`);
-    }
-  }
-  for (const target of RELEASE_TARGETS) {
-    const directory = join(packageRoot, target.bindingPackage);
-    const bindingFile = `akua.${target.bindingPackage.slice("native-".length)}.node`;
-    await mkdir(directory, { recursive: true });
-    await writeFile(
-      join(directory, "package.json"),
-      `${JSON.stringify({ main: bindingFile })}\n`,
-    );
-    await writeFile(
-      join(directory, bindingFile),
-      `${target.bindingPackage}/${bindingFile}\n`,
-    );
-  }
-  return packageRoot;
+	const packageRoot = joinPath(root, 'runtime-packages');
+	const packages = [
+		{
+			packageName: 'native',
+			files: ['index.js', 'loader.js', 'index.d.ts', 'extra-runtime.txt']
+		},
+		{
+			packageName: 'native-engines',
+			files: ['index.js', 'helm-engine.wasm', 'kustomize-engine.wasm']
+		},
+		{
+			// Real @akua-dev/sdk declares a directory entry ("dist") rather than
+			// a flat file list, unlike native/native-engines — this exercises
+			// directory expansion in packageManifestFiles.
+			packageName: 'sdk',
+			files: ['dist', 'README.md']
+		}
+	];
+	for (const runtimePackage of packages) {
+		const { packageName, files } = runtimePackage;
+		const directory = joinPath(packageRoot, packageName);
+		await mkdirp(directory);
+		await writeFileString(
+			joinPath(directory, 'package.json'),
+			`${JSON.stringify({ name: `@akua-dev/${packageName}`, files })}\n`
+		);
+		for (const file of files) {
+			if (packageName === 'sdk' && file === 'dist') {
+				await mkdirp(joinPath(directory, 'dist'));
+				await writeFileString(joinPath(directory, 'dist', 'mod.js'), 'sdk/dist/mod.js\n');
+				await writeFileString(joinPath(directory, 'dist', 'execute.js'), 'sdk/dist/execute.js\n');
+				continue;
+			}
+			await writeFileString(joinPath(directory, file), `${packageName}/${file}\n`);
+		}
+	}
+	for (const target of RELEASE_TARGETS) {
+		const directory = joinPath(packageRoot, target.bindingPackage);
+		const bindingFile = `akua.${target.bindingPackage.slice('native-'.length)}.node`;
+		await mkdirp(directory);
+		await writeFileString(
+			joinPath(directory, 'package.json'),
+			`${JSON.stringify({ main: bindingFile })}\n`
+		);
+		await writeFileString(
+			joinPath(directory, bindingFile),
+			`${target.bindingPackage}/${bindingFile}\n`
+		);
+	}
+	return packageRoot;
 }
 
-test("release packaging has a dedicated implementation module", async () => {
-  expect(await fileExists("scripts/release.ts")).toBe(true);
+test('release packaging has a dedicated implementation module', async () => {
+	expect(await fileExists('scripts/release.ts')).toBe(true);
 });
 
-test("keeps exported release contract helpers free of host APIs", async () => {
-  const helpers = await readFile("scripts/runtime/release-services.ts", "utf8");
+test('keeps exported release contract helpers free of host APIs', async () => {
+	const helpers = await readFileString('scripts/runtime/release-services.ts');
 
-  expect(helpers).not.toContain('from "node:crypto"');
-  expect(helpers).not.toContain("process.platform");
-  expect(helpers).not.toContain("process.arch");
-  expect(await fileExists("scripts/runtime/release-host-live.ts")).toBe(true);
+	expect(helpers).not.toContain('from "node:crypto"');
+	expect(helpers).not.toContain('process.platform');
+	expect(helpers).not.toContain('process.arch');
+	expect(await fileExists('scripts/runtime/release-host-live.ts')).toBe(true);
 });
 
-describe("release target contract", () => {
-  it.effect("renders the release matrix as JSON through the matrix subcommand", () =>
-    Effect.gen(function* () {
-      const stdout: string[] = [];
-      const testConsole = Object.assign(Object.create(console), {
-        log: (value: string) => stdout.push(value),
-      }) as Console.Console;
+describe('release target contract', () => {
+	it.effect('renders the release matrix as JSON through the matrix subcommand', () =>
+		Effect.gen(function* () {
+			const stdout: string[] = [];
+			const testConsole = Object.assign(Object.create(console), {
+				log: (value: string) => stdout.push(value)
+			}) as Console.Console;
 
-      yield* Command.runWith(releaseCommand, { version: "test" })(["matrix"]).pipe(
-        Effect.provide(Layer.mergeAll(cliTestLayer, ReleaseHostLive)),
-        Effect.provideService(Console.Console, testConsole),
-      );
+			yield* Command.runWith(releaseCommand, { version: 'test' })(['matrix']).pipe(
+				Effect.provide(Layer.mergeAll(cliTestLayer, ReleaseHostLive)),
+				Effect.provideService(Console.Console, testConsole)
+			);
 
-      expect(JSON.parse(stdout.join("\n"))).toEqual({
-        include: RELEASE_TARGETS.map((target) => ({
-          target: target.id,
-          runner: target.runner,
-        })),
-      });
-    }),
-  );
+			expect(JSON.parsePath(stdout.joinPath('\n'))).toEqual({
+				include: RELEASE_TARGETS.map((target) => ({
+					target: target.id,
+					runner: target.runner
+				}))
+			});
+		})
+	);
 
-  test("public release operations require ReleaseHost and never provide its live layer", async () => {
-    const release = await import("../scripts/release");
-    const source = await readFile("scripts/release.ts", "utf8");
-    const publicApi = source.slice(0, source.indexOf("if (import.meta.main)"));
-    const program: Effect.Effect<void, Error, ReleaseHost> =
-      release.assertSafeOutputDirectory(join(process.cwd(), "dist", "release"));
+	test('public release operations require ReleaseHost and never provide its live layer', async () => {
+		const release = await import('../scripts/release');
+		const source = await readFileString('scripts/release.ts');
+		const publicApi = source.slice(0, source.indexOf('if (import.meta.main)'));
+		const program: Effect.Effect<void, Error, ReleaseHost> = release.assertSafeOutputDirectory(
+			joinPath(process.cwd(), 'dist', 'release')
+		);
 
-    expect(program).toBeDefined();
-    expect(publicApi).not.toContain("Effect.provide(ReleaseHostLive)");
-  });
+		expect(program).toBeDefined();
+		expect(publicApi).not.toContain('Effect.provide(ReleaseHostLive)');
+	});
 
-  test("exposes local package, verify, and smoke tasks without publishing a package", async () => {
-    const packageJson = JSON.parse(await readFile("package.json", "utf8"));
-    const mise = await readFile("mise.toml", "utf8");
+	test('exposes local package, verify, and smoke tasks without publishing a package', async () => {
+		const packageJson = JSON.parsePath(await readFileString('package.json'));
+		const mise = await readFileString('mise.toml');
 
-    expect(packageJson.scripts["release:package"]).toContain(
-      "scripts/release.ts package",
-    );
-    expect(packageJson.scripts["release:verify"]).toContain(
-      "scripts/release.ts verify",
-    );
-    expect(packageJson.scripts["release:smoke"]).toContain(
-      "scripts/release.ts smoke",
-    );
-    expect(JSON.stringify(packageJson.scripts)).not.toContain("publish");
-    expect(mise).toContain('[tasks."release:package"]');
-    expect(mise).toContain('[tasks."release:smoke"]');
-  });
+		expect(packageJson.scripts['release:package']).toContain('scripts/release.ts package');
+		expect(packageJson.scripts['release:verify']).toContain('scripts/release.ts verify');
+		expect(packageJson.scripts['release:smoke']).toContain('scripts/release.ts smoke');
+		expect(JSON.stringify(packageJson.scripts)).not.toContain('publish');
+		expect(mise).toContain('[tasks."release:package"]');
+		expect(mise).toContain('[tasks."release:smoke"]');
+	});
 
-  test("defines the five tested Bun targets in stable order", async () => {
-    const release = (await import("../scripts/release")) as Record<
-      string,
-      unknown
-    >;
+	test('defines the five tested Bun targets in stable order', async () => {
+		const release = (await import('../scripts/release')) as Record<string, unknown>;
 
-    expect(release.RELEASE_TARGETS).toEqual([
-      {
-        id: "darwin-arm64",
-        bunTarget: "bun-darwin-arm64",
-        os: "darwin",
-        arch: "arm64",
-        archive: "tar.gz",
-        executable: "akua",
-        bindingPackage: "native-darwin-arm64",
-        runner: "macos-15",
-        homebrew: { os: "macos", arch: "arm" },
-      },
-      {
-        id: "darwin-x64",
-        bunTarget: "bun-darwin-x64",
-        os: "darwin",
-        arch: "x64",
-        archive: "tar.gz",
-        executable: "akua",
-        bindingPackage: "native-darwin-x64",
-        runner: "macos-15-intel",
-        homebrew: { os: "macos", arch: "intel" },
-      },
-      {
-        id: "linux-arm64",
-        bunTarget: "bun-linux-arm64",
-        os: "linux",
-        arch: "arm64",
-        archive: "tar.gz",
-        executable: "akua",
-        bindingPackage: "native-linux-arm64-gnu",
-        runner: "ubuntu-24.04-arm",
-        homebrew: { os: "linux", arch: "arm" },
-      },
-      {
-        id: "linux-x64",
-        bunTarget: "bun-linux-x64-baseline",
-        os: "linux",
-        arch: "x64",
-        archive: "tar.gz",
-        executable: "akua",
-        bindingPackage: "native-linux-x64-gnu",
-        runner: "ubuntu-24.04",
-        homebrew: { os: "linux", arch: "intel" },
-      },
-      {
-        id: "windows-x64",
-        bunTarget: "bun-windows-x64-baseline",
-        os: "windows",
-        arch: "x64",
-        archive: "zip",
-        executable: "akua.exe",
-        bindingPackage: "native-win32-x64-msvc",
-        runner: "windows-2025",
-      },
-    ]);
-  });
+		expect(release.RELEASE_TARGETS).toEqual([
+			{
+				id: 'darwin-arm64',
+				bunTarget: 'bun-darwin-arm64',
+				os: 'darwin',
+				arch: 'arm64',
+				archive: 'tar.gz',
+				executable: 'akua',
+				bindingPackage: 'native-darwin-arm64',
+				runner: 'macos-15',
+				homebrew: { os: 'macos', arch: 'arm' }
+			},
+			{
+				id: 'darwin-x64',
+				bunTarget: 'bun-darwin-x64',
+				os: 'darwin',
+				arch: 'x64',
+				archive: 'tar.gz',
+				executable: 'akua',
+				bindingPackage: 'native-darwin-x64',
+				runner: 'macos-15-intel',
+				homebrew: { os: 'macos', arch: 'intel' }
+			},
+			{
+				id: 'linux-arm64',
+				bunTarget: 'bun-linux-arm64',
+				os: 'linux',
+				arch: 'arm64',
+				archive: 'tar.gz',
+				executable: 'akua',
+				bindingPackage: 'native-linux-arm64-gnu',
+				runner: 'ubuntu-24.04-arm',
+				homebrew: { os: 'linux', arch: 'arm' }
+			},
+			{
+				id: 'linux-x64',
+				bunTarget: 'bun-linux-x64-baseline',
+				os: 'linux',
+				arch: 'x64',
+				archive: 'tar.gz',
+				executable: 'akua',
+				bindingPackage: 'native-linux-x64-gnu',
+				runner: 'ubuntu-24.04',
+				homebrew: { os: 'linux', arch: 'intel' }
+			},
+			{
+				id: 'windows-x64',
+				bunTarget: 'bun-windows-x64-baseline',
+				os: 'windows',
+				arch: 'x64',
+				archive: 'zip',
+				executable: 'akua.exe',
+				bindingPackage: 'native-win32-x64-msvc',
+				runner: 'windows-2025'
+			}
+		]);
+	});
 
-  test("derives the GitHub Actions matrix from the release target contract", async () => {
-    const release = (await import("../scripts/release")) as Record<
-      string,
-      unknown
-    >;
-    const releaseMatrix = release.releaseMatrix as () => {
-      include: Array<{ target: string; runner: string }>;
-    };
+	test('derives the GitHub Actions matrix from the release target contract', async () => {
+		const release = (await import('../scripts/release')) as Record<string, unknown>;
+		const releaseMatrix = release.releaseMatrix as () => {
+			include: Array<{ target: string; runner: string }>;
+		};
 
-    expect(releaseMatrix()).toEqual({
-      include: [
-        { target: "darwin-arm64", runner: "macos-15" },
-        { target: "darwin-x64", runner: "macos-15-intel" },
-        { target: "linux-arm64", runner: "ubuntu-24.04-arm" },
-        { target: "linux-x64", runner: "ubuntu-24.04" },
-        { target: "windows-x64", runner: "windows-2025" },
-      ],
-    });
-  });
+		expect(releaseMatrix()).toEqual({
+			include: [
+				{ target: 'darwin-arm64', runner: 'macos-15' },
+				{ target: 'darwin-x64', runner: 'macos-15-intel' },
+				{ target: 'linux-arm64', runner: 'ubuntu-24.04-arm' },
+				{ target: 'linux-x64', runner: 'ubuntu-24.04' },
+				{ target: 'windows-x64', runner: 'windows-2025' }
+			]
+		});
+	});
 
-  test("derives versioned archive and checksum names", async () => {
-    const release = (await import("../scripts/release")) as Record<
-      string,
-      unknown
-    >;
-    const targets = release.RELEASE_TARGETS as Array<{
-      id: string;
-      archive: string;
-    }>;
-    const artifactName = release.artifactName as (
-      version: string,
-      target: { id: string; archive: string },
-    ) => string;
+	test('derives versioned archive and checksum names', async () => {
+		const release = (await import('../scripts/release')) as Record<string, unknown>;
+		const targets = release.RELEASE_TARGETS as Array<{
+			id: string;
+			archive: string;
+		}>;
+		const artifactName = release.artifactName as (
+			version: string,
+			target: { id: string; archive: string }
+		) => string;
 
-    expect(targets.map((target) => artifactName("1.2.3", target))).toEqual([
-      "akua-v1.2.3-darwin-arm64.tar.gz",
-      "akua-v1.2.3-darwin-x64.tar.gz",
-      "akua-v1.2.3-linux-arm64.tar.gz",
-      "akua-v1.2.3-linux-x64.tar.gz",
-      "akua-v1.2.3-windows-x64.zip",
-    ]);
-  });
+		expect(targets.map((target) => artifactName('1.2.3', target))).toEqual([
+			'akua-v1.2.3-darwin-arm64.tar.gz',
+			'akua-v1.2.3-darwin-x64.tar.gz',
+			'akua-v1.2.3-linux-arm64.tar.gz',
+			'akua-v1.2.3-linux-x64.tar.gz',
+			'akua-v1.2.3-windows-x64.zip'
+		]);
+	});
 
-  test("renders standard SHA-256 checksum lines", async () => {
-    const release = (await import("../scripts/release")) as Record<
-      string,
-      unknown
-    >;
-    const sha256 = release.sha256 as (
-      bytes: Uint8Array,
-    ) => Effect.Effect<string, Error, ReleaseHost>;
-    const checksumLine = release.checksumLine as (
-      name: string,
-      digest: string,
-    ) => string;
-    const bytes = new TextEncoder().encode("akua\n");
-    const digest = await sha256Oracle(bytes);
+	test('renders standard SHA-256 checksum lines', async () => {
+		const release = (await import('../scripts/release')) as Record<string, unknown>;
+		const sha256 = release.sha256 as (
+			bytes: Uint8Array
+		) => Effect.Effect<string, Error, ReleaseHost>;
+		const checksumLine = release.checksumLine as (name: string, digest: string) => string;
+		const bytes = new TextEncoder().encode('akua\n');
+		const digest = await sha256Oracle(bytes);
 
-    expect(await runRelease(sha256(bytes))).toBe(digest);
-    expect(checksumLine("akua-v1.2.3-linux-x64.tar.gz", digest)).toBe(
-      `${digest}  akua-v1.2.3-linux-x64.tar.gz\n`,
-    );
-  });
+		expect(await runRelease(sha256(bytes))).toBe(digest);
+		expect(checksumLine('akua-v1.2.3-linux-x64.tar.gz', digest)).toBe(
+			`${digest}  akua-v1.2.3-linux-x64.tar.gz\n`
+		);
+	});
 
-  test("rejects zero-filled compiled outputs before release packaging", async () => {
-    const release = (await import("../scripts/release")) as Record<
-      string,
-      unknown
-    >;
-    const assertCompiledExecutable = release.assertCompiledExecutable as (
-      target: { id: string; os: "darwin" | "linux" | "windows" },
-      bytes: Uint8Array,
-    ) => Effect.Effect<void, Error>;
+	test('rejects zero-filled compiled outputs before release packaging', async () => {
+		const release = (await import('../scripts/release')) as Record<string, unknown>;
+		const assertCompiledExecutable = release.assertCompiledExecutable as (
+			target: { id: string; os: 'darwin' | 'linux' | 'windows' },
+			bytes: Uint8Array
+		) => Effect.Effect<void, Error>;
 
-    expect(() =>
-      Effect.runSync(
-        assertCompiledExecutable(
-          { id: "linux-x64", os: "linux" },
-          new Uint8Array(64),
-        ),
-      ),
-    ).toThrow("invalid linux header");
-    expect(() =>
-      Effect.runSync(
-        assertCompiledExecutable(
-          { id: "linux-x64", os: "linux" },
-          new Uint8Array([0x7f, 0x45, 0x4c, 0x46]),
-        ),
-      ),
-    ).not.toThrow();
-  });
+		expect(() =>
+			Effect.runSync(assertCompiledExecutable({ id: 'linux-x64', os: 'linux' }, new Uint8Array(64)))
+		).toThrow('invalid linux header');
+		expect(() =>
+			Effect.runSync(
+				assertCompiledExecutable(
+					{ id: 'linux-x64', os: 'linux' },
+					new Uint8Array([0x7f, 0x45, 0x4c, 0x46])
+				)
+			)
+		).not.toThrow();
+	});
 
-  test("plans uploads for only release assets missing from an identical existing subset", async () => {
-    const release = (await import("../scripts/release")) as Record<
-      string,
-      unknown
-    >;
-    expect(typeof release.planReleaseUploads).toBe("function");
-    if (typeof release.planReleaseUploads !== "function") {
-      return;
-    }
-    const planReleaseUploads = release.planReleaseUploads as (
-      candidateDir: string,
-      existingDir: string,
-      version: string,
-    ) => Effect.Effect<string[], Error>;
-    const releaseAssetNames = release.releaseAssetNames as (
-      version: string,
-    ) => Effect.Effect<string[], Error>;
-    const root = await makeReleaseTempDir();
+	test('plans uploads for only release assets missing from an identical existing subset', async () => {
+		const release = (await import('../scripts/release')) as Record<string, unknown>;
+		expect(typeof release.planReleaseUploads).toBe('function');
+		if (typeof release.planReleaseUploads !== 'function') {
+			return;
+		}
+		const planReleaseUploads = release.planReleaseUploads as (
+			candidateDir: string,
+			existingDir: string,
+			version: string
+		) => Effect.Effect<string[], Error>;
+		const releaseAssetNames = release.releaseAssetNames as (
+			version: string
+		) => Effect.Effect<string[], Error>;
+		const root = await makeReleaseTempDir();
 
-    try {
-      const candidateDir = join(root, "candidate");
-      const existingDir = join(root, "existing");
-      const assetNames = Effect.runSync(releaseAssetNames("1.2.3"));
-      await mkdir(candidateDir);
-      await mkdir(existingDir);
-      for (const name of assetNames) {
-        await writeFile(join(candidateDir, name), `candidate ${name}\n`);
-      }
-      await copyFile(
-        join(candidateDir, assetNames[0]),
-        join(existingDir, assetNames[0]),
-      );
-      await copyFile(
-        join(candidateDir, assetNames[4]),
-        join(existingDir, assetNames[4]),
-      );
+		try {
+			const candidateDir = joinPath(root, 'candidate');
+			const existingDir = joinPath(root, 'existing');
+			const assetNames = Effect.runSync(releaseAssetNames('1.2.3'));
+			await mkdirp(candidateDir);
+			await mkdirp(existingDir);
+			for (const name of assetNames) {
+				await writeFileString(joinPath(candidateDir, name), `candidate ${name}\n`);
+			}
+			await copyFilePath(
+				joinPath(candidateDir, assetNames[0]),
+				joinPath(existingDir, assetNames[0])
+			);
+			await copyFilePath(
+				joinPath(candidateDir, assetNames[4]),
+				joinPath(existingDir, assetNames[4])
+			);
 
-      expect(
-        await runRelease(planReleaseUploads(candidateDir, existingDir, "1.2.3")),
-      ).toEqual(
-        assetNames
-          .filter((_, index) => index !== 0 && index !== 4)
-          .map((name) => join(candidateDir, name)),
-      );
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
+			expect(await runRelease(planReleaseUploads(candidateDir, existingDir, '1.2.3'))).toEqual(
+				assetNames
+					.filter((_, index) => index !== 0 && index !== 4)
+					.map((name) => joinPath(candidateDir, name))
+			);
+		} finally {
+			await removePath(root, { recursive: true, force: true });
+		}
+	});
 
-  test("rejects an existing release asset that differs from the candidate", async () => {
-    const release = (await import("../scripts/release")) as Record<
-      string,
-      unknown
-    >;
-    expect(typeof release.planReleaseUploads).toBe("function");
-    if (typeof release.planReleaseUploads !== "function") {
-      return;
-    }
-    const planReleaseUploads = release.planReleaseUploads as (
-      candidateDir: string,
-      existingDir: string,
-      version: string,
-    ) => Effect.Effect<string[], Error>;
-    const releaseAssetNames = release.releaseAssetNames as (
-      version: string,
-    ) => Effect.Effect<string[], Error>;
-    const root = await makeReleaseTempDir();
+	test('rejects an existing release asset that differs from the candidate', async () => {
+		const release = (await import('../scripts/release')) as Record<string, unknown>;
+		expect(typeof release.planReleaseUploads).toBe('function');
+		if (typeof release.planReleaseUploads !== 'function') {
+			return;
+		}
+		const planReleaseUploads = release.planReleaseUploads as (
+			candidateDir: string,
+			existingDir: string,
+			version: string
+		) => Effect.Effect<string[], Error>;
+		const releaseAssetNames = release.releaseAssetNames as (
+			version: string
+		) => Effect.Effect<string[], Error>;
+		const root = await makeReleaseTempDir();
 
-    try {
-      const candidateDir = join(root, "candidate");
-      const existingDir = join(root, "existing");
-      const assetNames = Effect.runSync(releaseAssetNames("1.2.3"));
-      await mkdir(candidateDir);
-      await mkdir(existingDir);
-      for (const name of assetNames) {
-        await writeFile(join(candidateDir, name), `candidate ${name}\n`);
-      }
-      await writeFile(join(existingDir, assetNames[0]), "different bytes\n");
+		try {
+			const candidateDir = joinPath(root, 'candidate');
+			const existingDir = joinPath(root, 'existing');
+			const assetNames = Effect.runSync(releaseAssetNames('1.2.3'));
+			await mkdirp(candidateDir);
+			await mkdirp(existingDir);
+			for (const name of assetNames) {
+				await writeFileString(joinPath(candidateDir, name), `candidate ${name}\n`);
+			}
+			await writeFileString(joinPath(existingDir, assetNames[0]), 'different bytes\n');
 
-      await expect(
-        runRelease(planReleaseUploads(candidateDir, existingDir, "1.2.3")),
-      ).rejects.toThrow(
-        `Existing release asset does not match candidate: ${assetNames[0]}`,
-      );
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
+			await expect(
+				runRelease(planReleaseUploads(candidateDir, existingDir, '1.2.3'))
+			).rejects.toThrow(`Existing release asset does not match candidate: ${assetNames[0]}`);
+		} finally {
+			await removePath(root, { recursive: true, force: true });
+		}
+	});
 
-  test("packages executables with their target-native package runtime", async () => {
-    const release = (await import("../scripts/release")) as Record<
-      string,
-      unknown
-    >;
-    const targets = release.RELEASE_TARGETS as Array<{
-      id: string;
-      bindingPackage: string;
-    }>;
-    const packageExistingExecutables =
-      release.packageExistingExecutables as (input: {
-        version: string;
-        outputDir: string;
-        binaries: Record<string, string>;
-        packageRoot: string;
-      }) => Effect.Effect<void, Error>;
-    const verifyReleaseDirectory = release.verifyReleaseDirectory as (
-      outputDir: string,
-      version: string,
-    ) => Effect.Effect<void, Error>;
-    const root = await makeReleaseTempDir();
+	test('packages executables with their target-native package runtime', async () => {
+		const release = (await import('../scripts/release')) as Record<string, unknown>;
+		const targets = release.RELEASE_TARGETS as Array<{
+			id: string;
+			bindingPackage: string;
+		}>;
+		const packageExistingExecutables = release.packageExistingExecutables as (input: {
+			version: string;
+			outputDir: string;
+			binaries: Record<string, string>;
+			packageRoot: string;
+		}) => Effect.Effect<void, Error>;
+		const verifyReleaseDirectory = release.verifyReleaseDirectory as (
+			outputDir: string,
+			version: string
+		) => Effect.Effect<void, Error>;
+		const root = await makeReleaseTempDir();
 
-    try {
-      const source = join(root, "akua-fixture");
-      const outputDir = join(root, "release");
-      const packageRoot = await makePackageRuntimeFixture(root);
-      await writeFile(source, "#!/bin/sh\necho akua fixture\n");
-      await chmod(source, 0o755);
-      await runRelease(
-        packageExistingExecutables({
-          version: "1.2.3",
-          outputDir,
-          binaries: Object.fromEntries(
-            targets.map((target) => [target.id, source]),
-          ),
-          packageRoot,
-        }),
-      );
+		try {
+			const source = joinPath(root, 'akua-fixture');
+			const outputDir = joinPath(root, 'release');
+			const packageRoot = await makePackageRuntimeFixture(root);
+			await writeFileString(source, '#!/bin/sh\necho akua fixture\n');
+			await chmodPath(source, 0o755);
+			await runRelease(
+				packageExistingExecutables({
+					version: '1.2.3',
+					outputDir,
+					binaries: Object.fromEntries(targets.map((target) => [target.id, source])),
+					packageRoot
+				})
+			);
 
-      expect(
-        await runRelease(verifyReleaseDirectory(outputDir, "1.2.3")),
-      ).toBeUndefined();
-      const manifest = JSON.parse(
-        await readFile(join(outputDir, "akua-v1.2.3-manifest.json"), "utf8"),
-      );
-      expect(manifest).toMatchObject({
-        schema_version: 1,
-        executable: "akua",
-        version: "1.2.3",
-        checksums: "checksums.txt",
-        homebrew_manifest: "akua-v1.2.3-homebrew.json",
-      });
-      expect(manifest.assets).toHaveLength(5);
-      expect(
-        manifest.assets.map((asset: { target: string }) => asset.target),
-      ).toEqual(targets.map((target) => target.id));
+			expect(await runRelease(verifyReleaseDirectory(outputDir, '1.2.3'))).toBeUndefined();
+			const manifest = JSON.parsePath(
+				await readFileString(joinPath(outputDir, 'akua-v1.2.3-manifest.json'), 'utf8')
+			);
+			expect(manifest).toMatchObject({
+				schema_version: 1,
+				executable: 'akua',
+				version: '1.2.3',
+				checksums: 'checksums.txt',
+				homebrew_manifest: 'akua-v1.2.3-homebrew.json'
+			});
+			expect(manifest.assets).toHaveLength(5);
+			expect(manifest.assets.map((asset: { target: string }) => asset.target)).toEqual(
+				targets.map((target) => target.id)
+			);
 
-      const homebrew = JSON.parse(
-        await readFile(join(outputDir, "akua-v1.2.3-homebrew.json"), "utf8"),
-      );
-      expect(homebrew).toMatchObject({
-        schema_version: 1,
-        formula: "akua",
-        version: "1.2.3",
-        release: "https://github.com/akua-dev/cli/releases/tag/v1.2.3",
-      });
-      expect(Object.keys(homebrew.platforms)).toEqual([
-        "macos_arm",
-        "macos_intel",
-        "linux_arm",
-        "linux_intel",
-      ]);
-      expect(homebrew.platforms.linux_intel.url).toBe(
-        "https://github.com/akua-dev/cli/releases/download/v1.2.3/akua-v1.2.3-linux-x64.tar.gz",
-      );
+			const homebrew = JSON.parsePath(
+				await readFileString(joinPath(outputDir, 'akua-v1.2.3-homebrew.json'), 'utf8')
+			);
+			expect(homebrew).toMatchObject({
+				schema_version: 1,
+				formula: 'akua',
+				version: '1.2.3',
+				release: 'https://github.com/akua-dev/cli/releases/tag/v1.2.3'
+			});
+			expect(Object.keys(homebrew.platforms)).toEqual([
+				'macos_arm',
+				'macos_intel',
+				'linux_arm',
+				'linux_intel'
+			]);
+			expect(homebrew.platforms.linux_intel.url).toBe(
+				'https://github.com/akua-dev/cli/releases/download/v1.2.3/akua-v1.2.3-linux-x64.tar.gz'
+			);
 
-      const extractDir = join(root, "extract");
-      await mkdir(extractDir);
-      const extract = await extractTarSync(
-        join(outputDir, "akua-v1.2.3-linux-x64.tar.gz"),
-        extractDir,
-      );
-      expect(extract.status).toBe(0);
-      expect((await stat(join(extractDir, "akua"))).mode & 0o777).toBe(0o755);
-      expect(await readFile(join(extractDir, "akua"))).toEqual(
-        await readFile(source),
-      );
-      expect(
-        await readFile(
-          join(
-            extractDir,
-            "node_modules/@akua-dev/native/akua.linux-x64-gnu.node",
-          ),
-          "utf8",
-        ),
-      ).toBe("native-linux-x64-gnu/akua.linux-x64-gnu.node\n");
-      expect(
-        await readFile(
-          join(
-            extractDir,
-            "node_modules/@akua-dev/native-engines/helm-engine.wasm",
-          ),
-          "utf8",
-        ),
-      ).toBe("native-engines/helm-engine.wasm\n");
-      expect(
-        await readFile(
-          join(
-            extractDir,
-            "node_modules/@akua-dev/native/extra-runtime.txt",
-          ),
-          "utf8",
-        ),
-      ).toBe("native/extra-runtime.txt\n");
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
+			const extractDir = joinPath(root, 'extract');
+			await mkdirp(extractDir);
+			const extract = await extractTarSync(
+				joinPath(outputDir, 'akua-v1.2.3-linux-x64.tar.gz'),
+				extractDir
+			);
+			expect(extract.status).toBe(0);
+			expect((await statMode(joinPath(extractDir, 'akua'))) & 0o777).toBe(0o755);
+			expect(await readFileString(joinPath(extractDir, 'akua'))).toEqual(
+				await readFileString(source)
+			);
+			expect(
+				await readFileString(
+					joinPath(extractDir, 'node_modules/@akua-dev/native/akua.linux-x64-gnu.node'),
+					'utf8'
+				)
+			).toBe('native-linux-x64-gnu/akua.linux-x64-gnu.node\n');
+			expect(
+				await readFileString(
+					joinPath(extractDir, 'node_modules/@akua-dev/native-engines/helm-engine.wasm'),
+					'utf8'
+				)
+			).toBe('native-engines/helm-engine.wasm\n');
+			expect(
+				await readFileString(
+					joinPath(extractDir, 'node_modules/@akua-dev/native/extra-runtime.txt'),
+					'utf8'
+				)
+			).toBe('native/extra-runtime.txt\n');
+		} finally {
+			await removePath(root, { recursive: true, force: true });
+		}
+	});
 
-  test("packages byte-identical release assets across repeated builds", async () => {
-    const release = (await import("../scripts/release")) as Record<
-      string,
-      unknown
-    >;
-    const targets = release.RELEASE_TARGETS as Array<{ id: string }>;
-    const releaseAssetNames = release.releaseAssetNames as (
-      version: string,
-    ) => Effect.Effect<string[], Error>;
-    const packageExistingExecutables =
-      release.packageExistingExecutables as (input: {
-        version: string;
-        outputDir: string;
-        binaries: Record<string, string>;
-        packageRoot: string;
-      }) => Effect.Effect<void, Error>;
-    const root = await makeReleaseTempDir();
+	test('packages byte-identical release assets across repeated builds', async () => {
+		const release = (await import('../scripts/release')) as Record<string, unknown>;
+		const targets = release.RELEASE_TARGETS as Array<{ id: string }>;
+		const releaseAssetNames = release.releaseAssetNames as (
+			version: string
+		) => Effect.Effect<string[], Error>;
+		const packageExistingExecutables = release.packageExistingExecutables as (input: {
+			version: string;
+			outputDir: string;
+			binaries: Record<string, string>;
+			packageRoot: string;
+		}) => Effect.Effect<void, Error>;
+		const root = await makeReleaseTempDir();
 
-    try {
-      const source = join(root, "akua-fixture");
-      const firstOutputDir = join(root, "first");
-      const secondOutputDir = join(root, "second");
-      const packageRoot = await makePackageRuntimeFixture(root);
-      const binaries = Object.fromEntries(
-        targets.map((target) => [target.id, source]),
-      );
-      await writeFile(source, "#!/bin/sh\necho akua fixture\n");
-      await chmod(source, 0o755);
+		try {
+			const source = joinPath(root, 'akua-fixture');
+			const firstOutputDir = joinPath(root, 'first');
+			const secondOutputDir = joinPath(root, 'second');
+			const packageRoot = await makePackageRuntimeFixture(root);
+			const binaries = Object.fromEntries(targets.map((target) => [target.id, source]));
+			await writeFileString(source, '#!/bin/sh\necho akua fixture\n');
+			await chmodPath(source, 0o755);
 
-      await runRelease(
-        packageExistingExecutables({
-          version: "1.2.3",
-          outputDir: firstOutputDir,
-          binaries,
-          packageRoot,
-        }),
-      );
-      await Effect.runPromise(Effect.sleep("2100 millis"));
-      await runRelease(
-        packageExistingExecutables({
-          version: "1.2.3",
-          outputDir: secondOutputDir,
-          binaries,
-          packageRoot,
-        }),
-      );
+			await runRelease(
+				packageExistingExecutables({
+					version: '1.2.3',
+					outputDir: firstOutputDir,
+					binaries,
+					packageRoot
+				})
+			);
+			await Effect.runPromise(Effect.sleep('2100 millis'));
+			await runRelease(
+				packageExistingExecutables({
+					version: '1.2.3',
+					outputDir: secondOutputDir,
+					binaries,
+					packageRoot
+				})
+			);
 
-      for (const name of Effect.runSync(releaseAssetNames("1.2.3"))) {
-        const [first, second] = await Promise.all([
-          readFile(join(firstOutputDir, name)),
-          readFile(join(secondOutputDir, name)),
-        ]);
-        if (!second.equals(first)) {
-          throw new Error(`Repeated release packaging changed ${name}`);
-        }
-      }
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
+			for (const name of Effect.runSync(releaseAssetNames('1.2.3'))) {
+				const [first, second] = await Promise.all([
+					readFileString(joinPath(firstOutputDir, name)),
+					readFileString(joinPath(secondOutputDir, name))
+				]);
+				if (!second.equals(first)) {
+					throw new Error(`Repeated release packaging changed ${name}`);
+				}
+			}
+		} finally {
+			await removePath(root, { recursive: true, force: true });
+		}
+	});
 
-  test("verification rejects an archive changed after checksumming", async () => {
-    const release = (await import("../scripts/release")) as Record<
-      string,
-      unknown
-    >;
-    const targets = release.RELEASE_TARGETS as Array<{ id: string }>;
-    const packageExistingExecutables =
-      release.packageExistingExecutables as (input: {
-        version: string;
-        outputDir: string;
-        binaries: Record<string, string>;
-        packageRoot: string;
-      }) => Effect.Effect<void, Error>;
-    const verifyReleaseDirectory = release.verifyReleaseDirectory as (
-      outputDir: string,
-      version: string,
-    ) => Effect.Effect<void, Error>;
-    const root = await makeReleaseTempDir();
+	test('verification rejects an archive changed after checksumming', async () => {
+		const release = (await import('../scripts/release')) as Record<string, unknown>;
+		const targets = release.RELEASE_TARGETS as Array<{ id: string }>;
+		const packageExistingExecutables = release.packageExistingExecutables as (input: {
+			version: string;
+			outputDir: string;
+			binaries: Record<string, string>;
+			packageRoot: string;
+		}) => Effect.Effect<void, Error>;
+		const verifyReleaseDirectory = release.verifyReleaseDirectory as (
+			outputDir: string,
+			version: string
+		) => Effect.Effect<void, Error>;
+		const root = await makeReleaseTempDir();
 
-    try {
-      const source = join(root, "akua-fixture");
-      const outputDir = join(root, "release");
-      const packageRoot = await makePackageRuntimeFixture(root);
-      await writeFile(source, "#!/bin/sh\necho akua fixture\n");
-      await chmod(source, 0o755);
-      await runRelease(
-        packageExistingExecutables({
-          version: "1.2.3",
-          outputDir,
-          binaries: Object.fromEntries(
-            targets.map((target) => [target.id, source]),
-          ),
-          packageRoot,
-        }),
-      );
-      await writeFile(
-        join(outputDir, "akua-v1.2.3-linux-x64.tar.gz"),
-        "tampered",
-      );
+		try {
+			const source = joinPath(root, 'akua-fixture');
+			const outputDir = joinPath(root, 'release');
+			const packageRoot = await makePackageRuntimeFixture(root);
+			await writeFileString(source, '#!/bin/sh\necho akua fixture\n');
+			await chmodPath(source, 0o755);
+			await runRelease(
+				packageExistingExecutables({
+					version: '1.2.3',
+					outputDir,
+					binaries: Object.fromEntries(targets.map((target) => [target.id, source])),
+					packageRoot
+				})
+			);
+			await writeFileString(joinPath(outputDir, 'akua-v1.2.3-linux-x64.tar.gz'), 'tampered');
 
-      await expect(
-        runRelease(verifyReleaseDirectory(outputDir, "1.2.3")),
-      ).rejects.toThrow("checksum mismatch");
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
+			await expect(runRelease(verifyReleaseDirectory(outputDir, '1.2.3'))).rejects.toThrow(
+				'checksum mismatch'
+			);
+		} finally {
+			await removePath(root, { recursive: true, force: true });
+		}
+	});
 
-  test("rejects release output directories that could erase the checkout or filesystem root", async () => {
-    const release = (await import("../scripts/release")) as Record<
-      string,
-      unknown
-    >;
-    const assertSafeOutputDirectory = release.assertSafeOutputDirectory as (
-      outputDir: string,
-    ) => Effect.Effect<void, Error>;
+	test('rejects release output directories that could erase the checkout or filesystem root', async () => {
+		const release = (await import('../scripts/release')) as Record<string, unknown>;
+		const assertSafeOutputDirectory = release.assertSafeOutputDirectory as (
+			outputDir: string
+		) => Effect.Effect<void, Error>;
 
-    await expect(
-      runRelease(assertSafeOutputDirectory(process.cwd())),
-    ).rejects.toThrow("Unsafe release output directory");
-    await expect(
-      runRelease(assertSafeOutputDirectory(parse(process.cwd()).root)),
-    ).rejects.toThrow("Unsafe release output directory");
-    await expect(
-      runRelease(assertSafeOutputDirectory(join(process.cwd(), "src"))),
-    ).rejects.toThrow("Unsafe release output directory");
-    await expect(
-      runRelease(assertSafeOutputDirectory(join(process.cwd(), "docs"))),
-    ).rejects.toThrow("Unsafe release output directory");
-    await expect(
-      runRelease(assertSafeOutputDirectory(join(process.cwd(), "dist", "js"))),
-    ).rejects.toThrow("Unsafe release output directory");
-    expect(
-      await runRelease(
-        assertSafeOutputDirectory(join(process.cwd(), "dist", "release")),
-      ),
-    ).toBeUndefined();
-  });
+		await expect(runRelease(assertSafeOutputDirectory(process.cwd()))).rejects.toThrow(
+			'Unsafe release output directory'
+		);
+		await expect(
+			runRelease(assertSafeOutputDirectory(parsePath(process.cwd()).root))
+		).rejects.toThrow('Unsafe release output directory');
+		await expect(
+			runRelease(assertSafeOutputDirectory(joinPath(process.cwd(), 'src')))
+		).rejects.toThrow('Unsafe release output directory');
+		await expect(
+			runRelease(assertSafeOutputDirectory(joinPath(process.cwd(), 'docs')))
+		).rejects.toThrow('Unsafe release output directory');
+		await expect(
+			runRelease(assertSafeOutputDirectory(joinPath(process.cwd(), 'dist', 'js')))
+		).rejects.toThrow('Unsafe release output directory');
+		expect(
+			await runRelease(assertSafeOutputDirectory(joinPath(process.cwd(), 'dist', 'release')))
+		).toBeUndefined();
+	});
 
-  test("rejects release output paths beneath a symlinked ancestor", async () => {
-    const release = (await import("../scripts/release")) as Record<
-      string,
-      unknown
-    >;
-    const assertSafeOutputDirectory = release.assertSafeOutputDirectory as (
-      outputDir: string,
-    ) => Effect.Effect<void, Error>;
-    const root = await makeReleaseTempDir();
-    const target = await mkdtemp(
-      join(process.cwd(), ".tmp-akua-release-target-"),
-    );
-    const linkedDirectory = join(root, "linked-output");
+	test('rejects release output paths beneath a symlinked ancestor', async () => {
+		const release = (await import('../scripts/release')) as Record<string, unknown>;
+		const assertSafeOutputDirectory = release.assertSafeOutputDirectory as (
+			outputDir: string
+		) => Effect.Effect<void, Error>;
+		const root = await makeReleaseTempDir();
+		const target = await mkdtempPath('.tmp-akua-release-target-');
+		const linkedDirectory = joinPath(root, 'linked-output');
 
-    try {
-      await symlink(target, linkedDirectory, "dir");
-      await expect(
-        runRelease(assertSafeOutputDirectory(join(linkedDirectory, "release"))),
-      ).rejects.toThrow("symlink");
-    } finally {
-      await rm(root, { recursive: true, force: true });
-      await rm(target, { recursive: true, force: true });
-    }
-  });
+		try {
+			await symlinkPath(target, linkedDirectory);
+			await expect(
+				runRelease(assertSafeOutputDirectory(joinPath(linkedDirectory, 'release')))
+			).rejects.toThrow('symlink');
+		} finally {
+			await removePath(root, { recursive: true, force: true });
+			await removePath(target, { recursive: true, force: true });
+		}
+	});
 
-  test("verification rejects a Homebrew manifest that does not match verified assets", async () => {
-    const release = (await import("../scripts/release")) as Record<
-      string,
-      unknown
-    >;
-    const targets = release.RELEASE_TARGETS as Array<{ id: string }>;
-    const packageExistingExecutables =
-      release.packageExistingExecutables as (input: {
-        version: string;
-        outputDir: string;
-        binaries: Record<string, string>;
-        packageRoot: string;
-      }) => Effect.Effect<void, Error>;
-    const verifyReleaseDirectory = release.verifyReleaseDirectory as (
-      outputDir: string,
-      version: string,
-    ) => Effect.Effect<void, Error>;
-    const root = await makeReleaseTempDir();
+	test('verification rejects a Homebrew manifest that does not match verified assets', async () => {
+		const release = (await import('../scripts/release')) as Record<string, unknown>;
+		const targets = release.RELEASE_TARGETS as Array<{ id: string }>;
+		const packageExistingExecutables = release.packageExistingExecutables as (input: {
+			version: string;
+			outputDir: string;
+			binaries: Record<string, string>;
+			packageRoot: string;
+		}) => Effect.Effect<void, Error>;
+		const verifyReleaseDirectory = release.verifyReleaseDirectory as (
+			outputDir: string,
+			version: string
+		) => Effect.Effect<void, Error>;
+		const root = await makeReleaseTempDir();
 
-    try {
-      const source = join(root, "akua-fixture");
-      const outputDir = join(root, "release");
-      const packageRoot = await makePackageRuntimeFixture(root);
-      await writeFile(source, "#!/bin/sh\necho akua fixture\n");
-      await chmod(source, 0o755);
-      await runRelease(
-        packageExistingExecutables({
-          version: "1.2.3",
-          outputDir,
-          binaries: Object.fromEntries(
-            targets.map((target) => [target.id, source]),
-          ),
-          packageRoot,
-        }),
-      );
-      const manifestPath = join(outputDir, "akua-v1.2.3-homebrew.json");
-      const homebrew = JSON.parse(await readFile(manifestPath, "utf8"));
-      homebrew.platforms.linux_intel.sha256 = "0".repeat(64);
-      await writeFile(manifestPath, `${JSON.stringify(homebrew, null, 2)}\n`);
+		try {
+			const source = joinPath(root, 'akua-fixture');
+			const outputDir = joinPath(root, 'release');
+			const packageRoot = await makePackageRuntimeFixture(root);
+			await writeFileString(source, '#!/bin/sh\necho akua fixture\n');
+			await chmodPath(source, 0o755);
+			await runRelease(
+				packageExistingExecutables({
+					version: '1.2.3',
+					outputDir,
+					binaries: Object.fromEntries(targets.map((target) => [target.id, source])),
+					packageRoot
+				})
+			);
+			const manifestPath = joinPath(outputDir, 'akua-v1.2.3-homebrew.json');
+			const homebrew = JSON.parsePath(await readFileString(manifestPath));
+			homebrew.platforms.linux_intel.sha256 = '0'.repeat(64);
+			await writeFileString(manifestPath, `${JSON.stringify(homebrew, null, 2)}\n`);
 
-      await expect(
-        runRelease(verifyReleaseDirectory(outputDir, "1.2.3")),
-      ).rejects.toThrow("Homebrew manifest mismatch");
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
+			await expect(runRelease(verifyReleaseDirectory(outputDir, '1.2.3'))).rejects.toThrow(
+				'Homebrew manifest mismatch'
+			);
+		} finally {
+			await removePath(root, { recursive: true, force: true });
+		}
+	});
 
-  test("maps supported native hosts to release target IDs", async () => {
-    const release = (await import("../scripts/release")) as Record<
-      string,
-      unknown
-    >;
-    const releaseTargetIdForHost = release.releaseTargetIdForHost as (
-      platform: string,
-      arch: string,
-    ) => Effect.Effect<string, Error>;
+	test('maps supported native hosts to release target IDs', async () => {
+		const release = (await import('../scripts/release')) as Record<string, unknown>;
+		const releaseTargetIdForHost = release.releaseTargetIdForHost as (
+			platform: string,
+			arch: string
+		) => Effect.Effect<string, Error>;
 
-    expect(Effect.runSync(releaseTargetIdForHost("darwin", "arm64"))).toBe(
-      "darwin-arm64",
-    );
-    expect(Effect.runSync(releaseTargetIdForHost("darwin", "x64"))).toBe(
-      "darwin-x64",
-    );
-    expect(Effect.runSync(releaseTargetIdForHost("linux", "arm64"))).toBe(
-      "linux-arm64",
-    );
-    expect(Effect.runSync(releaseTargetIdForHost("linux", "x64"))).toBe(
-      "linux-x64",
-    );
-    expect(Effect.runSync(releaseTargetIdForHost("win32", "x64"))).toBe(
-      "windows-x64",
-    );
-    expect(() =>
-      Effect.runSync(releaseTargetIdForHost("win32", "arm64")),
-    ).toThrow("Unsupported release host");
-  });
+		expect(Effect.runSync(releaseTargetIdForHost('darwin', 'arm64'))).toBe('darwin-arm64');
+		expect(Effect.runSync(releaseTargetIdForHost('darwin', 'x64'))).toBe('darwin-x64');
+		expect(Effect.runSync(releaseTargetIdForHost('linux', 'arm64'))).toBe('linux-arm64');
+		expect(Effect.runSync(releaseTargetIdForHost('linux', 'x64'))).toBe('linux-x64');
+		expect(Effect.runSync(releaseTargetIdForHost('win32', 'x64'))).toBe('windows-x64');
+		expect(() => Effect.runSync(releaseTargetIdForHost('win32', 'arm64'))).toThrow(
+			'Unsupported release host'
+		);
+	});
 
-  test("extracts Windows zip archives with native PowerShell", async () => {
-    const release = (await import("../scripts/release")) as Record<
-      string,
-      unknown
-    >;
-    const archiveExtractCommand = release.archiveExtractCommand as (
-      archive: "tar.gz" | "zip",
-      archivePath: string,
-      installRoot: string,
-      platform: NodeJS.Platform,
-    ) => string[];
+	test('extracts Windows zip archives with native PowerShell', async () => {
+		const release = (await import('../scripts/release')) as Record<string, unknown>;
+		const archiveExtractCommand = release.archiveExtractCommand as (
+			archive: 'tar.gz' | 'zip',
+			archivePath: string,
+			installRoot: string,
+			platform: NodeJS.Platform
+		) => string[];
 
-    expect(
-      archiveExtractCommand(
-        "zip",
-        "D:\\a\\Robin's build\\akua.zip",
-        "C:\\install dir",
-        "win32",
-      ),
-    ).toEqual([
-      "powershell.exe",
-      "-NoLogo",
-      "-NoProfile",
-      "-NonInteractive",
-      "-Command",
-      "Expand-Archive -LiteralPath 'D:\\a\\Robin''s build\\akua.zip' -DestinationPath 'C:\\install dir'",
-    ]);
-  });
+		expect(
+			archiveExtractCommand('zip', "D:\\a\\Robin's build\\akua.zip", 'C:\\install dir', 'win32')
+		).toEqual([
+			'powershell.exe',
+			'-NoLogo',
+			'-NoProfile',
+			'-NonInteractive',
+			'-Command',
+			"Expand-Archive -LiteralPath 'D:\\a\\Robin''s build\\akua.zip' -DestinationPath 'C:\\install dir'"
+		]);
+	});
 
-  test("extracts and executes all install-smoke commands for the native artifact", async () => {
-    const release = (await import("../scripts/release")) as Record<
-      string,
-      unknown
-    >;
-    const targets = release.RELEASE_TARGETS as Array<{ id: string }>;
-    const hostTargetId = release.hostTargetId as () => Effect.Effect<
-      string,
-      Error,
-      ReleaseHost
-    >;
-    const packageExistingExecutables =
-      release.packageExistingExecutables as (input: {
-        version: string;
-        outputDir: string;
-        binaries: Record<string, string>;
-        packageRoot: string;
-      }) => Effect.Effect<void, Error>;
-    const smokeReleaseArtifact = release.smokeReleaseArtifact as (input: {
-      version: string;
-      outputDir: string;
-      targetId: string;
-    }) => Effect.Effect<void, Error>;
-    const root = await makeReleaseTempDir();
+	test('extracts and executes all install-smoke commands for the native artifact', async () => {
+		const release = (await import('../scripts/release')) as Record<string, unknown>;
+		const targets = release.RELEASE_TARGETS as Array<{ id: string }>;
+		const hostTargetId = release.hostTargetId as () => Effect.Effect<string, Error, ReleaseHost>;
+		const packageExistingExecutables = release.packageExistingExecutables as (input: {
+			version: string;
+			outputDir: string;
+			binaries: Record<string, string>;
+			packageRoot: string;
+		}) => Effect.Effect<void, Error>;
+		const smokeReleaseArtifact = release.smokeReleaseArtifact as (input: {
+			version: string;
+			outputDir: string;
+			targetId: string;
+		}) => Effect.Effect<void, Error>;
+		const root = await makeReleaseTempDir();
 
-    try {
-      const source = join(root, "akua-fixture");
-      const outputDir = join(root, "release");
-      const packageRoot = await makePackageRuntimeFixture(root);
-      const smokeLog = join(root, "smoke.log");
-      await writeFile(
-        source,
-        `#!/bin/sh\nprintf '%s\\n' "$*" >> '${smokeLog}'\ncase "$1" in\n  --version) echo '{"status":"ok","data":{"version":"1.2.3"}}' ;;\n  --help) echo 'Usage: akua' ;;\n  commands) echo 'commands[1]' ;;\n  pkg)\n    case "$2" in\n      version) echo '{"version":"0.8.26"}' ;;\n      init) mkdir -p demo; echo '{}' ;;\n      check) echo '{}' ;;\n      render) mkdir -p deploy; echo manifest > deploy/manifest.yaml; echo '{}' ;;\n      inspect) echo '{}' ;;\n      *) exit 2 ;;\n    esac\n    ;;\n  *) exit 2 ;;\nesac\n`,
-      );
-      await chmod(source, 0o755);
-      await runRelease(
-        packageExistingExecutables({
-          version: "1.2.3",
-          outputDir,
-          binaries: Object.fromEntries(
-            targets.map((target) => [target.id, source]),
-          ),
-          packageRoot,
-        }),
-      );
+		try {
+			const source = joinPath(root, 'akua-fixture');
+			const outputDir = joinPath(root, 'release');
+			const packageRoot = await makePackageRuntimeFixture(root);
+			const smokeLog = joinPath(root, 'smoke.log');
+			await writeFileString(
+				source,
+				`#!/bin/sh\nprintf '%s\\n' "$*" >> '${smokeLog}'\ncase "$1" in\n  --version) echo '{"status":"ok","data":{"version":"1.2.3"}}' ;;\n  --help) echo 'Usage: akua' ;;\n  commands) echo 'commands[1]' ;;\n  pkg)\n    case "$2" in\n      version) echo '{"version":"0.8.26"}' ;;\n      init) mkdir -p demo; echo '{}' ;;\n      check) echo '{}' ;;\n      render) mkdir -p deploy; echo manifest > deploy/manifest.yaml; echo '{}' ;;\n      inspect) echo '{}' ;;\n      *) exit 2 ;;\n    esac\n    ;;\n  *) exit 2 ;;\nesac\n`
+			);
+			await chmodPath(source, 0o755);
+			await runRelease(
+				packageExistingExecutables({
+					version: '1.2.3',
+					outputDir,
+					binaries: Object.fromEntries(targets.map((target) => [target.id, source])),
+					packageRoot
+				})
+			);
 
-      const targetId = await runRelease(hostTargetId());
-      expect(
-        await runRelease(
-          smokeReleaseArtifact({
-            version: "1.2.3",
-            outputDir,
-            targetId,
-          }),
-        ),
-      ).toBeUndefined();
-      expect((await readFile(smokeLog, "utf8")).trim().split("\n")).toEqual([
-        "--version --json",
-        "--help",
-        "commands --limit 1",
-        "pkg version --json",
-        "pkg init demo --json",
-        "pkg check --json",
-        "pkg render --inputs inputs.example.yaml --out deploy --json",
-        "pkg inspect --json",
-      ]);
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
+			const targetId = await runRelease(hostTargetId());
+			expect(
+				await runRelease(
+					smokeReleaseArtifact({
+						version: '1.2.3',
+						outputDir,
+						targetId
+					})
+				)
+			).toBeUndefined();
+			expect((await readFileString(smokeLog)).trim().split('\n')).toEqual([
+				'--version --json',
+				'--help',
+				'commands --limit 1',
+				'pkg version --json',
+				'pkg init demo --json',
+				'pkg check --json',
+				'pkg render --inputs inputs.example.yaml --out deploy --json',
+				'pkg inspect --json'
+			]);
+		} finally {
+			await removePath(root, { recursive: true, force: true });
+		}
+	});
 
-  test("stages the sdk package's runtime files, including directory-listed entries, into the archive", async () => {
-    const release = (await import("../scripts/release")) as Record<
-      string,
-      unknown
-    >;
-    const hostTargetId = release.hostTargetId as () => Effect.Effect<
-      string,
-      Error,
-      ReleaseHost
-    >;
-    const packageExistingExecutables =
-      release.packageExistingExecutables as (input: {
-        version: string;
-        outputDir: string;
-        binaries: Record<string, string>;
-        packageRoot: string;
-      }) => Effect.Effect<void, Error>;
-    const artifactName = release.artifactName as (
-      version: string,
-      target: { id: string },
-    ) => string;
-    const root = await makeReleaseTempDir();
+	test("stages the sdk package's runtime files, including directory-listed entries, into the archive", async () => {
+		const release = (await import('../scripts/release')) as Record<string, unknown>;
+		const hostTargetId = release.hostTargetId as () => Effect.Effect<string, Error, ReleaseHost>;
+		const packageExistingExecutables = release.packageExistingExecutables as (input: {
+			version: string;
+			outputDir: string;
+			binaries: Record<string, string>;
+			packageRoot: string;
+		}) => Effect.Effect<void, Error>;
+		const artifactName = release.artifactName as (
+			version: string,
+			target: { id: string }
+		) => string;
+		const root = await makeReleaseTempDir();
 
-    try {
-      const source = join(root, "akua-fixture");
-      const outputDir = join(root, "release");
-      const packageRoot = await makePackageRuntimeFixture(root);
-      await writeFile(source, "#!/bin/sh\nexit 0\n");
-      await chmod(source, 0o755);
-      const { RELEASE_TARGETS: targets } = release as {
-        RELEASE_TARGETS: Array<{ id: string }>;
-      };
-      await runRelease(
-        packageExistingExecutables({
-          version: "1.2.3",
-          outputDir,
-          binaries: Object.fromEntries(
-            targets.map((target) => [target.id, source]),
-          ),
-          packageRoot,
-        }),
-      );
+		try {
+			const source = joinPath(root, 'akua-fixture');
+			const outputDir = joinPath(root, 'release');
+			const packageRoot = await makePackageRuntimeFixture(root);
+			await writeFileString(source, '#!/bin/sh\nexit 0\n');
+			await chmodPath(source, 0o755);
+			const { RELEASE_TARGETS: targets } = release as {
+				RELEASE_TARGETS: Array<{ id: string }>;
+			};
+			await runRelease(
+				packageExistingExecutables({
+					version: '1.2.3',
+					outputDir,
+					binaries: Object.fromEntries(targets.map((target) => [target.id, source])),
+					packageRoot
+				})
+			);
 
-      // The staging directory is cleaned up after packaging, so verify the
-      // real produced archive contents (what an installer actually
-      // extracts), not the intermediate .staging tree.
-      const targetId = await runRelease(hostTargetId());
-      const target = targets.find((candidate) => candidate.id === targetId);
-      if (!target) throw new Error(`Unknown host target: ${targetId}`);
-      const archivePath = join(outputDir, artifactName("1.2.3", target));
-      const extractDir = join(root, "extracted");
-      await mkdir(extractDir, { recursive: true });
-      const extract = await extractTarSync(archivePath, extractDir);
-      expect(extract.status).toBe(0);
+			// The staging directory is cleaned up after packaging, so verify the
+			// real produced archive contents (what an installer actually
+			// extracts), not the intermediate .staging tree.
+			const targetId = await runRelease(hostTargetId());
+			const target = targets.find((candidate) => candidate.id === targetId);
+			if (!target) throw new Error(`Unknown host target: ${targetId}`);
+			const archivePath = joinPath(outputDir, artifactName('1.2.3', target));
+			const extractDir = joinPath(root, 'extracted');
+			await mkdirp(extractDir);
+			const extract = await extractTarSync(archivePath, extractDir);
+			expect(extract.status).toBe(0);
 
-      const sdkDir = join(extractDir, "node_modules", "@akua-dev", "sdk");
-      expect(await readFile(join(sdkDir, "dist", "mod.js"), "utf8")).toBe(
-        "sdk/dist/mod.js\n",
-      );
-      expect(await readFile(join(sdkDir, "dist", "execute.js"), "utf8")).toBe(
-        "sdk/dist/execute.js\n",
-      );
-      expect(await readFile(join(sdkDir, "README.md"), "utf8")).toBe(
-        "sdk/README.md\n",
-      );
-      expect(await readFile(join(sdkDir, "package.json"), "utf8")).toContain(
-        '"@akua-dev/sdk"',
-      );
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
+			const sdkDir = joinPath(extractDir, 'node_modules', '@akua-dev', 'sdk');
+			expect(await readFileString(joinPath(sdkDir, 'dist', 'mod.js'), 'utf8')).toBe(
+				'sdk/dist/mod.js\n'
+			);
+			expect(await readFileString(joinPath(sdkDir, 'dist', 'execute.js'), 'utf8')).toBe(
+				'sdk/dist/execute.js\n'
+			);
+			expect(await readFileString(joinPath(sdkDir, 'README.md'), 'utf8')).toBe('sdk/README.md\n');
+			expect(await readFileString(joinPath(sdkDir, 'package.json'), 'utf8')).toContain(
+				'"@akua-dev/sdk"'
+			);
+		} finally {
+			await removePath(root, { recursive: true, force: true });
+		}
+	});
 
-  test("rejects an install-smoke executable whose longer version contains the expected version", async () => {
-    const release = (await import("../scripts/release")) as Record<
-      string,
-      unknown
-    >;
-    const targets = release.RELEASE_TARGETS as Array<{ id: string }>;
-    const hostTargetId = release.hostTargetId as () => Effect.Effect<
-      string,
-      Error,
-      ReleaseHost
-    >;
-    const packageExistingExecutables =
-      release.packageExistingExecutables as (input: {
-        version: string;
-        outputDir: string;
-        binaries: Record<string, string>;
-        packageRoot: string;
-      }) => Effect.Effect<void, Error>;
-    const smokeReleaseArtifact = release.smokeReleaseArtifact as (input: {
-      version: string;
-      outputDir: string;
-      targetId: string;
-    }) => Effect.Effect<void, Error>;
-    const root = await makeReleaseTempDir();
+	test('rejects an install-smoke executable whose longer version contains the expected version', async () => {
+		const release = (await import('../scripts/release')) as Record<string, unknown>;
+		const targets = release.RELEASE_TARGETS as Array<{ id: string }>;
+		const hostTargetId = release.hostTargetId as () => Effect.Effect<string, Error, ReleaseHost>;
+		const packageExistingExecutables = release.packageExistingExecutables as (input: {
+			version: string;
+			outputDir: string;
+			binaries: Record<string, string>;
+			packageRoot: string;
+		}) => Effect.Effect<void, Error>;
+		const smokeReleaseArtifact = release.smokeReleaseArtifact as (input: {
+			version: string;
+			outputDir: string;
+			targetId: string;
+		}) => Effect.Effect<void, Error>;
+		const root = await makeReleaseTempDir();
 
-    try {
-      const source = join(root, "akua-fixture");
-      const outputDir = join(root, "release");
-      const packageRoot = await makePackageRuntimeFixture(root);
-      await writeFile(
-        source,
-        '#!/bin/sh\ncase "$1" in\n  --version) echo \'{"status":"ok","data":{"version":"11.2.3"}}\' ;;\n  --help) echo \'Usage: akua\' ;;\n  commands) echo \'commands[1]\' ;;\n  *) exit 2 ;;\nesac\n',
-      );
-      await chmod(source, 0o755);
-      await runRelease(
-        packageExistingExecutables({
-          version: "1.2.3",
-          outputDir,
-          binaries: Object.fromEntries(
-            targets.map((target) => [target.id, source]),
-          ),
-          packageRoot,
-        }),
-      );
+		try {
+			const source = joinPath(root, 'akua-fixture');
+			const outputDir = joinPath(root, 'release');
+			const packageRoot = await makePackageRuntimeFixture(root);
+			await writeFileString(
+				source,
+				'#!/bin/sh\ncase "$1" in\n  --version) echo \'{"status":"ok","data":{"version":"11.2.3"}}\' ;;\n  --help) echo \'Usage: akua\' ;;\n  commands) echo \'commands[1]\' ;;\n  *) exit 2 ;;\nesac\n'
+			);
+			await chmodPath(source, 0o755);
+			await runRelease(
+				packageExistingExecutables({
+					version: '1.2.3',
+					outputDir,
+					binaries: Object.fromEntries(targets.map((target) => [target.id, source])),
+					packageRoot
+				})
+			);
 
-      const targetId = await runRelease(hostTargetId());
-      await expect(
-        runRelease(
-          smokeReleaseArtifact({
-            version: "1.2.3",
-            outputDir,
-            targetId,
-          }),
-        ),
-      ).rejects.toThrow("unexpected version");
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
+			const targetId = await runRelease(hostTargetId());
+			await expect(
+				runRelease(
+					smokeReleaseArtifact({
+						version: '1.2.3',
+						outputDir,
+						targetId
+					})
+				)
+			).rejects.toThrow('unexpected version');
+		} finally {
+			await removePath(root, { recursive: true, force: true });
+		}
+	});
 });
