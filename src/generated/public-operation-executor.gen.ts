@@ -102,14 +102,9 @@ export type PublicOperationId =
   | "installs.setAutomaticUpdates"
   | "installs.updateVersion"
   | "machines.create"
-  | "machines.createDriftReport"
   | "machines.delete"
   | "machines.get"
-  | "machines.getDriftReport"
-  | "machines.getSuspensionEvent"
   | "machines.list"
-  | "machines.listDriftReports"
-  | "machines.listSuspensionEvents"
   | "machines.resume"
   | "machines.suspend"
   | "machines.update"
@@ -357,14 +352,9 @@ export interface PublicOperationEffectMap {
   readonly "installs.setAutomaticUpdates": WithCommandFailure<ReturnType<PublicApiClientValue["client"]["Installs"]["installsSetAutomaticUpdates"]>>;
   readonly "installs.updateVersion": WithCommandFailure<ReturnType<PublicApiClientValue["client"]["Installs"]["installsUpdateVersion"]>>;
   readonly "machines.create": WithCommandFailure<ReturnType<PublicApiClientValue["client"]["Machines"]["machinesCreate"]>>;
-  readonly "machines.createDriftReport": WithCommandFailure<ReturnType<PublicApiClientValue["client"]["Machines"]["machinesCreateDriftReport"]>>;
   readonly "machines.delete": WithCommandFailure<ReturnType<PublicApiClientValue["client"]["Machines"]["machinesDelete"]>>;
   readonly "machines.get": WithCommandFailure<ReturnType<PublicApiClientValue["client"]["Machines"]["machinesGet"]>>;
-  readonly "machines.getDriftReport": WithCommandFailure<ReturnType<PublicApiClientValue["client"]["Machines"]["machinesGetDriftReport"]>>;
-  readonly "machines.getSuspensionEvent": WithCommandFailure<ReturnType<PublicApiClientValue["client"]["Machines"]["machinesGetSuspensionEvent"]>>;
   readonly "machines.list": WithCommandFailure<ReturnType<PublicApiClientValue["client"]["Machines"]["machinesList"]>>;
-  readonly "machines.listDriftReports": WithCommandFailure<ReturnType<PublicApiClientValue["client"]["Machines"]["machinesListDriftReports"]>>;
-  readonly "machines.listSuspensionEvents": WithCommandFailure<ReturnType<PublicApiClientValue["client"]["Machines"]["machinesListSuspensionEvents"]>>;
   readonly "machines.resume": WithCommandFailure<ReturnType<PublicApiClientValue["client"]["Machines"]["machinesResume"]>>;
   readonly "machines.suspend": WithCommandFailure<ReturnType<PublicApiClientValue["client"]["Machines"]["machinesSuspend"]>>;
   readonly "machines.update": WithCommandFailure<ReturnType<PublicApiClientValue["client"]["Machines"]["machinesUpdate"]>>;
@@ -2297,29 +2287,6 @@ function executeOperation(
         const value = yield* executeClientOperation(client, client.client["Machines"]["machinesCreate"]({ headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
-    case "machines.createDriftReport":
-      return Effect.gen(function* () {
-        const input = yield* Schema.decodeUnknownEffect(
-          Schema.Struct({ path: Schema.optionalKey(Schema.Unknown), headers: Schema.optionalKey(Schema.Unknown), body: Schema.optionalKey(Schema.Unknown) }),
-          strictParseOptions,
-        )(rawInput);
-        const path = yield* atEnvelopeKey("path", Schema.decodeUnknownEffect(
-          Api.MachinesCreateDriftReportPathParams,
-          strictParseOptions,
-        )(input.path ?? {}));
-        const headers = yield* atEnvelopeKey("headers", Schema.decodeUnknownEffect(
-          Api.MachinesCreateDriftReportHeaders,
-          strictParseOptions,
-        )(input.headers ?? {}));
-        const payload = input.body === undefined
-          ? undefined
-          : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
-          Api.MachinesCreateDriftReportRequestJson,
-          strictParseOptions,
-        )(input.body));
-        const value = yield* executeClientOperation(client, client.client["Machines"]["machinesCreateDriftReport"]({ params: path, headers, payload }));
-        return mode === "raw" ? value : { _tag: "Value", value };
-      });
     case "machines.delete":
       return Effect.gen(function* () {
         const input = yield* Schema.decodeUnknownEffect(
@@ -2354,40 +2321,6 @@ function executeOperation(
         const value = yield* executeClientOperation(client, client.client["Machines"]["machinesGet"]({ params: path, headers }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
-    case "machines.getDriftReport":
-      return Effect.gen(function* () {
-        const input = yield* Schema.decodeUnknownEffect(
-          Schema.Struct({ path: Schema.optionalKey(Schema.Unknown), headers: Schema.optionalKey(Schema.Unknown) }),
-          strictParseOptions,
-        )(rawInput);
-        const path = yield* atEnvelopeKey("path", Schema.decodeUnknownEffect(
-          Api.MachinesGetDriftReportPathParams,
-          strictParseOptions,
-        )(input.path ?? {}));
-        const headers = yield* atEnvelopeKey("headers", Schema.decodeUnknownEffect(
-          Api.MachinesGetDriftReportHeaders,
-          strictParseOptions,
-        )(input.headers ?? {}));
-        const value = yield* executeClientOperation(client, client.client["Machines"]["machinesGetDriftReport"]({ params: path, headers }));
-        return mode === "raw" ? value : { _tag: "Value", value };
-      });
-    case "machines.getSuspensionEvent":
-      return Effect.gen(function* () {
-        const input = yield* Schema.decodeUnknownEffect(
-          Schema.Struct({ path: Schema.optionalKey(Schema.Unknown), headers: Schema.optionalKey(Schema.Unknown) }),
-          strictParseOptions,
-        )(rawInput);
-        const path = yield* atEnvelopeKey("path", Schema.decodeUnknownEffect(
-          Api.MachinesGetSuspensionEventPathParams,
-          strictParseOptions,
-        )(input.path ?? {}));
-        const headers = yield* atEnvelopeKey("headers", Schema.decodeUnknownEffect(
-          Api.MachinesGetSuspensionEventHeaders,
-          strictParseOptions,
-        )(input.headers ?? {}));
-        const value = yield* executeClientOperation(client, client.client["Machines"]["machinesGetSuspensionEvent"]({ params: path, headers }));
-        return mode === "raw" ? value : { _tag: "Value", value };
-      });
     case "machines.list":
       return Effect.gen(function* () {
         const input = yield* Schema.decodeUnknownEffect(
@@ -2403,48 +2336,6 @@ function executeOperation(
           strictParseOptions,
         )(input.headers ?? {}));
         const value = yield* executeClientOperation(client, client.client["Machines"]["machinesList"]({ query, headers }));
-        return mode === "raw" ? value : { _tag: "Value", value };
-      });
-    case "machines.listDriftReports":
-      return Effect.gen(function* () {
-        const input = yield* Schema.decodeUnknownEffect(
-          Schema.Struct({ path: Schema.optionalKey(Schema.Unknown), query: Schema.optionalKey(Schema.Unknown), headers: Schema.optionalKey(Schema.Unknown) }),
-          strictParseOptions,
-        )(rawInput);
-        const path = yield* atEnvelopeKey("path", Schema.decodeUnknownEffect(
-          Api.MachinesListDriftReportsPathParams,
-          strictParseOptions,
-        )(input.path ?? {}));
-        const query = yield* atEnvelopeKey("query", Schema.decodeUnknownEffect(
-          Api.MachinesListDriftReportsQuery,
-          strictParseOptions,
-        )(input.query ?? {}));
-        const headers = yield* atEnvelopeKey("headers", Schema.decodeUnknownEffect(
-          Api.MachinesListDriftReportsHeaders,
-          strictParseOptions,
-        )(input.headers ?? {}));
-        const value = yield* executeClientOperation(client, client.client["Machines"]["machinesListDriftReports"]({ params: path, query, headers }));
-        return mode === "raw" ? value : { _tag: "Value", value };
-      });
-    case "machines.listSuspensionEvents":
-      return Effect.gen(function* () {
-        const input = yield* Schema.decodeUnknownEffect(
-          Schema.Struct({ path: Schema.optionalKey(Schema.Unknown), query: Schema.optionalKey(Schema.Unknown), headers: Schema.optionalKey(Schema.Unknown) }),
-          strictParseOptions,
-        )(rawInput);
-        const path = yield* atEnvelopeKey("path", Schema.decodeUnknownEffect(
-          Api.MachinesListSuspensionEventsPathParams,
-          strictParseOptions,
-        )(input.path ?? {}));
-        const query = yield* atEnvelopeKey("query", Schema.decodeUnknownEffect(
-          Api.MachinesListSuspensionEventsQuery,
-          strictParseOptions,
-        )(input.query ?? {}));
-        const headers = yield* atEnvelopeKey("headers", Schema.decodeUnknownEffect(
-          Api.MachinesListSuspensionEventsHeaders,
-          strictParseOptions,
-        )(input.headers ?? {}));
-        const value = yield* executeClientOperation(client, client.client["Machines"]["machinesListSuspensionEvents"]({ params: path, query, headers }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
     case "machines.resume":

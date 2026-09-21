@@ -2957,39 +2957,6 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
     }
   },
   {
-    "operation_id": "machines.createDriftReport",
-    "command": "machines create-drift-report",
-    "resource": "machines",
-    "action": "create-drift-report",
-    "method": "POST",
-    "path": "/machines/{id}/drift_reports",
-    "tag": "Machines",
-    "summary": "Create machine drift report",
-    "visibility": "PUBLIC",
-    "requires_auth": true,
-    "parameters": [
-      {
-        "name": "id",
-        "in": "path",
-        "required": true
-      },
-      {
-        "name": "akua-context",
-        "in": "header",
-        "required": false
-      },
-      {
-        "name": "idempotency-key",
-        "in": "header",
-        "required": false
-      }
-    ],
-    "body": {
-      "required": false,
-      "example": {}
-    }
-  },
-  {
     "operation_id": "machines.delete",
     "command": "machines delete",
     "resource": "machines",
@@ -3048,64 +3015,6 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
     ]
   },
   {
-    "operation_id": "machines.getDriftReport",
-    "command": "machines get-drift-report",
-    "resource": "machines",
-    "action": "get-drift-report",
-    "method": "GET",
-    "path": "/machines/{id}/drift_reports/{report_id}",
-    "tag": "Machines",
-    "summary": "Get machine drift report",
-    "visibility": "PUBLIC",
-    "requires_auth": true,
-    "parameters": [
-      {
-        "name": "id",
-        "in": "path",
-        "required": true
-      },
-      {
-        "name": "report_id",
-        "in": "path",
-        "required": true
-      },
-      {
-        "name": "akua-context",
-        "in": "header",
-        "required": false
-      }
-    ]
-  },
-  {
-    "operation_id": "machines.getSuspensionEvent",
-    "command": "machines get-suspension-event",
-    "resource": "machines",
-    "action": "get-suspension-event",
-    "method": "GET",
-    "path": "/machines/{id}/suspension_events/{event_id}",
-    "tag": "Machines",
-    "summary": "Get machine suspension event",
-    "visibility": "PUBLIC",
-    "requires_auth": true,
-    "parameters": [
-      {
-        "name": "id",
-        "in": "path",
-        "required": true
-      },
-      {
-        "name": "event_id",
-        "in": "path",
-        "required": true
-      },
-      {
-        "name": "akua-context",
-        "in": "header",
-        "required": false
-      }
-    ]
-  },
-  {
     "operation_id": "machines.list",
     "command": "machines list",
     "resource": "machines",
@@ -3139,84 +3048,6 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
       },
       {
         "name": "view",
-        "in": "query",
-        "required": false
-      },
-      {
-        "name": "akua-context",
-        "in": "header",
-        "required": false
-      }
-    ]
-  },
-  {
-    "operation_id": "machines.listDriftReports",
-    "command": "machines list-drift-reports",
-    "resource": "machines",
-    "action": "list-drift-reports",
-    "method": "GET",
-    "path": "/machines/{id}/drift_reports",
-    "tag": "Machines",
-    "summary": "List machine drift reports",
-    "visibility": "PUBLIC",
-    "requires_auth": true,
-    "parameters": [
-      {
-        "name": "id",
-        "in": "path",
-        "required": true
-      },
-      {
-        "name": "cursor",
-        "in": "query",
-        "required": false
-      },
-      {
-        "name": "limit",
-        "in": "query",
-        "required": false
-      },
-      {
-        "name": "state",
-        "in": "query",
-        "required": false
-      },
-      {
-        "name": "akua-context",
-        "in": "header",
-        "required": false
-      }
-    ]
-  },
-  {
-    "operation_id": "machines.listSuspensionEvents",
-    "command": "machines list-suspension-events",
-    "resource": "machines",
-    "action": "list-suspension-events",
-    "method": "GET",
-    "path": "/machines/{id}/suspension_events",
-    "tag": "Machines",
-    "summary": "List machine suspension events",
-    "visibility": "PUBLIC",
-    "requires_auth": true,
-    "parameters": [
-      {
-        "name": "id",
-        "in": "path",
-        "required": true
-      },
-      {
-        "name": "cursor",
-        "in": "query",
-        "required": false
-      },
-      {
-        "name": "limit",
-        "in": "query",
-        "required": false
-      },
-      {
-        "name": "reason",
         "in": "query",
         "required": false
       },
