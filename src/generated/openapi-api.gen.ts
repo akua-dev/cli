@@ -1928,6 +1928,8 @@ export type ClustersCreate403 = ApiErrorResponse
 export const ClustersCreate403 = ApiErrorResponse
 export type ClustersCreate422 = ApiErrorResponse
 export const ClustersCreate422 = ApiErrorResponse
+export type ClustersCreate504 = ApiErrorResponse
+export const ClustersCreate504 = ApiErrorResponse
 export type ClustersGetParams = { readonly "akua-context"?: string }
 export const ClustersGetParams = Schema.Struct({ "akua-context": Schema.optionalKey(Schema.String.annotate({ "description": "Optional workspace/scope context for the request. Carries a single workspace wire id (`ws_…`) today. Only needed for broad tokens — a workspace-owned token implies its workspace.", "examples": ["ws_j572abc123def456"] }).check(Schema.isMinLength(1).annotate({ "expected": "a value with a length of at least 1" })).check(Schema.isMaxLength(53).annotate({ "expected": "a value with a length of at most 53" }))) })
 export type ClustersGetPathParams = { readonly "id": string }
@@ -3892,11 +3894,11 @@ class ClustersGroup extends HttpApiGroup.make("Clusters")
       .annotate(OpenApi.Identifier, "clusters.list")
       .annotate(OpenApi.Summary, "List clusters")
       .annotate(OpenApi.Description, "Lists clusters visible to the authenticated workspace owner."),
-    HttpApiEndpoint.post("clustersCreate", "/clusters", { headers: ClustersCreateHeaders, payload: [ClustersCreateRequestJson, HttpApiSchema.NoContent], success: ClustersCreate202.pipe(HttpApiSchema.status(202)), error: [ClustersCreate401.pipe(HttpApiSchema.status(401)), ClustersCreate403.pipe(HttpApiSchema.status(403)), ClustersCreate422.pipe(HttpApiSchema.status(422))] })
+    HttpApiEndpoint.post("clustersCreate", "/clusters", { headers: ClustersCreateHeaders, payload: [ClustersCreateRequestJson, HttpApiSchema.NoContent], success: ClustersCreate202.pipe(HttpApiSchema.status(202)), error: [ClustersCreate401.pipe(HttpApiSchema.status(401)), ClustersCreate403.pipe(HttpApiSchema.status(403)), ClustersCreate422.pipe(HttpApiSchema.status(422)), ClustersCreate504.pipe(HttpApiSchema.status(504))] })
       .middleware(BearerAuthSecurityMiddleware)
       .annotate(OpenApi.Identifier, "clusters.create")
       .annotate(OpenApi.Summary, "Create cluster")
-      .annotate(OpenApi.Description, "Creates a managed cluster and returns an async Operation envelope. State for in-flight operations is eventually consistent and may lag actual execution by a few seconds. State for completed operations (`done: true`) is immutable."),
+      .annotate(OpenApi.Description, "Creates a managed cluster and returns an async Operation envelope. State for in-flight operations is eventually consistent and may lag actual execution by a few seconds. State for completed operations (`done: true`) is immutable. If you supply an Idempotency-Key and the workflow starts before its Operation is visible, retry with the same key to retrieve the same Operation."),
     HttpApiEndpoint.get("clustersGet", "/clusters/{id}", { params: ClustersGetPathParams, headers: ClustersGetHeaders, success: ClustersGet200, error: [ClustersGet401.pipe(HttpApiSchema.status(401)), ClustersGet403.pipe(HttpApiSchema.status(403)), ClustersGet404.pipe(HttpApiSchema.status(404))] })
       .middleware(BearerAuthSecurityMiddleware)
       .annotate(OpenApi.Identifier, "clusters.get")
