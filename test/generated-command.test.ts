@@ -178,6 +178,86 @@ describe('generated public commands', () => {
 		expect(received?.headers.get('akua-context')).toBe('ws_123');
 	});
 
+	test('operations.wait preserves the literal custom verb and workspace context', async () => {
+		let received: Request | undefined;
+		const operation = machineOperation();
+		const result = await runGenerated(
+			'operations.wait',
+			['--input', '-'],
+			JSON.stringify({
+				path: { id: operation.id },
+				query: { timeout: 30 },
+				headers: { 'akua-context': 'ws_123' }
+			}),
+			(input, init) => {
+				received = new Request(input, init);
+				return Promise.resolve(Response.json(operation));
+			}
+		);
+
+		expect(result.data).toMatchObject({ id: operation.id, state: operation.state });
+		expect(received?.method).toBe('POST');
+		expect(received?.url).toBe('https://api.akua.dev/v1/operations/op_123:wait?timeout=30');
+		expect(received?.headers.get('akua-context')).toBe('ws_123');
+	});
+
+	test('package list ids are accepted by get and list-versions with the same context', async () => {
+		const workspaceId = 'ws_w97ebxp3b5s23jee036xcncw5s88svt4';
+		const packageRecord = publicPackage(workspaceId);
+		const packageVersion = publicPackageVersion(packageRecord.id);
+		const listResult = await runGenerated(
+			'packages.list',
+			['--input', '-'],
+			JSON.stringify({ headers: { 'akua-context': workspaceId } }),
+			() =>
+				Promise.resolve(
+					Response.json({ data: [packageRecord], has_more: false, next_cursor: null })
+				)
+		);
+		const listedPackage = listResult.data.data[0];
+		expect(listedPackage).toBeDefined();
+		if (listedPackage === undefined) return;
+
+		const requests: Request[] = [];
+		const getResult = await runGenerated(
+			'packages.get',
+			['--input', '-'],
+			JSON.stringify({
+				path: { id: listedPackage.id },
+				headers: { 'akua-context': workspaceId }
+			}),
+			(input, init) => {
+				requests.push(new Request(input, init));
+				return Promise.resolve(Response.json(packageRecord));
+			}
+		);
+		const versionsResult = await runGenerated(
+			'packages.listVersions',
+			['--input', '-'],
+			JSON.stringify({
+				path: { id: listedPackage.id },
+				headers: { 'akua-context': workspaceId }
+			}),
+			(input, init) => {
+				requests.push(new Request(input, init));
+				return Promise.resolve(
+					Response.json({ data: [packageVersion], has_more: false, next_cursor: null })
+				);
+			}
+		);
+
+		expect(getResult.data.id).toBe(listedPackage.id);
+		expect(versionsResult.data.data[0]?.package_id).toBe(listedPackage.id);
+		expect(requests.map((request) => request.url)).toEqual([
+			`https://api.akua.dev/v1/packages/${listedPackage.id}`,
+			`https://api.akua.dev/v1/packages/${listedPackage.id}/versions`
+		]);
+		expect(requests.map((request) => request.headers.get('akua-context'))).toEqual([
+			workspaceId,
+			workspaceId
+		]);
+	});
+
 	test('quotas.list accepts a lifetime quota response', async () => {
 		const quotas = {
 			data: [
@@ -987,6 +1067,34 @@ function machineOperation() {
 		last_error: null,
 		started_at: 1,
 		completed_at: null
+	};
+}
+
+function publicPackage(workspaceId: string) {
+	return {
+		id: 'pkg_rh798028r44dhw5ff29y7dskvh8et7xs',
+		html_url: 'https://akua.dev/packages/pkg_rh798028r44dhw5ff29y7dskvh8et7xs',
+		workspace_id: workspaceId,
+		name: 'quickstart-package',
+		latest_version_id: 'pkgv_rd7ccve0kn3f0z31x9ggzf671h8evpp3',
+		description: null,
+		display_image_url: null,
+		source: { kind: 'hosted', repository_id: 'repo_rh798028r44dhw5ff29y7dskvh8et7xs' },
+		created_at: 1_789_133_184,
+		etag: '1'
+	};
+}
+
+function publicPackageVersion(packageId: string) {
+	return {
+		id: 'pkgv_rd7ccve0kn3f0z31x9ggzf671h8evpp3',
+		package_id: packageId,
+		semver: '0.1.0',
+		ref: 'refs/tags/v1.0.0',
+		input_schema: {},
+		published_at: 1_789_133_184,
+		created_at: 1_789_133_184,
+		etag: '1'
 	};
 }
 

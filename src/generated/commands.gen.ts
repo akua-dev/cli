@@ -1421,7 +1421,7 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
     "resource": "clusters",
     "action": "proxy-kube",
     "method": "GET",
-    "path": "/clusters/{id}/kube_proxy/{path}",
+    "path": "/clusters/{id}/kube_proxy/{path:*}",
     "tag": "Clusters",
     "summary": "Proxy cluster API",
     "visibility": "PUBLIC",

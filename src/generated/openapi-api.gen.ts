@@ -3940,7 +3940,7 @@ class ClustersGroup extends HttpApiGroup.make("Clusters")
       .annotate(OpenApi.Identifier, "clusters.getKubeconfig")
       .annotate(OpenApi.Summary, "Get cluster kubeconfig")
       .annotate(OpenApi.Description, "Returns a cluster admin kubeconfig for workspace owners and admins. Successful credential disclosure is fail-closed on a cluster-scoped audit record."),
-    HttpApiEndpoint.get("clustersProxyKube", "/clusters/{id}/kube_proxy/{path}", { params: ClustersProxyKubePathParams, headers: ClustersProxyKubeHeaders, success: HttpApiSchema.Empty(200), error: [ClustersProxyKube401.pipe(HttpApiSchema.status(401)), ClustersProxyKube403.pipe(HttpApiSchema.status(403)), ClustersProxyKube404.pipe(HttpApiSchema.status(404))] })
+    HttpApiEndpoint.get("clustersProxyKube", "/clusters/{id}/kube_proxy/{path:*}", { params: ClustersProxyKubePathParams, headers: ClustersProxyKubeHeaders, success: HttpApiSchema.Empty(200), error: [ClustersProxyKube401.pipe(HttpApiSchema.status(401)), ClustersProxyKube403.pipe(HttpApiSchema.status(403)), ClustersProxyKube404.pipe(HttpApiSchema.status(404))] })
       .middleware(BearerAuthSecurityMiddleware)
       .annotate(OpenApi.Identifier, "clusters.proxyKube")
       .annotate(OpenApi.Summary, "Proxy cluster API")
