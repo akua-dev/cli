@@ -3102,9 +3102,7 @@ function executeOperation(
           Api.PackagesCreateVersionHeaders,
           strictParseOptions,
         )(input.headers ?? {}));
-        const payload = input.body === undefined
-          ? undefined
-          : yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
+        const payload = yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
           Api.PackagesCreateVersionRequestJson,
           strictParseOptions,
         )(input.body));

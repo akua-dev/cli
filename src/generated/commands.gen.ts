@@ -4294,15 +4294,16 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "name": "akua-context",
         "in": "header",
         "required": false
+      },
+      {
+        "name": "idempotency-key",
+        "in": "header",
+        "required": false
       }
     ],
     "body": {
-      "required": false,
-      "example": {
-        "semver": "<semver>",
-        "ref": "<ref>",
-        "input_schema": "<input_schema>"
-      }
+      "required": true,
+      "example": {}
     }
   },
   {
