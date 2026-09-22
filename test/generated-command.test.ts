@@ -89,6 +89,30 @@ describe('generated public commands', () => {
 		expect(received?.headers.get('authorization')).toBe('Bearer test-token');
 	});
 
+	test('workspaces.listMembers forwards pagination and workspace context', async () => {
+		let received: Request | undefined;
+		const members = { data: [], has_more: false, next_cursor: null };
+		const result = await runGenerated(
+			'workspaces.listMembers',
+			['--input', '-'],
+			JSON.stringify({
+				path: { id: 'ws_123' },
+				query: { cursor: 'next-page', limit: 25 },
+				headers: { 'akua-context': 'ws_123' }
+			}),
+			(input, init) => {
+				received = new Request(input, init);
+				return Promise.resolve(Response.json(members));
+			}
+		);
+
+		expect(result.data).toEqual(members);
+		expect(received?.url).toBe(
+			'https://api.akua.dev/v1/workspaces/ws_123/members?cursor=next-page&limit=25'
+		);
+		expect(received?.headers.get('akua-context')).toBe('ws_123');
+	});
+
 	test('machines.create permits an omitted optional compute config and decodes 202', async () => {
 		let received: Request | undefined;
 		const body = {
@@ -199,6 +223,89 @@ describe('generated public commands', () => {
 		expect(received?.method).toBe('POST');
 		expect(received?.url).toBe('https://api.akua.dev/v1/operations/op_123:wait?timeout=30');
 		expect(received?.headers.get('akua-context')).toBe('ws_123');
+	});
+
+	test('entitlements.list forwards the workspace context header', async () => {
+		let received: Request | undefined;
+		const entitlements = { data: [], has_more: false, next_cursor: null, etag: '1' };
+		const result = await runGenerated(
+			'entitlements.list',
+			['--input', '-'],
+			JSON.stringify({ headers: { 'akua-context': 'ws_123' } }),
+			(input, init) => {
+				received = new Request(input, init);
+				return Promise.resolve(Response.json(entitlements));
+			}
+		);
+
+		expect(result.data).toEqual(entitlements);
+		expect(received?.url).toBe('https://api.akua.dev/v1/entitlements');
+		expect(received?.headers.get('akua-context')).toBe('ws_123');
+	});
+
+	test('repositories.create sends the generated workspace repository request', async () => {
+		let received: Request | undefined;
+		const repository = {
+			id: 'repo_123',
+			name: 'workspace-repository',
+			workspace_id: 'ws_123',
+			created_at: 1,
+			updated_at: 1,
+			etag: '1',
+			reconciling: false,
+			purpose: 'workspace',
+			remote_url: 'https://git.example.test/workspace/repository.git',
+			expires_at: 3_600
+		};
+		const result = await runGenerated(
+			'repositories.create',
+			['--input', '-'],
+			JSON.stringify({
+				headers: { 'akua-context': 'ws_123', 'idempotency-key': 'repository-create' },
+				body: { purpose: 'workspace' }
+			}),
+			(input, init) => {
+				received = new Request(input, init);
+				return Promise.resolve(Response.json(repository, { status: 201 }));
+			}
+		);
+
+		expect(result.data).toEqual(repository);
+		expect(received?.method).toBe('POST');
+		expect(received?.url).toBe('https://api.akua.dev/v1/repositories');
+		expect(received?.headers.get('akua-context')).toBe('ws_123');
+		expect(received?.headers.get('idempotency-key')).toBe('repository-create');
+		expect(await received?.json()).toEqual({ purpose: 'workspace' });
+	});
+
+	test('repositories.createToken preserves the literal custom verb and body', async () => {
+		let received: Request | undefined;
+		const token = {
+			repository_id: 'repo_123',
+			remote_url: 'https://git.example.test/workspace/repository.git',
+			write_token: 'redacted-test-token',
+			revocation_scheduled_at: 3_600
+		};
+		const result = await runGenerated(
+			'repositories.createToken',
+			['--input', '-'],
+			JSON.stringify({
+				path: { id: 'repo_123' },
+				headers: { 'akua-context': 'ws_123', 'idempotency-key': 'repository-token' },
+				body: { revoke_after_seconds: 600 }
+			}),
+			(input, init) => {
+				received = new Request(input, init);
+				return Promise.resolve(Response.json(token, { status: 201 }));
+			}
+		);
+
+		expect(result.data).toEqual(token);
+		expect(received?.method).toBe('POST');
+		expect(received?.url).toBe('https://api.akua.dev/v1/repositories/repo_123:createToken');
+		expect(received?.headers.get('akua-context')).toBe('ws_123');
+		expect(received?.headers.get('idempotency-key')).toBe('repository-token');
+		expect(await received?.json()).toEqual({ revoke_after_seconds: 600 });
 	});
 
 	test('package list ids are accepted by get and list-versions with the same context', async () => {
