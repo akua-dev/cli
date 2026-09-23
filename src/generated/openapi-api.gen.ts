@@ -2082,6 +2082,8 @@ export type ClustersProxyKubePathParams = { readonly "id": string, readonly "pat
 export const ClustersProxyKubePathParams = Schema.Struct({ "id": Schema.String.check(Schema.isMinLength(1).annotate({ "expected": "a value with a length of at least 1" })).check(Schema.isMaxLength(54).annotate({ "expected": "a value with a length of at most 54" })), "path": Schema.String.annotate({ "description": "Kube API path forwarded verbatim" }) })
 export type ClustersProxyKubeHeaders = { readonly "akua-context"?: string }
 export const ClustersProxyKubeHeaders = Schema.Struct({ "akua-context": Schema.optionalKey(Schema.String.annotate({ "description": "Optional workspace/scope context for the request. Carries a single workspace wire id (`ws_…`) today. Only needed for broad tokens — a workspace-owned token implies its workspace.", "examples": ["ws_j572abc123def456"] }).check(Schema.isMinLength(1).annotate({ "expected": "a value with a length of at least 1" })).check(Schema.isMaxLength(53).annotate({ "expected": "a value with a length of at most 53" }))) })
+export type ClustersProxyKube200 = Schema.Json
+export const ClustersProxyKube200 = Schema.Json.annotate({ "expected": "JSON value" })
 export type ClustersProxyKube401 = ApiErrorResponse
 export const ClustersProxyKube401 = ApiErrorResponse
 export type ClustersProxyKube403 = ApiErrorResponse
@@ -3944,7 +3946,7 @@ class ClustersGroup extends HttpApiGroup.make("Clusters")
       .annotate(OpenApi.Identifier, "clusters.getKubeconfig")
       .annotate(OpenApi.Summary, "Get cluster kubeconfig")
       .annotate(OpenApi.Description, "Returns a cluster admin kubeconfig for workspace owners and admins. Successful credential disclosure is fail-closed on a cluster-scoped audit record."),
-    HttpApiEndpoint.get("clustersProxyKube", "/clusters/{id}/kube_proxy/{path:*}", { params: ClustersProxyKubePathParams, headers: ClustersProxyKubeHeaders, success: HttpApiSchema.Empty(200), error: [ClustersProxyKube401.pipe(HttpApiSchema.status(401)), ClustersProxyKube403.pipe(HttpApiSchema.status(403)), ClustersProxyKube404.pipe(HttpApiSchema.status(404))] })
+    HttpApiEndpoint.get("clustersProxyKube", "/clusters/{id}/kube_proxy/{path:*}", { params: ClustersProxyKubePathParams, headers: ClustersProxyKubeHeaders, success: [ClustersProxyKube200, HttpApiSchema.Empty(204)], error: [ClustersProxyKube401.pipe(HttpApiSchema.status(401)), ClustersProxyKube403.pipe(HttpApiSchema.status(403)), ClustersProxyKube404.pipe(HttpApiSchema.status(404))] })
       .middleware(BearerAuthSecurityMiddleware)
       .annotate(OpenApi.Identifier, "clusters.proxyKube")
       .annotate(OpenApi.Summary, "Proxy cluster API")

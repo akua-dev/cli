@@ -503,6 +503,7 @@ describe('generated public commands', () => {
 
 	test('clusters proxy-kube preserves wildcard path separators', async () => {
 		let received: Request | undefined;
+		const kubeResponse = { kind: 'NodeList', items: [{ metadata: { name: 'worker-1' } }] };
 		const result = await runGenerated(
 			'clusters.proxyKube',
 			['--input', '-'],
@@ -511,11 +512,11 @@ describe('generated public commands', () => {
 			}),
 			(input, init) => {
 				received = new Request(input, init);
-				return Promise.resolve(new Response(null, { status: 200 }));
+				return Promise.resolve(Response.json(kubeResponse));
 			}
 		);
 
-		expect(result.data).toBeUndefined();
+		expect(result.data).toEqual(kubeResponse);
 		expect(received?.url).toBe(
 			'https://api.akua.dev/v1/clusters/clu%3A123/kube_proxy/api/v1/nodes'
 		);
