@@ -10,7 +10,7 @@ output to whichever one is running it.
 Every command is generated directly from Akua's public API, so the CLI never
 drifts out of sync with what the platform can actually do.
 
-The canonical executable is `akua`; there is no `cnap` compatibility binary.
+The canonical executable is `akua`.
 
 **Source of truth.** Development continues in the `akua-dev/cnap` monorepo under
 `tools/cli/source`. This public repository is being prepared as a Josh projection
