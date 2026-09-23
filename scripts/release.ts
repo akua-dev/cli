@@ -108,6 +108,9 @@ export function hostTargetId(): Effect.Effect<ReleaseTargetId, Error, ReleaseHos
 
 const versionFlag = Flag.string('version').pipe(Flag.withDescription('Release version'));
 const outputFlag = Flag.string('output').pipe(Flag.withDescription('Release output directory'));
+const sourceShaFlag = Flag.string('source-sha').pipe(
+	Flag.withDescription('Canonical cnap source commit SHA')
+);
 
 const matrixCommand = Command.make('matrix', {}, () =>
 	Console.log(JSON.stringify(releaseMatrix()))
@@ -115,8 +118,8 @@ const matrixCommand = Command.make('matrix', {}, () =>
 
 const packageCommand = Command.make(
 	'package',
-	{ version: versionFlag, outputDir: outputFlag },
-	({ version, outputDir }) => packageRelease({ version, outputDir })
+	{ version: versionFlag, outputDir: outputFlag, sourceSha: sourceShaFlag },
+	({ version, outputDir, sourceSha }) => packageRelease({ version, outputDir, sourceSha })
 ).pipe(Command.withDescription('Package all release artifacts'));
 
 const verifyCommand = Command.make(

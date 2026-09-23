@@ -24,6 +24,8 @@ import { bytesToHex, ReleaseHost } from '../scripts/runtime/release-services';
 import { ReleaseHostLive } from '../scripts/runtime/release-host-live';
 import { cliTestLayer } from './cli-test-layer';
 
+const TEST_SOURCE_SHA = '0123456789abcdef0123456789abcdef01234567';
+
 function runRelease<A, E>(program: Effect.Effect<A, E, ReleaseHost>): Promise<A> {
 	return Effect.runPromise(Effect.provide(program, ReleaseHostLive));
 }
@@ -95,7 +97,7 @@ async function makePackageRuntimeFixture(root: string): Promise<string> {
 		await mkdirp(directory);
 		await writeFileString(
 			joinPath(directory, 'package.json'),
-			`${JSON.stringify({ name: `@akua-dev/${packageName}`, files })}\n`
+			`${JSON.stringify({ name: `@akua-dev/${packageName}`, version: '0.9.4', files })}\n`
 		);
 		for (const file of files) {
 			if (packageName === 'sdk' && file === 'dist') {
@@ -405,6 +407,7 @@ describe('release target contract', () => {
 			outputDir: string;
 			binaries: Record<string, string>;
 			packageRoot: string;
+			sourceSha: string;
 		}) => Effect.Effect<void, Error>;
 		const verifyReleaseDirectory = release.verifyReleaseDirectory as (
 			outputDir: string,
@@ -423,7 +426,8 @@ describe('release target contract', () => {
 					version: '1.2.3',
 					outputDir,
 					binaries: Object.fromEntries(targets.map((target) => [target.id, source])),
-					packageRoot
+					packageRoot,
+					sourceSha: TEST_SOURCE_SHA
 				})
 			);
 
@@ -436,7 +440,19 @@ describe('release target contract', () => {
 				executable: 'akua',
 				version: '1.2.3',
 				checksums: 'checksums.txt',
-				homebrew_manifest: 'akua-v1.2.3-homebrew.json'
+				homebrew_manifest: 'akua-v1.2.3-homebrew.json',
+				source: {
+					repository: 'akua-dev/cnap',
+					sha: TEST_SOURCE_SHA,
+					subtree: 'tools/cli/source'
+				},
+				dependencies: [
+					{
+						name: '@akua-dev/sdk',
+						version: '0.9.4',
+						sha256: expect.stringMatching(/^[0-9a-f]{64}$/)
+					}
+				]
 			});
 			expect(manifest.assets).toHaveLength(5);
 			expect(manifest.assets.map((asset: { target: string }) => asset.target)).toEqual(
@@ -507,6 +523,7 @@ describe('release target contract', () => {
 			outputDir: string;
 			binaries: Record<string, string>;
 			packageRoot: string;
+			sourceSha: string;
 		}) => Effect.Effect<void, Error>;
 		const root = await makeReleaseTempDir();
 
@@ -524,7 +541,8 @@ describe('release target contract', () => {
 					version: '1.2.3',
 					outputDir: firstOutputDir,
 					binaries,
-					packageRoot
+					packageRoot,
+					sourceSha: TEST_SOURCE_SHA
 				})
 			);
 			await Effect.runPromise(Effect.sleep('2100 millis'));
@@ -533,7 +551,8 @@ describe('release target contract', () => {
 					version: '1.2.3',
 					outputDir: secondOutputDir,
 					binaries,
-					packageRoot
+					packageRoot,
+					sourceSha: TEST_SOURCE_SHA
 				})
 			);
 
@@ -559,6 +578,7 @@ describe('release target contract', () => {
 			outputDir: string;
 			binaries: Record<string, string>;
 			packageRoot: string;
+			sourceSha: string;
 		}) => Effect.Effect<void, Error>;
 		const verifyReleaseDirectory = release.verifyReleaseDirectory as (
 			outputDir: string,
@@ -577,7 +597,8 @@ describe('release target contract', () => {
 					version: '1.2.3',
 					outputDir,
 					binaries: Object.fromEntries(targets.map((target) => [target.id, source])),
-					packageRoot
+					packageRoot,
+					sourceSha: TEST_SOURCE_SHA
 				})
 			);
 			await writeFileString(joinPath(outputDir, 'akua-v1.2.3-linux-x64.tar.gz'), 'tampered');
@@ -644,6 +665,7 @@ describe('release target contract', () => {
 			outputDir: string;
 			binaries: Record<string, string>;
 			packageRoot: string;
+			sourceSha: string;
 		}) => Effect.Effect<void, Error>;
 		const verifyReleaseDirectory = release.verifyReleaseDirectory as (
 			outputDir: string,
@@ -662,7 +684,8 @@ describe('release target contract', () => {
 					version: '1.2.3',
 					outputDir,
 					binaries: Object.fromEntries(targets.map((target) => [target.id, source])),
-					packageRoot
+					packageRoot,
+					sourceSha: TEST_SOURCE_SHA
 				})
 			);
 			const manifestPath = joinPath(outputDir, 'akua-v1.2.3-homebrew.json');
@@ -725,6 +748,7 @@ describe('release target contract', () => {
 			outputDir: string;
 			binaries: Record<string, string>;
 			packageRoot: string;
+			sourceSha: string;
 		}) => Effect.Effect<void, Error>;
 		const smokeReleaseArtifact = release.smokeReleaseArtifact as (input: {
 			version: string;
@@ -748,7 +772,8 @@ describe('release target contract', () => {
 					version: '1.2.3',
 					outputDir,
 					binaries: Object.fromEntries(targets.map((target) => [target.id, source])),
-					packageRoot
+					packageRoot,
+					sourceSha: TEST_SOURCE_SHA
 				})
 			);
 
@@ -785,6 +810,7 @@ describe('release target contract', () => {
 			outputDir: string;
 			binaries: Record<string, string>;
 			packageRoot: string;
+			sourceSha: string;
 		}) => Effect.Effect<void, Error>;
 		const artifactName = release.artifactName as (
 			version: string,
@@ -806,7 +832,8 @@ describe('release target contract', () => {
 					version: '1.2.3',
 					outputDir,
 					binaries: Object.fromEntries(targets.map((target) => [target.id, source])),
-					packageRoot
+					packageRoot,
+					sourceSha: TEST_SOURCE_SHA
 				})
 			);
 
@@ -847,6 +874,7 @@ describe('release target contract', () => {
 			outputDir: string;
 			binaries: Record<string, string>;
 			packageRoot: string;
+			sourceSha: string;
 		}) => Effect.Effect<void, Error>;
 		const smokeReleaseArtifact = release.smokeReleaseArtifact as (input: {
 			version: string;
@@ -869,7 +897,8 @@ describe('release target contract', () => {
 					version: '1.2.3',
 					outputDir,
 					binaries: Object.fromEntries(targets.map((target) => [target.id, source])),
-					packageRoot
+					packageRoot,
+					sourceSha: TEST_SOURCE_SHA
 				})
 			);
 

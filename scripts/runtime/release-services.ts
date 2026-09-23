@@ -110,7 +110,24 @@ export interface ReleaseManifest {
 	version: string;
 	checksums: 'checksums.txt';
 	homebrew_manifest: string;
+	source: ReleaseProvenance['source'];
+	dependencies: ReleaseProvenance['dependencies'];
 	assets: ReleaseAsset[];
+}
+
+export interface ReleaseProvenance {
+	source: {
+		repository: 'akua-dev/cnap';
+		sha: string;
+		subtree: 'tools/cli/source';
+	};
+	dependencies: [
+		{
+			name: '@akua-dev/sdk';
+			version: string;
+			sha256: string;
+		}
+	];
 }
 
 export interface PackageExistingExecutablesInput {
@@ -118,6 +135,18 @@ export interface PackageExistingExecutablesInput {
 	outputDir: string;
 	binaries: Record<string, string>;
 	packageRoot: string;
+	sourceSha: string;
+	targetId?: ReleaseTargetId;
+	zipperPath?: string;
+}
+
+export interface AssembleReleasePackagesInput {
+	version: string;
+	outputDir: string;
+	packageRoot: string;
+	sourceSha: string;
+	parts: Record<string, string>;
+	zipperPath?: string;
 }
 
 export interface PackageReleaseInput {
@@ -125,7 +154,36 @@ export interface PackageReleaseInput {
 	outputDir: string;
 	entrypoint?: string;
 	packageRoot?: string;
+	sourceSha: string;
 }
+
+export const makeReleaseProvenance = Effect.fn('makeReleaseProvenance')(function* (input: {
+	readonly sourceSha: string;
+	readonly sdkVersion: string;
+	readonly sdkSha256: string;
+}) {
+	if (!/^[0-9a-f]{40}$/.test(input.sourceSha)) {
+		return yield* releaseFailure(`Invalid cnap source SHA: ${input.sourceSha}`);
+	}
+	yield* validateVersion(input.sdkVersion);
+	if (!/^[0-9a-f]{64}$/.test(input.sdkSha256)) {
+		return yield* releaseFailure(`Invalid Akuapkg SDK SHA-256: ${input.sdkSha256}`);
+	}
+	return {
+		source: {
+			repository: 'akua-dev/cnap',
+			sha: input.sourceSha,
+			subtree: 'tools/cli/source'
+		},
+		dependencies: [
+			{
+				name: '@akua-dev/sdk',
+				version: input.sdkVersion,
+				sha256: input.sdkSha256
+			}
+		]
+	} satisfies ReleaseProvenance;
+});
 
 export function releaseMatrix(): {
 	include: Array<{ target: ReleaseTargetId; runner: string }>;
@@ -262,6 +320,9 @@ export class ReleaseHost extends Context.Service<
 		readonly assertSafeOutputDirectory: (outputDir: string) => Effect.Effect<void, ReleaseFailure>;
 		readonly packageExistingExecutables: (
 			input: PackageExistingExecutablesInput
+		) => Effect.Effect<void, ReleaseFailure>;
+		readonly assembleReleasePackages: (
+			input: AssembleReleasePackagesInput
 		) => Effect.Effect<void, ReleaseFailure>;
 		readonly packageRelease: (input: PackageReleaseInput) => Effect.Effect<void, ReleaseFailure>;
 		readonly smokeReleaseArtifact: (input: {

@@ -27,13 +27,16 @@ import {
 	releaseFailure,
 	releaseManifestName,
 	releaseTargetIdForHost,
+	makeReleaseProvenance,
 	validateVersion
 } from './release-services';
 import type {
+	AssembleReleasePackagesInput,
 	PackageExistingExecutablesInput,
 	PackageReleaseInput,
 	ReleaseAsset,
 	ReleaseManifest,
+	ReleaseProvenance,
 	ReleaseTarget
 } from './release-services';
 
@@ -143,6 +146,37 @@ function lstatIfPresent(
 	);
 }
 
+const writeReleaseMetadata = Effect.fn('writeReleaseMetadata')(function* (
+	outputDir: string,
+	version: string,
+	assets: ReleaseAsset[],
+	provenance: ReleaseProvenance
+) {
+	const fs = yield* FileSystem.FileSystem;
+	const path = yield* Path.Path;
+	const manifestName = yield* releaseManifestName(version);
+	const homebrewName = yield* homebrewManifestName(version);
+	const manifest: ReleaseManifest = {
+		schema_version: 1,
+		executable: 'akua',
+		version,
+		checksums: 'checksums.txt',
+		homebrew_manifest: homebrewName,
+		...provenance,
+		assets
+	};
+	const homebrewManifest = yield* createHomebrewManifest(version, assets);
+	for (const [name, contents] of [
+		['checksums.txt', assets.map((asset) => checksumLine(asset.file, asset.sha256)).join('')],
+		[manifestName, stableJson(manifest)],
+		[homebrewName, stableJson(homebrewManifest)]
+	]) {
+		yield* fs
+			.writeFileString(path.join(outputDir, name), contents)
+			.pipe(Effect.mapError(toReleaseFailure('write release metadata')));
+	}
+});
+
 const packageExistingExecutables = Effect.fn('packageExistingExecutables')(function* (
 	input: PackageExistingExecutablesInput
 ) {
@@ -159,122 +193,131 @@ const packageExistingExecutables = Effect.fn('packageExistingExecutables')(funct
 		.makeDirectory(stagingRoot, { recursive: true })
 		.pipe(Effect.mapError(toReleaseFailure('create staging directory')));
 
-	const assets: ReleaseAsset[] = [];
+	const sdkIdentity = yield* readSdkRuntimeIdentity(input.packageRoot);
+	const provenance = yield* makeReleaseProvenance({
+		sourceSha: input.sourceSha,
+		sdkVersion: sdkIdentity.version,
+		sdkSha256: sdkIdentity.sha256
+	});
 	const packageAssets = Effect.gen(function* () {
-		for (const target of RELEASE_TARGETS) {
-			const source = input.binaries[target.id];
-			if (!source) {
-				return yield* releaseFailure(`Missing compiled executable for ${target.id}`);
-			}
-			const stagingDir = path.join(stagingRoot, target.id);
-			const stagedExecutable = path.join(stagingDir, target.executable);
-			const archive = artifactName(input.version, target);
-			const archivePath = path.join(outputDir, archive);
+		const selectedTargets = input.targetId
+			? RELEASE_TARGETS.filter((target) => target.id === input.targetId)
+			: RELEASE_TARGETS;
+		yield* check(selectedTargets.length > 0, `Unknown release target: ${input.targetId}`);
+		const assets = yield* Effect.forEach(
+			selectedTargets,
+			(target) =>
+				Effect.gen(function* () {
+					const source = input.binaries[target.id];
+					if (!source) {
+						return yield* releaseFailure(`Missing compiled executable for ${target.id}`);
+					}
+					const stagingDir = path.join(stagingRoot, target.id);
+					const stagedExecutable = path.join(stagingDir, target.executable);
+					const archive = artifactName(input.version, target);
+					const archivePath = path.join(outputDir, archive);
+					yield* fs
+						.makeDirectory(stagingDir, { recursive: true })
+						.pipe(Effect.mapError(toReleaseFailure('create target staging directory')));
+					const sourceBytes = yield* fs
+						.readFile(source)
+						.pipe(Effect.mapError(toReleaseFailure('read compiled executable')));
+					yield* fs
+						.writeFile(stagedExecutable, sourceBytes)
+						.pipe(Effect.mapError(toReleaseFailure('stage compiled executable')));
+					const stagedBytes = yield* fs
+						.readFile(stagedExecutable)
+						.pipe(Effect.mapError(toReleaseFailure('verify staged executable')));
+					yield* check(
+						bytesEqual(stagedBytes, sourceBytes),
+						`Staged executable does not match source for ${target.id}`
+					);
+					yield* fs
+						.chmod(stagedExecutable, target.os === 'windows' ? 0o644 : 0o755)
+						.pipe(Effect.mapError(toReleaseFailure('set staged executable mode')));
+					yield* fs
+						.utimes(stagedExecutable, ARCHIVE_TIMESTAMP, ARCHIVE_TIMESTAMP)
+						.pipe(Effect.mapError(toReleaseFailure('set staged executable timestamp')));
+					const runtimeFiles = yield* stagePackageRuntime(input.packageRoot, stagingDir, target);
+					if (target.archive === 'tar.gz') {
+						const metadataArguments =
+							process.platform === 'linux'
+								? ['--owner=0', '--group=0', `--mtime=@${ARCHIVE_TIMESTAMP_SECONDS}`]
+								: [
+										'--uid',
+										'0',
+										'--gid',
+										'0',
+										'--uname',
+										'root',
+										'--gname',
+										'root',
+										'--options',
+										'gzip:!timestamp'
+									];
+						yield* runCommand(
+							[
+								'tar',
+								'--format=ustar',
+								...metadataArguments,
+								'-czf',
+								archivePath,
+								'-C',
+								stagingDir,
+								target.executable,
+								'node_modules'
+							],
+							{ COPYFILE_DISABLE: '1' }
+						);
+					} else {
+						if (input.zipperPath) {
+							yield* runCommand([
+								input.zipperPath,
+								'cC',
+								archivePath,
+								...[target.executable, ...runtimeFiles].map(
+									(file) => `${file}=${path.join(stagingDir, file)}`
+								)
+							]);
+						} else {
+							yield* runCommand(
+								['zip', '-X', '-q', '-r', archivePath, target.executable, 'node_modules'],
+								{ COPYFILE_DISABLE: '1', TZ: 'UTC' },
+								stagingDir
+							);
+						}
+					}
+					const bytes = yield* fs
+						.readFile(archivePath)
+						.pipe(Effect.mapError(toReleaseFailure('read packaged archive')));
+					const digest = yield* sha256(bytes);
+					const checksumFile = `${archive}.sha256`;
+					yield* fs
+						.writeFileString(path.join(outputDir, checksumFile), checksumLine(archive, digest))
+						.pipe(Effect.mapError(toReleaseFailure('write archive checksum')));
+					return {
+						target: target.id,
+						bun_target: target.bunTarget,
+						os: target.os,
+						arch: target.arch,
+						archive: target.archive,
+						executable: target.executable,
+						contents: [target.executable, ...runtimeFiles],
+						file: archive,
+						checksum_file: checksumFile,
+						sha256: digest,
+						size: bytes.byteLength
+					} satisfies ReleaseAsset;
+				}),
+			{ concurrency: selectedTargets.length }
+		);
+		if (input.targetId) {
 			yield* fs
-				.makeDirectory(stagingDir, { recursive: true })
-				.pipe(Effect.mapError(toReleaseFailure('create target staging directory')));
-			const sourceBytes = yield* fs
-				.readFile(source)
-				.pipe(Effect.mapError(toReleaseFailure('read compiled executable')));
-			yield* fs
-				.writeFile(stagedExecutable, sourceBytes)
-				.pipe(Effect.mapError(toReleaseFailure('stage compiled executable')));
-			const stagedBytes = yield* fs
-				.readFile(stagedExecutable)
-				.pipe(Effect.mapError(toReleaseFailure('verify staged executable')));
-			yield* check(
-				bytesEqual(stagedBytes, sourceBytes),
-				`Staged executable does not match source for ${target.id}`
-			);
-			yield* fs
-				.chmod(stagedExecutable, target.os === 'windows' ? 0o644 : 0o755)
-				.pipe(Effect.mapError(toReleaseFailure('set staged executable mode')));
-			yield* fs
-				.utimes(stagedExecutable, ARCHIVE_TIMESTAMP, ARCHIVE_TIMESTAMP)
-				.pipe(Effect.mapError(toReleaseFailure('set staged executable timestamp')));
-			const runtimeFiles = yield* stagePackageRuntime(input.packageRoot, stagingDir, target);
-			if (target.archive === 'tar.gz') {
-				const metadataArguments =
-					process.platform === 'linux'
-						? ['--owner=0', '--group=0', `--mtime=@${ARCHIVE_TIMESTAMP_SECONDS}`]
-						: [
-								'--uid',
-								'0',
-								'--gid',
-								'0',
-								'--uname',
-								'root',
-								'--gname',
-								'root',
-								'--options',
-								'gzip:!timestamp'
-							];
-				yield* runCommand(
-					[
-						'tar',
-						'--format=ustar',
-						...metadataArguments,
-						'-czf',
-						archivePath,
-						'-C',
-						stagingDir,
-						target.executable,
-						'node_modules'
-					],
-					{ COPYFILE_DISABLE: '1' }
-				);
-			} else {
-				yield* runCommand(
-					['zip', '-X', '-q', '-r', archivePath, target.executable, 'node_modules'],
-					{ COPYFILE_DISABLE: '1', TZ: 'UTC' },
-					stagingDir
-				);
-			}
-			const bytes = yield* fs
-				.readFile(archivePath)
-				.pipe(Effect.mapError(toReleaseFailure('read packaged archive')));
-			const digest = yield* sha256(bytes);
-			const checksumFile = `${archive}.sha256`;
-			yield* fs
-				.writeFileString(path.join(outputDir, checksumFile), checksumLine(archive, digest))
-				.pipe(Effect.mapError(toReleaseFailure('write archive checksum')));
-			assets.push({
-				target: target.id,
-				bun_target: target.bunTarget,
-				os: target.os,
-				arch: target.arch,
-				archive: target.archive,
-				executable: target.executable,
-				contents: [target.executable, ...runtimeFiles],
-				file: archive,
-				checksum_file: checksumFile,
-				sha256: digest,
-				size: bytes.byteLength
-			});
+				.writeFileString(path.join(outputDir, 'asset.json'), stableJson(assets[0]))
+				.pipe(Effect.mapError(toReleaseFailure('write target asset metadata')));
+			return;
 		}
-		const manifestName = yield* releaseManifestName(input.version);
-		const homebrewName = yield* homebrewManifestName(input.version);
-		const manifest: ReleaseManifest = {
-			schema_version: 1,
-			executable: 'akua',
-			version: input.version,
-			checksums: 'checksums.txt',
-			homebrew_manifest: homebrewName,
-			assets
-		};
-		const homebrewManifest = yield* createHomebrewManifest(input.version, assets);
-		yield* fs
-			.writeFileString(
-				path.join(outputDir, 'checksums.txt'),
-				assets.map((asset) => checksumLine(asset.file, asset.sha256)).join('')
-			)
-			.pipe(Effect.mapError(toReleaseFailure('write aggregate checksums')));
-		yield* fs
-			.writeFileString(path.join(outputDir, manifestName), stableJson(manifest))
-			.pipe(Effect.mapError(toReleaseFailure('write release manifest')));
-		yield* fs
-			.writeFileString(path.join(outputDir, homebrewName), stableJson(homebrewManifest))
-			.pipe(Effect.mapError(toReleaseFailure('write Homebrew manifest')));
+		yield* writeReleaseMetadata(outputDir, input.version, assets, provenance);
 	});
 	yield* packageAssets.pipe(
 		Effect.ensuring(
@@ -283,7 +326,54 @@ const packageExistingExecutables = Effect.fn('packageExistingExecutables')(funct
 				.pipe(Effect.mapError(toReleaseFailure('remove staging directory')), Effect.ignore)
 		)
 	);
-	yield* verifyReleaseDirectory(outputDir, input.version);
+	if (!input.targetId) yield* verifyReleaseDirectory(outputDir, input.version, input.zipperPath);
+});
+
+const assembleReleasePackages = Effect.fn('assembleReleasePackages')(function* (
+	input: AssembleReleasePackagesInput
+) {
+	const fs = yield* FileSystem.FileSystem;
+	const path = yield* Path.Path;
+	yield* validateVersion(input.version);
+	const outputDir = path.resolve(input.outputDir);
+	yield* assertSafeOutputDirectory(outputDir);
+	yield* fs
+		.remove(outputDir, { recursive: true, force: true })
+		.pipe(Effect.mapError(toReleaseFailure('clear assembled release output')));
+	yield* fs
+		.makeDirectory(outputDir, { recursive: true })
+		.pipe(Effect.mapError(toReleaseFailure('create assembled release output')));
+	const assets = yield* Effect.forEach(RELEASE_TARGETS, (target) =>
+		Effect.gen(function* () {
+			const part = input.parts[target.id];
+			if (!part) return yield* releaseFailure(`Missing release part for ${target.id}`);
+			const metadata = yield* fs
+				.readFileString(path.join(part, 'asset.json'))
+				.pipe(Effect.mapError(toReleaseFailure('read release part metadata')));
+			const parsed = yield* attempt('parse release part metadata', () => JSON.parse(metadata));
+			const asset = yield* parseReleaseAsset(parsed);
+			yield* check(
+				asset.target === target.id &&
+					asset.file === artifactName(input.version, target) &&
+					asset.checksum_file === `${asset.file}.sha256`,
+				`Release part does not match ${target.id}`
+			);
+			for (const name of [asset.file, asset.checksum_file]) {
+				yield* fs
+					.copyFile(path.join(part, name), path.join(outputDir, name))
+					.pipe(Effect.mapError(toReleaseFailure('copy release part')));
+			}
+			return asset;
+		})
+	);
+	const sdkIdentity = yield* readSdkRuntimeIdentity(input.packageRoot);
+	const provenance = yield* makeReleaseProvenance({
+		sourceSha: input.sourceSha,
+		sdkVersion: sdkIdentity.version,
+		sdkSha256: sdkIdentity.sha256
+	});
+	yield* writeReleaseMetadata(outputDir, input.version, assets, provenance);
+	yield* verifyReleaseDirectory(outputDir, input.version, input.zipperPath);
 });
 
 const packageRelease = Effect.fn('packageRelease')(function* (input: PackageReleaseInput) {
@@ -333,7 +423,8 @@ const packageRelease = Effect.fn('packageRelease')(function* (input: PackageRele
 			version: input.version,
 			outputDir: input.outputDir,
 			binaries,
-			packageRoot: input.packageRoot ?? path.join(process.cwd(), 'node_modules', '@akua-dev')
+			packageRoot: input.packageRoot ?? path.join(process.cwd(), 'node_modules', '@akua-dev'),
+			sourceSha: input.sourceSha
 		});
 	});
 	yield* buildBinaries.pipe(
@@ -434,7 +525,8 @@ function parseReportedVersion(output: string): Effect.Effect<unknown, ReleaseFai
 
 const verifyReleaseDirectory = Effect.fn('verifyReleaseDirectory')(function* (
 	outputDirInput: string,
-	version: string
+	version: string,
+	zipperPath?: string
 ) {
 	const fs = yield* FileSystem.FileSystem;
 	const path = yield* Path.Path;
@@ -496,7 +588,7 @@ const verifyReleaseDirectory = Effect.fn('verifyReleaseDirectory')(function* (
 		const size = Number(info.size);
 		yield* check(size === asset.size, `Release asset size mismatch: ${asset.file}`);
 		aggregateLines.push(expectedLine);
-		yield* verifyArchive(outputDir, target, asset.file, asset.contents);
+		yield* verifyArchive(outputDir, target, asset.file, asset.contents, zipperPath);
 	}
 	const aggregate = yield* fs
 		.readFileString(path.join(outputDir, manifest.checksums))
@@ -550,17 +642,30 @@ const verifyArchive = Effect.fn('verifyArchive')(function* (
 	outputDir: string,
 	target: ReleaseTarget,
 	file: string,
-	contents: readonly string[]
+	contents: readonly string[],
+	zipperPath?: string
 ) {
 	const fs = yield* FileSystem.FileSystem;
 	const path = yield* Path.Path;
 	const archivePath = path.join(outputDir, file);
 	const listCommand =
-		target.archive === 'zip' ? ['unzip', '-Z1', archivePath] : ['tar', '-tzf', archivePath];
+		target.archive === 'zip'
+			? zipperPath
+				? [zipperPath, 'v', archivePath]
+				: ['unzip', '-Z1', archivePath]
+			: ['tar', '-tzf', archivePath];
 	const listedFiles = (yield* runCommand(listCommand))
 		.trim()
 		.split('\n')
-		.filter((entry) => entry !== '' && !entry.endsWith('/'))
+		.flatMap((entry) =>
+			zipperPath && target.archive === 'zip'
+				? entry.startsWith('f ')
+					? [entry.slice(6)]
+					: []
+				: entry !== '' && !entry.endsWith('/')
+					? [entry]
+					: []
+		)
 		.sort();
 	const expectedFiles = [...contents].sort();
 	yield* check(
@@ -624,6 +729,32 @@ const runCommand = Effect.fn('runCommand')(function* (
 		`${command[0]} failed (${exitCode}): ${stderr.trim()}`
 	);
 	return stdout;
+});
+
+const readSdkRuntimeIdentity = Effect.fn('readSdkRuntimeIdentity')(function* (packageRoot: string) {
+	const fs = yield* FileSystem.FileSystem;
+	const path = yield* Path.Path;
+	const manifest = yield* readPackageManifest(packageRoot, 'sdk');
+	if (!isRecord(manifest) || typeof manifest.version !== 'string') {
+		return yield* releaseFailure('Package runtime version is invalid for sdk');
+	}
+	const declaredFiles = yield* packageManifestFiles(path, manifest, 'sdk');
+	const files = [
+		'package.json',
+		...(yield* expandPackageManifestFiles(packageRoot, 'sdk', declaredFiles))
+	].sort();
+	const content = yield* Effect.forEach(files, (file) =>
+		Effect.gen(function* () {
+			const bytes = yield* fs
+				.readFile(path.join(packageRoot, 'sdk', file))
+				.pipe(Effect.mapError(toReleaseFailure('read sdk runtime file')));
+			return { file: file.replaceAll('\\', '/'), sha256: yield* sha256(bytes) };
+		})
+	);
+	return {
+		version: manifest.version,
+		sha256: yield* sha256(new TextEncoder().encode(stableJson(content)))
+	};
 });
 
 const stagePackageRuntime = Effect.fn('stagePackageRuntime')(function* (
@@ -825,16 +956,43 @@ function parseReleaseManifest(value: unknown): Effect.Effect<ReleaseManifest, Re
 	) {
 		return releaseFailure('Release manifest is invalid');
 	}
-	return Effect.all(value.assets.map(parseReleaseAsset)).pipe(
-		Effect.map((assets) => ({
+	return Effect.gen(function* () {
+		const provenance = yield* parseReleaseProvenance(value);
+		const assets = yield* Effect.all(value.assets.map(parseReleaseAsset));
+		return {
 			schema_version: 1,
 			executable: 'akua',
 			version,
 			checksums: 'checksums.txt',
 			homebrew_manifest: homebrewManifest,
+			...provenance,
 			assets
-		}))
-	);
+		};
+	});
+}
+
+function parseReleaseProvenance(value: Record<string, unknown>) {
+	const source = value.source;
+	const dependencies = value.dependencies;
+	const sdk =
+		Array.isArray(dependencies) && dependencies.length === 1 ? dependencies[0] : undefined;
+	if (
+		!isRecord(source) ||
+		source.repository !== 'akua-dev/cnap' ||
+		source.subtree !== 'tools/cli/source' ||
+		!isRecord(sdk) ||
+		sdk.name !== '@akua-dev/sdk' ||
+		typeof source.sha !== 'string' ||
+		typeof sdk.version !== 'string' ||
+		typeof sdk.sha256 !== 'string'
+	) {
+		return releaseFailure('Release manifest provenance is invalid');
+	}
+	return makeReleaseProvenance({
+		sourceSha: source.sha,
+		sdkVersion: sdk.version,
+		sdkSha256: sdk.sha256
+	});
 }
 
 function parseReleaseAsset(value: unknown): Effect.Effect<ReleaseAsset, ReleaseFailure> {
@@ -952,6 +1110,8 @@ export const ReleaseHostLive = Layer.succeed(ReleaseHost, {
 		assertSafeOutputDirectory(outputDir).pipe(Effect.provide(BunServices.layer)),
 	packageExistingExecutables: (input) =>
 		packageExistingExecutables(input).pipe(Effect.provide(BunServices.layer)),
+	assembleReleasePackages: (input) =>
+		assembleReleasePackages(input).pipe(Effect.provide(BunServices.layer)),
 	packageRelease: (input) => packageRelease(input).pipe(Effect.provide(BunServices.layer)),
 	smokeReleaseArtifact: (input) =>
 		smokeReleaseArtifact(input).pipe(Effect.provide(BunServices.layer)),

@@ -13,7 +13,7 @@
 		"build:binary": "bun build src/bin/akua.ts --compile --target=bun --outfile dist/akua",
 		"generate": "bun scripts/generate-commands.ts && bun scripts/generate-effect-api.ts",
 		"generate:check": "bun scripts/generate-commands.ts --check && bun scripts/generate-effect-api.ts --check",
-		"release:package": "bun scripts/release.ts package --version $npm_package_version --output dist/release",
+		"release:package": "bun scripts/release.ts package --version $npm_package_version --output dist/release --source-sha $CNAP_SOURCE_SHA",
 		"release:verify": "bun scripts/release.ts verify --version $npm_package_version --output dist/release",
 		"release:smoke": "bun scripts/release.ts smoke --version $npm_package_version --output dist/release",
 		"test": "vitest run"
