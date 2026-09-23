@@ -12,6 +12,12 @@ drifts out of sync with what the platform can actually do.
 
 The canonical executable is `akua`; there is no `cnap` compatibility binary.
 
+**Source of truth.** Development continues in the `akua-dev/cnap` monorepo under
+`tools/cli/source`. This public repository is being prepared as a Josh projection
+(`viewId: cli`). Open contribution PRs against cnap; do not treat `akua-dev/cli`
+as a second writable authority. Releases are versioned from this tree's
+`package.json` and published by monorepo outbound delivery when enabled.
+
 ## Install
 
 ```sh

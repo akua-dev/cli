@@ -4,6 +4,14 @@ This file covers building, testing, and releasing this repository's source.
 If you only want to use the `akua` executable, see [README.md](README.md)
 instead.
 
+**Canonical writable history is cnap.** This tree is prepared for the public Josh projection
+of `tools/cli/source` (`viewId: cli`). Contribute via reviewed PRs on
+`akua-dev/cnap`. Direct pushes to `akua-dev/cli` main are not the release path.
+The SemVer for a public release is `tools/cli/source/package.json` `version`,
+bumped in that cnap PR; the public `v<version>` tag is created later by the
+outbound App at an admitted projected commit (not by release-please, not as a
+cnap project tag).
+
 ## Prerequisites
 
 [mise](https://mise.jdx.dev/) manages the pinned Bun toolchain:
@@ -60,29 +68,31 @@ for what current test coverage includes.
 
 ## Release process
 
+Bump `package.json` `version` in a reviewed cnap PR. That value is the only
+version source for a future cnap-owned public `v*` tag. The legacy
+release-please files remain while the replacement publisher is disabled.
+
 `mise run release:package` cross-compiles all five targets, creates archives
 and checksums in `dist/release`, and verifies their manifest.
 `mise run release:verify` re-verifies an already-packaged release directory.
 `mise run release:smoke` extracts and runs the artifact for the current
-supported host. CI repeats native smoke tests on every platform in the
-release matrix (macOS arm64/x64, glibc Linux arm64/x64, Windows x64).
+supported host. Authoritative archive labels under `//tools/cli:release_archive_*`
+are named for the published-source-view config; real Bazel compile wiring and
+the macOS/Windows native-smoke authority are still open (design §9).
 
-Release Please creates the version tag and GitHub Release. Its own workflow
-then calls artifact publication directly, so publication does not depend on a
-tag event that GitHub may suppress for job-token-created tags. Uploads do not
-clobber existing assets. Only after downloading and re-verifying the published
-assets does the workflow dispatch the Homebrew manifest URL. The
-`HOMEBREW_TAP_TOKEN` secret must be a fine-grained credential scoped only to
-the tap repository's dispatch permission; failures remain visible as release
-job failures.
+The previous public Release Please workflows are disabled. A future monorepo
+publisher must create immutable tags and assets from admitted Bazel outputs,
+then hand the verified manifest to the Homebrew tap through Access Proxy.
+The publisher is not active in this planning phase.
 
 `akua-dev/homebrew-tap` owns the `akua` formula, formula tests, and the
 reviewed formula-update PR. This repository requests a formula PR only after
 every archive has passed a native install smoke test and all published assets
 have passed post-upload verification; it never pushes formula commits itself.
 
-`scripts/release.ts` is the source of truth for target IDs, Bun targets,
-archive names, executable names, SHA-256 files, and release manifests.
+`scripts/release.ts` remains the source of truth for target IDs, Bun targets,
+archive names, executable names, SHA-256 files, and release manifests until the
+Bazel archive targets produce equivalent bytes.
 
 ## Repository-specific engineering rules
 
