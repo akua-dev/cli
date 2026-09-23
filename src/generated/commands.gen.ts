@@ -5022,6 +5022,35 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
     }
   },
   {
+    "operation_id": "regions.delete",
+    "command": "regions delete",
+    "resource": "regions",
+    "action": "delete",
+    "method": "DELETE",
+    "path": "/regions/{id}",
+    "tag": "Regions",
+    "summary": "Delete region",
+    "visibility": "PUBLIC",
+    "requires_auth": true,
+    "parameters": [
+      {
+        "name": "id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "akua-context",
+        "in": "header",
+        "required": false
+      },
+      {
+        "name": "if-match",
+        "in": "header",
+        "required": true
+      }
+    ]
+  },
+  {
     "operation_id": "regions.list",
     "command": "regions list",
     "resource": "regions",
@@ -5049,6 +5078,39 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "required": false
       }
     ]
+  },
+  {
+    "operation_id": "regions.update",
+    "command": "regions update",
+    "resource": "regions",
+    "action": "update",
+    "method": "PATCH",
+    "path": "/regions/{id}",
+    "tag": "Regions",
+    "summary": "Update region",
+    "visibility": "PUBLIC",
+    "requires_auth": true,
+    "parameters": [
+      {
+        "name": "id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "akua-context",
+        "in": "header",
+        "required": false
+      },
+      {
+        "name": "if-match",
+        "in": "header",
+        "required": true
+      }
+    ],
+    "body": {
+      "required": true,
+      "example": {}
+    }
   },
   {
     "operation_id": "registry.createCredential",

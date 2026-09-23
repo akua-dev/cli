@@ -172,7 +172,9 @@ export type PublicOperationId =
   | "quotas.get"
   | "quotas.list"
   | "regions.create"
+  | "regions.delete"
   | "regions.list"
+  | "regions.update"
   | "registry.createCredential"
   | "registry.deleteCredential"
   | "registry.listCredentials"
@@ -422,7 +424,9 @@ export interface PublicOperationEffectMap {
   readonly "quotas.get": WithCommandFailure<ReturnType<PublicApiClientValue["client"]["Quotas"]["quotasGet"]>>;
   readonly "quotas.list": WithCommandFailure<ReturnType<PublicApiClientValue["client"]["Quotas"]["quotasList"]>>;
   readonly "regions.create": WithCommandFailure<ReturnType<PublicApiClientValue["client"]["Regions"]["regionsCreate"]>>;
+  readonly "regions.delete": WithCommandFailure<ReturnType<PublicApiClientValue["client"]["Regions"]["regionsDelete"]>>;
   readonly "regions.list": WithCommandFailure<ReturnType<PublicApiClientValue["client"]["Regions"]["regionsList"]>>;
+  readonly "regions.update": WithCommandFailure<ReturnType<PublicApiClientValue["client"]["Regions"]["regionsUpdate"]>>;
   readonly "registry.createCredential": WithCommandFailure<ReturnType<PublicApiClientValue["client"]["Registry"]["registryCreateCredential"]>>;
   readonly "registry.deleteCredential": WithCommandFailure<ReturnType<PublicApiClientValue["client"]["Registry"]["registryDeleteCredential"]>>;
   readonly "registry.listCredentials": WithCommandFailure<ReturnType<PublicApiClientValue["client"]["Registry"]["registryListCredentials"]>>;
@@ -3535,6 +3539,23 @@ function executeOperation(
         const value = yield* executeClientOperation(client, client.client["Regions"]["regionsCreate"]({ headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
+    case "regions.delete":
+      return Effect.gen(function* () {
+        const input = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ path: Schema.optionalKey(Schema.Unknown), headers: Schema.optionalKey(Schema.Unknown) }),
+          strictParseOptions,
+        )(rawInput);
+        const path = yield* atEnvelopeKey("path", Schema.decodeUnknownEffect(
+          Api.RegionsDeletePathParams,
+          strictParseOptions,
+        )(input.path ?? {}));
+        const headers = yield* atEnvelopeKey("headers", Schema.decodeUnknownEffect(
+          Api.RegionsDeleteHeaders,
+          strictParseOptions,
+        )(input.headers ?? {}));
+        const value = yield* executeClientOperation(client, client.client["Regions"]["regionsDelete"]({ params: path, headers }));
+        return mode === "raw" ? value : { _tag: "Value", value };
+      });
     case "regions.list":
       return Effect.gen(function* () {
         const input = yield* Schema.decodeUnknownEffect(
@@ -3550,6 +3571,27 @@ function executeOperation(
           strictParseOptions,
         )(input.headers ?? {}));
         const value = yield* executeClientOperation(client, client.client["Regions"]["regionsList"]({ query, headers }));
+        return mode === "raw" ? value : { _tag: "Value", value };
+      });
+    case "regions.update":
+      return Effect.gen(function* () {
+        const input = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ path: Schema.optionalKey(Schema.Unknown), headers: Schema.optionalKey(Schema.Unknown), body: Schema.optionalKey(Schema.Unknown) }),
+          strictParseOptions,
+        )(rawInput);
+        const path = yield* atEnvelopeKey("path", Schema.decodeUnknownEffect(
+          Api.RegionsUpdatePathParams,
+          strictParseOptions,
+        )(input.path ?? {}));
+        const headers = yield* atEnvelopeKey("headers", Schema.decodeUnknownEffect(
+          Api.RegionsUpdateHeaders,
+          strictParseOptions,
+        )(input.headers ?? {}));
+        const payload = yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
+          Api.RegionsUpdateRequestJson,
+          strictParseOptions,
+        )(input.body));
+        const value = yield* executeClientOperation(client, client.client["Regions"]["regionsUpdate"]({ params: path, headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
     case "registry.createCredential":
