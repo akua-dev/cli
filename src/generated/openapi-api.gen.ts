@@ -1470,6 +1470,8 @@ export type PackagesCreate403 = ApiErrorResponse
 export const PackagesCreate403 = ApiErrorResponse
 export type PackagesCreate422 = ApiErrorResponse
 export const PackagesCreate422 = ApiErrorResponse
+export type PackagesCreate504 = ApiErrorResponse
+export const PackagesCreate504 = ApiErrorResponse
 export type PackagesGetParams = { readonly "view"?: "basic" | "full", readonly "akua-context"?: string }
 export const PackagesGetParams = Schema.Struct({ "view": Schema.optionalKey(Schema.Literals(["basic", "full"]).annotate({ "description": "Controls whether sensitive source provenance is included. `basic` omits `composed_from_sources`.", "default": "basic" })), "akua-context": Schema.optionalKey(Schema.String.annotate({ "description": "Optional workspace/scope context for the request. Carries a single workspace wire id (`ws_…`) today. Only needed for broad tokens — a workspace-owned token implies its workspace.", "examples": ["ws_j572abc123def456"] }).check(Schema.isMinLength(1).annotate({ "expected": "a value with a length of at least 1" })).check(Schema.isMaxLength(53).annotate({ "expected": "a value with a length of at most 53" }))) })
 export type PackagesGetPathParams = { readonly "id": string }
@@ -2228,6 +2230,8 @@ export type InstallsDelete403 = ApiErrorResponse
 export const InstallsDelete403 = ApiErrorResponse
 export type InstallsDelete409 = ApiErrorResponse
 export const InstallsDelete409 = ApiErrorResponse
+export type InstallsDelete504 = ApiErrorResponse
+export const InstallsDelete504 = ApiErrorResponse
 export type InstallsUpdateVersionParams = { readonly "akua-context"?: string, readonly "if-match": string, readonly "idempotency-key": string }
 export const InstallsUpdateVersionParams = Schema.Struct({ "akua-context": Schema.optionalKey(Schema.String.annotate({ "description": "Optional workspace/scope context for the request. Carries a single workspace wire id (`ws_…`) today. Only needed for broad tokens — a workspace-owned token implies its workspace.", "examples": ["ws_j572abc123def456"] }).check(Schema.isMinLength(1).annotate({ "expected": "a value with a length of at least 1" })).check(Schema.isMaxLength(53).annotate({ "expected": "a value with a length of at most 53" }))), "if-match": Schema.String.annotate({ "description": "The `etag` of the resource version the client last read. Required on writes when the resource exposes an `etag` field. Mismatch returns 409 `ABORTED` with the current etag in the error metadata.", "examples": ["42"] }).check(Schema.isMinLength(1).annotate({ "expected": "a value with a length of at least 1" })).check(Schema.isMaxLength(256).annotate({ "expected": "a value with a length of at most 256" })), "idempotency-key": Schema.String.annotate({ "description": "Required caller-supplied idempotency key. Any non-empty key up to 64 characters is accepted. Endpoint-specific documentation describes how the key is used.", "examples": ["create-prod-2026-05-07"] }).check(Schema.isMinLength(1).annotate({ "expected": "a value with a length of at least 1" })).check(Schema.isMaxLength(64).annotate({ "expected": "a value with a length of at most 64" })) })
 export type InstallsUpdateVersionPathParams = { readonly "id": string }
@@ -4171,11 +4175,11 @@ class PackagesGroup extends HttpApiGroup.make("Packages")
       .annotate(OpenApi.Identifier, "packages.list")
       .annotate(OpenApi.Summary, "List packages")
       .annotate(OpenApi.Description, "Returns all packages in the active workspace."),
-    HttpApiEndpoint.post("packagesCreate", "/packages", { headers: PackagesCreateHeaders, payload: [PackagesCreateRequestJson, HttpApiSchema.NoContent], success: PackagesCreate202.pipe(HttpApiSchema.status(202)), error: [PackagesCreate401.pipe(HttpApiSchema.status(401)), PackagesCreate403.pipe(HttpApiSchema.status(403)), PackagesCreate422.pipe(HttpApiSchema.status(422))] })
+    HttpApiEndpoint.post("packagesCreate", "/packages", { headers: PackagesCreateHeaders, payload: [PackagesCreateRequestJson, HttpApiSchema.NoContent], success: PackagesCreate202.pipe(HttpApiSchema.status(202)), error: [PackagesCreate401.pipe(HttpApiSchema.status(401)), PackagesCreate403.pipe(HttpApiSchema.status(403)), PackagesCreate422.pipe(HttpApiSchema.status(422)), PackagesCreate504.pipe(HttpApiSchema.status(504))] })
       .middleware(BearerAuthSecurityMiddleware)
       .annotate(OpenApi.Identifier, "packages.create")
       .annotate(OpenApi.Summary, "Create package")
-      .annotate(OpenApi.Description, "Creates a package from one OCI Helm or platform-hosted authored source as a long-running operation."),
+      .annotate(OpenApi.Description, "Creates a package from one OCI Helm or platform-hosted authored source as a long-running operation. If the workflow starts before its Operation is visible, retry with the same Idempotency-Key."),
     HttpApiEndpoint.get("packagesGet", "/packages/{id}", { params: PackagesGetPathParams, query: PackagesGetQuery, headers: PackagesGetHeaders, success: PackagesGet200, error: [PackagesGet401.pipe(HttpApiSchema.status(401)), PackagesGet403.pipe(HttpApiSchema.status(403)), PackagesGet404.pipe(HttpApiSchema.status(404))] })
       .middleware(BearerAuthSecurityMiddleware)
       .annotate(OpenApi.Identifier, "packages.get")
@@ -4344,11 +4348,11 @@ class InstallsGroup extends HttpApiGroup.make("Installs")
       .annotate(OpenApi.Identifier, "installs.get")
       .annotate(OpenApi.Summary, "Get install details")
       .annotate(OpenApi.Description, "Returns current install metadata."),
-    HttpApiEndpoint.delete("installsDelete", "/installs/{id}", { params: InstallsDeletePathParams, headers: InstallsDeleteHeaders, success: InstallsDelete202.pipe(HttpApiSchema.status(202)), error: [InstallsDelete401.pipe(HttpApiSchema.status(401)), InstallsDelete403.pipe(HttpApiSchema.status(403)), InstallsDelete409.pipe(HttpApiSchema.status(409))] })
+    HttpApiEndpoint.delete("installsDelete", "/installs/{id}", { params: InstallsDeletePathParams, headers: InstallsDeleteHeaders, success: InstallsDelete202.pipe(HttpApiSchema.status(202)), error: [InstallsDelete401.pipe(HttpApiSchema.status(401)), InstallsDelete403.pipe(HttpApiSchema.status(403)), InstallsDelete409.pipe(HttpApiSchema.status(409)), InstallsDelete504.pipe(HttpApiSchema.status(504))] })
       .middleware(BearerAuthSecurityMiddleware)
       .annotate(OpenApi.Identifier, "installs.delete")
       .annotate(OpenApi.Summary, "Delete install")
-      .annotate(OpenApi.Description, "Deletes an install and cascades resource cleanup asynchronously. Returns an Operation envelope to poll for progress."),
+      .annotate(OpenApi.Description, "Deletes an install and cascades resource cleanup asynchronously. Returns an Operation envelope to poll for progress. If the workflow starts before its Operation is visible, retry with the same Idempotency-Key."),
     HttpApiEndpoint.post("installsUpdateVersion", "/installs/{id}:update", { params: InstallsUpdateVersionPathParams, headers: InstallsUpdateVersionHeaders, payload: InstallsUpdateVersionRequestJson, success: InstallsUpdateVersion202.pipe(HttpApiSchema.status(202)), error: [InstallsUpdateVersion401.pipe(HttpApiSchema.status(401)), InstallsUpdateVersion403.pipe(HttpApiSchema.status(403)), InstallsUpdateVersion404.pipe(HttpApiSchema.status(404)), InstallsUpdateVersion409.pipe(HttpApiSchema.status(409))] })
       .middleware(BearerAuthSecurityMiddleware)
       .annotate(OpenApi.Identifier, "installs.updateVersion")
