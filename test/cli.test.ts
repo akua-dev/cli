@@ -12,7 +12,7 @@ import {
 import { BunServices } from '@effect/platform-bun';
 import { Effect, Layer } from 'effect';
 
-import { main } from '../src/bin/akua';
+import { main, VERSION } from '../src/bin/akua';
 import { authView } from '../src/commands/auth';
 import { renderSuccess, type RenderEnvelope } from '../src/runtime/render';
 import { CliLive } from '../src/runtime/services-live';
@@ -38,7 +38,7 @@ describe('akua entrypoint', () => {
 						writeStderr: () => Effect.void,
 						writeStdout: () => Effect.void
 					}),
-					Effect.provide(CliLive.pipe(Layer.provide(BunServices.layer)))
+					Effect.provide(CliLive(VERSION).pipe(Layer.provide(BunServices.layer)))
 				);
 
 			expect(yield* run(['pkg'])).toBe(0);
@@ -59,7 +59,7 @@ describe('akua entrypoint', () => {
 								return 0;
 							})
 					}),
-					Effect.provide(CliLive.pipe(Layer.provide(BunServices.layer)))
+					Effect.provide(CliLive(VERSION).pipe(Layer.provide(BunServices.layer)))
 				);
 
 			expect(yield* run(['--json', 'pkg', 'version'])).toBe(0);
@@ -86,7 +86,7 @@ describe('akua entrypoint', () => {
 							stdout.push(value);
 						})
 				}),
-				Effect.provide(CliLive.pipe(Layer.provide(BunServices.layer)))
+				Effect.provide(CliLive(VERSION).pipe(Layer.provide(BunServices.layer)))
 			);
 
 			expect(exitCode).toBe(1);
@@ -801,7 +801,7 @@ describe('akua entrypoint', () => {
 						HOME: home,
 						AKUA_API_TOKEN: 'sk_akua_env'
 					}),
-					CliLive.pipe(Layer.provide(BunServices.layer))
+					CliLive(VERSION).pipe(Layer.provide(BunServices.layer))
 				) as Effect.Effect<RenderEnvelope>;
 				const stdout = renderSuccess(envelope, 'json');
 				const payload = JSON.parse(stdout);

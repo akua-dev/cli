@@ -1,7 +1,6 @@
 import { Crypto, Data, Duration, Effect, FileSystem, Layer, Path } from 'effect';
 import type * as PackageExecuteModule from '@akua-dev/sdk/execute';
 import {
-	FetchHttpClient,
 	HttpBody,
 	HttpClient,
 	HttpClientError,
@@ -9,6 +8,7 @@ import {
 	HttpClientResponse
 } from 'effect/unstable/http';
 
+import { AkuaHttpClientLive } from './http-client-live';
 import {
 	Browser,
 	BrowserFailure,
@@ -34,22 +34,24 @@ class ConfigParseFailure extends Data.TaggedError('ConfigParseFailure')<{
 	readonly cause: Error;
 }> {}
 
-export const HttpLive = Layer.effect(
-	Http,
-	Effect.gen(function* () {
-		const client = yield* HttpClient.HttpClient;
-		return {
-			postJson: (request) =>
-				readJsonResponse(
-					HttpClientRequest.post(request.url).pipe(
-						HttpClientRequest.bodyJson(request.body),
-						Effect.flatMap(client.execute)
-					),
-					'Device response is too large.'
-				)
-		};
-	})
-).pipe(Layer.provide(FetchHttpClient.layer));
+export function HttpLive(cliVersion: string): Layer.Layer<Http> {
+	return Layer.effect(
+		Http,
+		Effect.gen(function* () {
+			const client = yield* HttpClient.HttpClient;
+			return {
+				postJson: (request) =>
+					readJsonResponse(
+						HttpClientRequest.post(request.url).pipe(
+							HttpClientRequest.bodyJson(request.body),
+							Effect.flatMap(client.execute)
+						),
+						'Device response is too large.'
+					)
+			};
+		})
+	).pipe(Layer.provide(AkuaHttpClientLive(cliVersion)));
+}
 
 export const BrowserLive = Layer.succeed(Browser, {
 	launch: (url) =>
@@ -219,20 +221,20 @@ export const PackageCliLive = Layer.effect(
 	})
 );
 
-export const CliLive: Layer.Layer<
-	CliServices,
-	never,
-	FileSystem.FileSystem | Path.Path | Crypto.Crypto
-> = Layer.mergeAll(
-	HttpLive,
-	BrowserLive,
-	ProcessLive,
-	ConsoleLive,
-	SecureConfigLive,
-	PublicInputLive,
-	PackageCliLive,
-	ClockLive
-);
+export function CliLive(
+	cliVersion: string
+): Layer.Layer<CliServices, never, FileSystem.FileSystem | Path.Path | Crypto.Crypto> {
+	return Layer.mergeAll(
+		HttpLive(cliVersion),
+		BrowserLive,
+		ProcessLive,
+		ConsoleLive,
+		SecureConfigLive,
+		PublicInputLive,
+		PackageCliLive,
+		ClockLive
+	);
+}
 
 function readJsonResponse(
 	response: Effect.Effect<

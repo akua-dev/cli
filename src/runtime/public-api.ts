@@ -1,8 +1,9 @@
 import { Context, Data, Effect, Layer, Ref, Semaphore } from 'effect';
-import { FetchHttpClient, HttpClient, HttpClientRequest } from 'effect/unstable/http';
+import { HttpClient, HttpClientRequest } from 'effect/unstable/http';
 import { HttpApiClient } from 'effect/unstable/httpapi';
 
 import { PublicApi } from '../generated/openapi-api.gen';
+import { AkuaHttpClientLive } from './http-client-live';
 import { SecureConfig } from './services';
 
 const PUBLIC_API_BASE_URL = 'https://api.akua.dev/v1';
@@ -23,7 +24,8 @@ export class PublicApiAuthenticationFailure extends Data.TaggedError(
 
 export function PublicApiClientLive(
 	env: Record<string, string | undefined>,
-	requiresAuth: boolean
+	requiresAuth: boolean,
+	cliVersion: string
 ): Layer.Layer<PublicApiClient, PublicApiAuthenticationFailure, SecureConfig> {
 	return Layer.effect(
 		PublicApiClient,
@@ -45,7 +47,7 @@ export function PublicApiClientLive(
 			});
 			return { client, responseStatus, semaphore };
 		})
-	).pipe(Layer.provide(FetchHttpClient.layer));
+	).pipe(Layer.provide(AkuaHttpClientLive(cliVersion)));
 }
 
 function resolvePublicApiToken(

@@ -17,7 +17,7 @@ import { Console, PackageCli, type CliServices } from '../runtime/services';
 import { PublicApiAuthenticationFailure, PublicApiClientLive } from '../runtime/public-api';
 import { commandInputExample, commandInputExampleJson } from '../runtime/registry';
 
-const VERSION = '0.11.0'; // x-release-please-version
+export const VERSION = '0.11.0'; // x-release-please-version
 
 export function main(
 	argv: readonly string[],
@@ -40,7 +40,7 @@ if (import.meta.main) {
 	});
 	runMain(
 		Effect.provide(
-			Effect.provide(main(process.argv.slice(2), process.env), CliLive),
+			Effect.provide(main(process.argv.slice(2), process.env), CliLive(VERSION)),
 			BunServices.layer
 		)
 	);
@@ -163,7 +163,7 @@ function routeCommand(
 	);
 	if (maybeGenerated) {
 		return generatedCommandView(maybeGenerated, argv.slice(2)).pipe(
-			Effect.provide(PublicApiClientLive(env, maybeGenerated.requires_auth)),
+			Effect.provide(PublicApiClientLive(env, maybeGenerated.requires_auth, VERSION)),
 			Effect.map((envelope): RenderEnvelope<CliFailure> => ({
 				...envelope,
 				stream: envelope.stream?.pipe(Stream.mapError(generatedCliFailure))

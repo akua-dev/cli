@@ -11,7 +11,26 @@ import { generatedCommandError } from '../src/runtime/errors';
 import { PublicApiClientLive } from '../src/runtime/public-api';
 import { PublicInput, SecureConfig, SecureConfigFailure } from '../src/runtime/services';
 
+const TEST_CLI_VERSION = '1.2.3';
+
 describe('generated public commands', () => {
+	test('workspaces.list sends the single CLI User-Agent header', async () => {
+		let received: Request | undefined;
+		await runGenerated(
+			'workspaces.list',
+			['--input', '-'],
+			'{"query":{"limit":2}}',
+			(input, init) => {
+				received = new Request(input, init);
+				return Promise.resolve(Response.json({ data: [], has_more: false, next_cursor: null }));
+			}
+		);
+
+		expect(received?.headers.get('user-agent')).toMatch(
+			/^akua-cli\/1\.2\.3 \([^;]+; [^)]+\) bun\/.+$/
+		);
+	});
+
 	test('compiles brace templates without breaking legacy colon parameters', () => {
 		const params = Schema.Struct({
 			id: Schema.optional(Schema.String),
@@ -1088,7 +1107,8 @@ function runGenerated(
 			Effect.provide(
 				PublicApiClientLive(
 					options.env ?? { AKUA_API_TOKEN: 'test-token' },
-					definition.requires_auth
+					definition.requires_auth,
+					TEST_CLI_VERSION
 				)
 			),
 			Effect.provide(services),

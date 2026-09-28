@@ -5,6 +5,8 @@ import { FetchHttpClient } from 'effect/unstable/http';
 import { Http, HttpFailure } from '../src/runtime/services';
 import { HttpLive } from '../src/runtime/services-live';
 
+const TEST_CLI_VERSION = '1.2.3';
+
 describe('device authorization HTTP', () => {
 	it.effect("uses Effect's FetchHttpClient to encode JSON requests", () =>
 		Effect.gen(function* () {
@@ -27,12 +29,15 @@ describe('device authorization HTTP', () => {
 			});
 
 			const response = yield* program.pipe(
-				Effect.provide(HttpLive),
+				Effect.provide(HttpLive(TEST_CLI_VERSION)),
 				Effect.provideService(FetchHttpClient.Fetch, fetch)
 			);
 
 			expect(response).toEqual({ status: 200, body: { access_token: 'token' } });
 			expect(received?.headers.get('content-type')).toContain('application/json');
+			expect(received?.headers.get('user-agent')).toMatch(
+				/^akua-cli\/1\.2\.3 \([^;]+; [^)]+\) bun\/.+$/
+			);
 			const receivedRequest = received;
 			const receivedBody =
 				receivedRequest === undefined
@@ -72,13 +77,13 @@ describe('device authorization HTTP', () => {
 
 			const invalidResult = yield* Effect.exit(
 				request.pipe(
-					Effect.provide(HttpLive),
+					Effect.provide(HttpLive(TEST_CLI_VERSION)),
 					Effect.provideService(FetchHttpClient.Fetch, invalidJson)
 				)
 			);
 			const oversizedResult = yield* Effect.exit(
 				request.pipe(
-					Effect.provide(HttpLive),
+					Effect.provide(HttpLive(TEST_CLI_VERSION)),
 					Effect.provideService(FetchHttpClient.Fetch, oversized)
 				)
 			);
