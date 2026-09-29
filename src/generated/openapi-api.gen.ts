@@ -1578,6 +1578,12 @@ export type PackagesGetArtifacthubValuesSchema200 = PackageArtifacthubValuesSche
 export const PackagesGetArtifacthubValuesSchema200 = PackageArtifacthubValuesSchema
 export type PackagesGetArtifacthubValuesSchema401 = ApiErrorResponse
 export const PackagesGetArtifacthubValuesSchema401 = ApiErrorResponse
+export type PackagesGetArtifacthubValuesSchema404 = ApiErrorResponse
+export const PackagesGetArtifacthubValuesSchema404 = ApiErrorResponse
+export type PackagesGetArtifacthubValuesSchema502 = ApiErrorResponse
+export const PackagesGetArtifacthubValuesSchema502 = ApiErrorResponse
+export type PackagesGetArtifacthubValuesSchema503 = ApiErrorResponse
+export const PackagesGetArtifacthubValuesSchema503 = ApiErrorResponse
 export type PackagesImportPublishedParams = { readonly "akua-context"?: string, readonly "idempotency-key"?: string }
 export const PackagesImportPublishedParams = Schema.Struct({ "akua-context": Schema.optionalKey(Schema.String.annotate({ "description": "Optional workspace/scope context for the request. Carries a single workspace wire id (`ws_…`) today. Only needed for broad tokens — a workspace-owned token implies its workspace.", "examples": ["ws_j572abc123def456"] }).check(Schema.isMinLength(1).annotate({ "expected": "a value with a length of at least 1" })).check(Schema.isMaxLength(53).annotate({ "expected": "a value with a length of at most 53" }))), "idempotency-key": Schema.optionalKey(Schema.String.annotate({ "description": "Optional caller-supplied idempotency key. Any non-empty key up to 64 characters is accepted. Endpoint-specific documentation describes how the key is used.", "examples": ["create-prod-2026-05-07"] }).check(Schema.isMinLength(1).annotate({ "expected": "a value with a length of at least 1" })).check(Schema.isMaxLength(64).annotate({ "expected": "a value with a length of at most 64" }))) })
 export type PackagesImportPublishedHeaders = { readonly "akua-context"?: string, readonly "idempotency-key"?: string }
@@ -4244,7 +4250,7 @@ class PackagesGroup extends HttpApiGroup.make("Packages")
       .annotate(OpenApi.Identifier, "packages.getVersionInputs")
       .annotate(OpenApi.Summary, "Get package version input schema")
       .annotate(OpenApi.Description, "Returns the version input schema used by the install wizard, typically generated JSON Schema."),
-    HttpApiEndpoint.get("packagesGetArtifacthubValuesSchema", "/packages/artifacthub/{package_id}/versions/{version}/values_schema", { params: PackagesGetArtifacthubValuesSchemaPathParams, query: PackagesGetArtifacthubValuesSchemaQuery, success: PackagesGetArtifacthubValuesSchema200, error: PackagesGetArtifacthubValuesSchema401.pipe(HttpApiSchema.status(401)) })
+    HttpApiEndpoint.get("packagesGetArtifacthubValuesSchema", "/packages/artifacthub/{package_id}/versions/{version}/values_schema", { params: PackagesGetArtifacthubValuesSchemaPathParams, query: PackagesGetArtifacthubValuesSchemaQuery, success: PackagesGetArtifacthubValuesSchema200, error: [PackagesGetArtifacthubValuesSchema401.pipe(HttpApiSchema.status(401)), PackagesGetArtifacthubValuesSchema404.pipe(HttpApiSchema.status(404)), PackagesGetArtifacthubValuesSchema502.pipe(HttpApiSchema.status(502)), PackagesGetArtifacthubValuesSchema503.pipe(HttpApiSchema.status(503))] })
       .middleware(BearerAuthSecurityMiddleware)
       .annotate(OpenApi.Identifier, "packages.getArtifacthubValuesSchema")
       .annotate(OpenApi.Summary, "Resolve Artifact Hub chart values + schema")
