@@ -1,7 +1,7 @@
 import { describe, expect, test } from '@effect/vitest';
 import { Effect, Layer, Schema, Stream } from 'effect';
-import { FetchHttpClient } from 'effect/unstable/http';
-import { HttpApi, HttpApiClient, HttpApiEndpoint, HttpApiGroup } from 'effect/unstable/httpapi';
+import { FetchHttpClient } from 'effect/http';
+import { HttpApi, HttpApiClient, HttpApiEndpoint, HttpApiGroup } from 'effect/http-api';
 
 import { generatedCommandView } from '../src/commands/generated';
 import { GeneratedCommandFailure } from '../src/commands/generated';

@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@effect/vitest';
 import { Cause, Effect, Exit } from 'effect';
-import { FetchHttpClient } from 'effect/unstable/http';
+import { FetchHttpClient } from 'effect/http';
 
 import { Http, HttpFailure } from '../src/runtime/services';
 import { HttpLive } from '../src/runtime/services-live';

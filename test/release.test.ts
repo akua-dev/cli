@@ -16,8 +16,8 @@ import {
 } from './fs-test';
 import { BunServices } from '@effect/platform-bun';
 import { Console, Crypto, Effect, FileSystem, Layer } from 'effect';
-import { Command } from 'effect/unstable/cli';
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import { Command } from 'effect/cli';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 
 import { RELEASE_TARGETS, releaseCommand } from '../scripts/release';
 import { bytesToHex, ReleaseHost } from '../scripts/runtime/release-services';

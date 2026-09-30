@@ -1,8 +1,8 @@
 import * as OpenApiGenerator from '@effect/openapi-generator/OpenApiGenerator';
 import * as GeneratorUtils from '@effect/openapi-generator/Utils';
 import { Cause, Data, Effect, Runtime } from 'effect';
-import { Command, Flag } from 'effect/unstable/cli';
-import type { OpenAPISpec } from 'effect/unstable/httpapi/OpenApi';
+import { Command, Flag } from 'effect/cli';
+import type { OpenAPISpec } from 'effect/http-api/OpenApi';
 
 import { ScriptFiles, ScriptHostFailure, ScriptValidationFailure } from './runtime/services';
 import { ScriptCliLive } from './runtime/cli-live';
@@ -441,8 +441,9 @@ function executorGenerationFailure(
 export const generateEffectApiCommand = Command.make(
 	'generate-effect-api',
 	{
-		check: Flag.boolean('check').pipe(
-			Flag.withDescription('Fail if the generated Effect API is out of date')
+		check: Flag.Boolean('check').pipe(
+			Flag.withDescription('Fail if the generated Effect API is out of date'),
+			Flag.withDefault(false)
 		)
 	},
 	({ check }) =>

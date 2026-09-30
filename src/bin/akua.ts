@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { Effect, Exit, Ref, Runtime, Stream } from 'effect';
 import { BunServices } from '@effect/platform-bun';
-import { CliOutput, Command } from 'effect/unstable/cli';
+import { CliOutput, Command } from 'effect/cli';
 
 import { makeAkuaCommand, shouldShowGroupHelp } from '../cli/command';
 import { authView } from '../commands/auth';

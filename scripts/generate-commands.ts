@@ -1,5 +1,5 @@
 import { Effect, Runtime } from 'effect';
-import { Command, Flag } from 'effect/unstable/cli';
+import { Command, Flag } from 'effect/cli';
 
 import type { CommandBody, CommandDefinition } from '../src/runtime/registry';
 import { ScriptFiles, ScriptHostFailure, ScriptValidationFailure } from './runtime/services';
@@ -49,8 +49,9 @@ export function generateCommandRegistry(
 export const generateCommandsCommand = Command.make(
 	'generate-commands',
 	{
-		check: Flag.boolean('check').pipe(
-			Flag.withDescription('Fail if the generated registry is out of date')
+		check: Flag.Boolean('check').pipe(
+			Flag.withDescription('Fail if the generated registry is out of date'),
+			Flag.withDefault(false)
 		)
 	},
 	({ check }) =>

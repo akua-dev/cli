@@ -1,18 +1,18 @@
 import { Effect } from 'effect';
-import { Command, Flag } from 'effect/unstable/cli';
+import { Command, Flag } from 'effect/cli';
 
 import { commandRegistry } from '../generated/commands.gen';
 
 export type CommandHandler<R> = () => Effect.Effect<void, never, R>;
 
 const globalFlags = {
-	output: Flag.choice('output', ['human', 'agent', 'json', 'quiet']).pipe(
+	output: Flag.Literals('output', ['human', 'agent', 'json', 'quiet']).pipe(
 		Flag.withAlias('o'),
 		Flag.optional,
 		Flag.withDescription('Choose human, agent, JSON, or quiet output')
 	),
-	json: Flag.boolean('json').pipe(Flag.withDescription('Write the result as JSON')),
-	quiet: Flag.boolean('quiet').pipe(
+	json: Flag.Boolean('json').pipe(Flag.withDescription('Write the result as JSON')),
+	quiet: Flag.Boolean('quiet').pipe(
 		Flag.withAlias('q'),
 		Flag.withDescription('Suppress successful output')
 	)
@@ -32,10 +32,10 @@ export function makeAkuaCommand<R>(handler: CommandHandler<R>) {
 			Command.make(
 				'login',
 				{
-					noBrowser: Flag.boolean('no-browser').pipe(
+					noBrowser: Flag.Boolean('no-browser').pipe(
 						Flag.withDescription('Do not open the verification URL automatically')
 					),
-					token: Flag.string('token').pipe(
+					token: Flag.String('token').pipe(
 						Flag.optional,
 						Flag.withDescription('Save an explicit API token for automation')
 					)
@@ -58,15 +58,15 @@ export function makeAkuaCommand<R>(handler: CommandHandler<R>) {
 	const commands = Command.make(
 		'commands',
 		{
-			operationId: Flag.string('operation-id').pipe(
+			operationId: Flag.String('operation-id').pipe(
 				Flag.optional,
 				Flag.withDescription('Show one OpenAPI operation by its ID')
 			),
-			resource: Flag.string('resource').pipe(
+			resource: Flag.String('resource').pipe(
 				Flag.optional,
 				Flag.withDescription('Show operations for one resource')
 			),
-			limit: Flag.integer('limit').pipe(
+			limit: Flag.Int('limit').pipe(
 				Flag.optional,
 				Flag.withDescription('Limit displayed operations (default: 20)')
 			)
@@ -92,7 +92,7 @@ export function makeAkuaCommand<R>(handler: CommandHandler<R>) {
 						Command.make(
 							definition.action,
 							{
-								input: Flag.string('input').pipe(
+								input: Flag.String('input').pipe(
 									Flag.optional,
 									Flag.withDescription('JSON request input from stdin (-) or a file path')
 								)

@@ -19,7 +19,7 @@
 		"test": "vitest run"
 	},
 	"devDependencies": {
-		"@effect/openapi-generator": "4.0.0-rc.112",
+		"@effect/openapi-generator": "4.0.0-rc.118",
 		"@effect/vitest": "catalog:",
 		"@types/bun": "catalog:",
 		"typescript": "catalog:",

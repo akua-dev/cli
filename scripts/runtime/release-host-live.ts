@@ -10,7 +10,7 @@ import { lstatSync } from 'node:fs';
 import { BunServices } from '@effect/platform-bun';
 import { Crypto, Effect, FileSystem, Layer, Path, Stream } from 'effect';
 import type { PlatformError } from 'effect/PlatformError';
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 
 import {
 	RELEASE_TARGETS,

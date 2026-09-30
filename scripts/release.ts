@@ -1,5 +1,5 @@
 import { Console, Effect, Option, Runtime } from 'effect';
-import { Command, Flag } from 'effect/unstable/cli';
+import { Command, Flag } from 'effect/cli';
 
 import {
 	RELEASE_TARGETS,
@@ -106,9 +106,9 @@ export function hostTargetId(): Effect.Effect<ReleaseTargetId, Error, ReleaseHos
 	});
 }
 
-const versionFlag = Flag.string('version').pipe(Flag.withDescription('Release version'));
-const outputFlag = Flag.string('output').pipe(Flag.withDescription('Release output directory'));
-const sourceShaFlag = Flag.string('source-sha').pipe(
+const versionFlag = Flag.String('version').pipe(Flag.withDescription('Release version'));
+const outputFlag = Flag.String('output').pipe(Flag.withDescription('Release output directory'));
+const sourceShaFlag = Flag.String('source-sha').pipe(
 	Flag.withDescription('Canonical cnap source commit SHA')
 );
 
@@ -133,7 +133,7 @@ const smokeCommand = Command.make(
 	{
 		version: versionFlag,
 		outputDir: outputFlag,
-		targetId: Flag.string('target').pipe(
+		targetId: Flag.String('target').pipe(
 			Flag.optional,
 			Flag.withDescription('Release target to smoke; defaults to the host target')
 		)
@@ -159,7 +159,7 @@ const uploadPlanCommand = Command.make(
 	{
 		version: versionFlag,
 		outputDir: outputFlag,
-		existingDir: Flag.string('existing').pipe(
+		existingDir: Flag.String('existing').pipe(
 			Flag.withDescription('Directory containing already-published assets')
 		)
 	},

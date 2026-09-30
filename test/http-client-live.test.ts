@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@effect/vitest';
 import { Effect } from 'effect';
-import { FetchHttpClient, HttpClient, HttpClientRequest } from 'effect/unstable/http';
+import { FetchHttpClient, HttpClient, HttpClientRequest } from 'effect/http';
 
 import { AkuaHttpClientLive, buildUserAgent } from '../src/runtime/http-client-live';
 

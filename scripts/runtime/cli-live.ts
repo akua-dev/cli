@@ -1,6 +1,6 @@
 import { Effect, FileSystem, Layer, Path, Stdio, Terminal } from 'effect';
-import { CliConfig, GlobalFlag } from 'effect/unstable/cli';
-import { ChildProcessSpawner } from 'effect/unstable/process';
+import { CliConfig, GlobalFlag } from 'effect/cli';
+import { ChildProcessSpawner } from 'effect/process';
 
 import { ScriptEnvironment } from './services';
 

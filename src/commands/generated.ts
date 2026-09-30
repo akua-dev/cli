@@ -1,6 +1,6 @@
 import { Cause, Data, Effect, Exit, Schema, SchemaIssue, Stream } from 'effect';
-import { HttpClientError } from 'effect/unstable/http';
-import type { HttpClientResponse } from 'effect/unstable/http';
+import { HttpClientError } from 'effect/http';
+import type { HttpClientResponse } from 'effect/http';
 
 import {
 	executeAnyPublicOperation,

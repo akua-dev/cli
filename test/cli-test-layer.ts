@@ -1,5 +1,5 @@
 import { Effect, FileSystem, Layer, Path, Stdio, Terminal } from 'effect';
-import { ChildProcessSpawner } from 'effect/unstable/process';
+import { ChildProcessSpawner } from 'effect/process';
 
 export const cliTestLayer = Layer.mergeAll(
 	FileSystem.layerNoop({}),

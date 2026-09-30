@@ -1,6 +1,6 @@
 import { Context, Data, Effect, Layer, Ref, Semaphore } from 'effect';
-import { HttpClient, HttpClientRequest } from 'effect/unstable/http';
-import { HttpApiClient } from 'effect/unstable/httpapi';
+import { HttpClient, HttpClientRequest } from 'effect/http';
+import { HttpApiClient } from 'effect/http-api';
 
 import { PublicApi } from '../generated/openapi-api.gen';
 import { AkuaHttpClientLive } from './http-client-live';

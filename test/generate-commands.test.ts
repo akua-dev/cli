@@ -1,6 +1,6 @@
 import { describe, expect, it, test } from '@effect/vitest';
 import { Effect, Layer } from 'effect';
-import { Command } from 'effect/unstable/cli';
+import { Command } from 'effect/cli';
 
 import { collectPublicCommands, generateCommandsCommand } from '../scripts/generate-commands';
 import { ScriptFiles } from '../scripts/runtime/services';

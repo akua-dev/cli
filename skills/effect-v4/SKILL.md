@@ -34,18 +34,21 @@ audit.
   `async`/`await`; its host reads, writes, and output stay in the same guard.
 
 ```ts
-class DeviceFailure extends Data.TaggedError("DeviceFailure")<{
-  readonly cause: unknown;
+class DeviceFailure extends Data.TaggedError('DeviceFailure')<{
+	readonly cause: unknown;
 }> {}
 
-export class DeviceApi extends Context.Service<DeviceApi, {
-  readonly inspect: (id: string) => Effect.Effect<Device, DeviceFailure>;
-}>()("cli/DeviceApi") {}
+export class DeviceApi extends Context.Service<
+	DeviceApi,
+	{
+		readonly inspect: (id: string) => Effect.Effect<Device, DeviceFailure>;
+	}
+>()('cli/DeviceApi') {}
 
 export const inspect = (id: string) =>
-  Effect.gen(function* () {
-    return yield* (yield* DeviceApi).inspect(id);
-  });
+	Effect.gen(function* () {
+		return yield* (yield* DeviceApi).inspect(id);
+	});
 ```
 
 Use `Effect.try`, `Effect.tryPromise`, or an Effect platform adapter at the

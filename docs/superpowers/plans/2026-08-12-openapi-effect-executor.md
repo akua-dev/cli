@@ -6,7 +6,7 @@
 
 **Architecture:** The server's OpenAPI snapshot remains the contract. The CLI generates an Effect `HttpApi` contract, binds a typed `HttpApiClient`, and drives it through a small generic JSON request executor. Every fallible production function uses a typed Effect error channel; pure definitions remain pure. The source invariant blocks raw throws, native Promise control flow, type assertions, unauthorized host I/O, and generated drift.
 
-**Tech Stack:** Bun, TypeScript 5.9, `effect@4.0.0-beta.106`, `@effect/openapi-generator@4.0.0-beta.106`, `effect/unstable/httpapi`, Bun test, GitHub Actions.
+**Tech Stack:** Bun, TypeScript 5.9, `effect@4.0.0-beta.106`, `@effect/openapi-generator@4.0.0-beta.106`, `effect/http-api`, Bun test, GitHub Actions.
 
 ---
 

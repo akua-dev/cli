@@ -1,5 +1,5 @@
 import { Effect, Layer } from 'effect';
-import { FetchHttpClient, HttpClient, HttpClientRequest } from 'effect/unstable/http';
+import { FetchHttpClient, HttpClient, HttpClientRequest } from 'effect/http';
 
 export interface UserAgentContext {
 	readonly cliVersion: string;
