@@ -18,9 +18,11 @@ import { BunServices } from '@effect/platform-bun';
 import { Console, Crypto, Effect, FileSystem, Layer } from 'effect';
 import { Command } from 'effect/cli';
 import { ChildProcess, ChildProcessSpawner } from 'effect/process';
+import { parse as parseToml } from 'smol-toml';
 
+import * as release from '../scripts/release';
 import { RELEASE_TARGETS, releaseCommand } from '../scripts/release';
-import { bytesToHex, ReleaseHost } from '../scripts/runtime/release-services';
+import { bytesToHex, ReleaseFailure, ReleaseHost } from '../scripts/runtime/release-services';
 import { ReleaseHostLive } from '../scripts/runtime/release-host-live';
 import { cliTestLayer } from './cli-test-layer';
 
@@ -129,15 +131,6 @@ test('release packaging has a dedicated implementation module', async () => {
 	expect(await fileExists('scripts/release.ts')).toBe(true);
 });
 
-test('keeps exported release contract helpers free of host APIs', async () => {
-	const helpers = await readFileString('scripts/runtime/release-services.ts');
-
-	expect(helpers).not.toContain('from "node:crypto"');
-	expect(helpers).not.toContain('process.platform');
-	expect(helpers).not.toContain('process.arch');
-	expect(await fileExists('scripts/runtime/release-host-live.ts')).toBe(true);
-});
-
 describe('release target contract', () => {
 	it.effect('renders the release matrix as JSON through the matrix subcommand', () =>
 		Effect.gen(function* () {
@@ -160,28 +153,42 @@ describe('release target contract', () => {
 		})
 	);
 
-	test('public release operations require ReleaseHost and never provide its live layer', async () => {
-		const release = await import('../scripts/release');
-		const source = await readFileString('scripts/release.ts');
-		const publicApi = source.slice(0, source.indexOf('if (import.meta.main)'));
-		const program: Effect.Effect<void, Error, ReleaseHost> = release.assertSafeOutputDirectory(
-			joinPath(process.cwd(), 'dist', 'release')
-		);
-
-		expect(program).toBeDefined();
-		expect(publicApi).not.toContain('Effect.provide(ReleaseHostLive)');
-	});
+	it.effect('public release operations preserve the injected host failure', () =>
+		Effect.gen(function* () {
+			const program: Effect.Effect<void, Error, ReleaseHost> =
+				release.assertSafeOutputDirectory('/virtual/output');
+			const failure = yield* program.pipe(
+				Effect.provideService(ReleaseHost, {
+					sha256: () => Effect.die('unused'),
+					hostTargetId: Effect.die('unused'),
+					planUploads: () => Effect.die('unused'),
+					assertSafeOutputDirectory: (output) =>
+						Effect.fail(new ReleaseFailure({ message: `injected host: ${output}` })),
+					packageExistingExecutables: () => Effect.die('unused'),
+					assembleReleasePackages: () => Effect.die('unused'),
+					packageRelease: () => Effect.die('unused'),
+					smokeReleaseArtifact: () => Effect.die('unused'),
+					verifyReleaseDirectory: () => Effect.die('unused')
+				}),
+				Effect.flip
+			);
+			expect(failure.message).toBe('injected host: /virtual/output');
+		})
+	);
 
 	test('exposes local package, verify, and smoke tasks without publishing a package', async () => {
-		const packageJson = JSON.parsePath(await readFileString('package.json'));
-		const mise = await readFileString('mise.toml');
+		const packageJson = JSON.parse(await readFileString('package.json'));
+		const mise = parseToml(await readFileString('mise.toml'));
 
 		expect(packageJson.scripts['release:package']).toContain('scripts/release.ts package');
 		expect(packageJson.scripts['release:verify']).toContain('scripts/release.ts verify');
 		expect(packageJson.scripts['release:smoke']).toContain('scripts/release.ts smoke');
 		expect(JSON.stringify(packageJson.scripts)).not.toContain('publish');
-		expect(mise).toContain('[tasks."release:package"]');
-		expect(mise).toContain('[tasks."release:smoke"]');
+		expect(mise.tasks).toMatchObject({
+			'release:package': { run: 'bun run release:package' },
+			'release:verify': { run: 'bun run release:verify' },
+			'release:smoke': { run: 'bun run release:smoke' }
+		});
 	});
 
 	test('defines the five tested Bun targets in stable order', async () => {

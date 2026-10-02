@@ -2,6 +2,7 @@ import { expect, it } from '@effect/vitest';
 import { BunServices } from '@effect/platform-bun';
 import { Effect, FileSystem, Path, Stream } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/process';
+import ts from 'typescript';
 
 import { resolveBunBinary } from './bun-binary';
 
@@ -51,17 +52,41 @@ it.effect('patched Effect generator preserves headers and SSE contracts without 
 	}).pipe(Effect.provide(BunServices.layer))
 );
 
-it.effect('patched Effect client preserves optional multipart as FormData or void', () =>
-	Effect.gen(function* () {
-		const fs = yield* FileSystem.FileSystem;
-		const clientTypes = yield* fs.readFileString(
-			'node_modules/effect/dist/unstable/httpapi/HttpApiEndpoint.d.ts'
-		);
-
-		expect(clientTypes).toContain('Extract<Payload["Type"], Brand<');
-		expect(clientTypes).toContain('Exclude<Payload["Type"], Brand<');
-	}).pipe(Effect.provide(BunServices.layer))
-);
+it('Effect client accepts optional multipart as FormData or void, not an unencoded object', () => {
+	const fileName = 'test/optional-multipart-contract.ts';
+	const source = `
+import { Schema } from 'effect';
+import { HttpApiEndpoint, HttpApiSchema } from 'effect/http-api';
+const multipart = Schema.Struct({ name: Schema.String }).pipe(HttpApiSchema.asMultipart());
+type Request = HttpApiEndpoint.ClientRequest<never, never, typeof multipart | typeof Schema.Void, never, 'decoded-only'>;
+declare const upload: (request: Request) => void;
+upload({ payload: new FormData() });
+upload({ payload: undefined });
+// @ts-expect-error multipart input must be encoded as FormData
+upload({ payload: { name: 'widget' } });
+`;
+	const options: ts.CompilerOptions = {
+		strict: true,
+		noEmit: true,
+		skipLibCheck: true,
+		types: [],
+		module: ts.ModuleKind.NodeNext,
+		moduleResolution: ts.ModuleResolutionKind.NodeNext,
+		target: ts.ScriptTarget.ES2022
+	};
+	const host = ts.createCompilerHost(options);
+	const getSourceFile = host.getSourceFile.bind(host);
+	host.getSourceFile = (name, languageVersion) =>
+		name === fileName
+			? ts.createSourceFile(name, source, languageVersion, true)
+			: getSourceFile(name, languageVersion);
+	const program = ts.createProgram([fileName], options, host);
+	expect(
+		ts
+			.getPreEmitDiagnostics(program)
+			.map((diagnostic) => ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'))
+	).toEqual([]);
+});
 
 function specification() {
 	return {
