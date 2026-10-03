@@ -4482,7 +4482,7 @@ class AgentEventsGroup extends HttpApiGroup.make("Agent events")
       .annotate(OpenApi.Identifier, "agentEvents.listResponseParts")
       .annotate(OpenApi.Summary, "Recover committed agent response parts")
       .annotate(OpenApi.Description, "Reads only persisted response chunks after a session cursor. This bounded recovery read is separate from the live Temporal Workflow Stream."))
-  .annotate(OpenApi.Description, "Normalized agent event history and streams.") {}
+  .annotate(OpenApi.Description, "Persisted agent transcripts and response recovery.") {}
 
 export class PublicApi extends HttpApi.make("PublicApi")
   .annotate(OpenApi.Title, "Akua API")
