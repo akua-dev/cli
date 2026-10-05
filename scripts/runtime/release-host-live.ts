@@ -19,6 +19,7 @@ import {
 	archiveExtractCommand,
 	artifactName,
 	assertCompiledExecutable,
+	admitNativeSmokeArchive,
 	bytesEqual,
 	bytesToHex,
 	checksumLine,
@@ -443,6 +444,7 @@ const smokeReleaseArtifact = Effect.fn('smokeReleaseArtifact')(function* (input:
 	version: string;
 	outputDir: string;
 	targetId: string;
+	archiveSha256: string;
 }) {
 	const fs = yield* FileSystem.FileSystem;
 	const path = yield* Path.Path;
@@ -451,11 +453,24 @@ const smokeReleaseArtifact = Effect.fn('smokeReleaseArtifact')(function* (input:
 	if (!target) {
 		return yield* releaseFailure(`Unknown release target: ${input.targetId}`);
 	}
+	const host = yield* attempt('read release host', () => ({
+		platform: process.platform,
+		arch: process.arch
+	}));
+	const hostTargetId = yield* releaseTargetIdForHost(host.platform, host.arch);
+	const archivePath = path.resolve(input.outputDir, artifactName(input.version, target));
+	yield* admitNativeSmokeArchive({
+		targetId: target.id,
+		hostTargetId,
+		archiveSha256: input.archiveSha256,
+		actualSha256: fs
+			.readFile(archivePath)
+			.pipe(Effect.mapError(toReleaseFailure('read smoke archive')), Effect.flatMap(sha256))
+	});
 	const installRoot = yield* fs
 		.makeTempDirectory({ prefix: 'akua-release-smoke-' })
 		.pipe(Effect.mapError(toReleaseFailure('create smoke directory')));
 	const smoke = Effect.gen(function* () {
-		const archivePath = path.resolve(input.outputDir, artifactName(input.version, target));
 		yield* runCommand(
 			archiveExtractCommand(target.archive, archivePath, installRoot, process.platform)
 		);

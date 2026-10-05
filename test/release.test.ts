@@ -746,6 +746,46 @@ describe('release target contract', () => {
 		]);
 	});
 
+	it.effect('rejects the wrong archive digest before extraction or execution', () =>
+		Effect.gen(function* () {
+			const fs = yield* FileSystem.FileSystem;
+			const root = yield* fs.makeTempDirectoryScoped();
+			const targetId = yield* release.hostTargetId();
+			const target = RELEASE_TARGETS.find((candidate) => candidate.id === targetId);
+			expect(target).toBeDefined();
+			if (target === undefined) return yield* Effect.die('Missing native release target');
+			const archivePath = joinPath(root, release.artifactName('1.2.3', target));
+			yield* fs.writeFileString(archivePath, 'not an archive: must never be extracted');
+			const failure = yield* release
+				.smokeReleaseArtifact({
+					version: '1.2.3',
+					outputDir: root,
+					targetId,
+					archiveSha256: '0'.repeat(64)
+				})
+				.pipe(Effect.flip);
+			expect(failure.message).toBe('Release smoke archive checksum mismatch');
+		}).pipe(Effect.scoped, Effect.provide(ReleaseHostLive), Effect.provide(BunServices.layer))
+	);
+
+	it.effect('rejects a foreign native target before reading its archive', () =>
+		Effect.gen(function* () {
+			const host = yield* release.hostTargetId();
+			const foreign = host === 'windows-x64' ? 'linux-x64' : 'windows-x64';
+			const failure = yield* release
+				.smokeReleaseArtifact({
+					version: '1.2.3',
+					outputDir: '/does-not-exist',
+					targetId: foreign,
+					archiveSha256: '0'.repeat(64)
+				})
+				.pipe(Effect.flip);
+			expect(failure.message).toBe(
+				`Release smoke target ${foreign} does not match native host ${host}`
+			);
+		}).pipe(Effect.provide(ReleaseHostLive))
+	);
+
 	test('extracts and executes all install-smoke commands for the native artifact', async () => {
 		const release = (await import('../scripts/release')) as Record<string, unknown>;
 		const targets = release.RELEASE_TARGETS as Array<{ id: string }>;
@@ -761,6 +801,7 @@ describe('release target contract', () => {
 			version: string;
 			outputDir: string;
 			targetId: string;
+			archiveSha256: string;
 		}) => Effect.Effect<void, Error>;
 		const root = await makeReleaseTempDir();
 
@@ -790,7 +831,17 @@ describe('release target contract', () => {
 					smokeReleaseArtifact({
 						version: '1.2.3',
 						outputDir,
-						targetId
+						targetId,
+						archiveSha256: await runRelease(
+							Effect.gen(function* () {
+								const fs = yield* FileSystem.FileSystem;
+								const target = RELEASE_TARGETS.find((candidate) => candidate.id === targetId);
+								if (target === undefined) return yield* Effect.die('Missing native release target');
+								return yield* release.sha256(
+									yield* fs.readFile(joinPath(outputDir, release.artifactName('1.2.3', target)))
+								);
+							}).pipe(Effect.provide(BunServices.layer))
+						)
 					})
 				)
 			).toBeUndefined();
@@ -887,6 +938,7 @@ describe('release target contract', () => {
 			version: string;
 			outputDir: string;
 			targetId: string;
+			archiveSha256: string;
 		}) => Effect.Effect<void, Error>;
 		const root = await makeReleaseTempDir();
 
@@ -915,7 +967,17 @@ describe('release target contract', () => {
 					smokeReleaseArtifact({
 						version: '1.2.3',
 						outputDir,
-						targetId
+						targetId,
+						archiveSha256: await runRelease(
+							Effect.gen(function* () {
+								const fs = yield* FileSystem.FileSystem;
+								const target = RELEASE_TARGETS.find((candidate) => candidate.id === targetId);
+								if (target === undefined) return yield* Effect.die('Missing native release target');
+								return yield* release.sha256(
+									yield* fs.readFile(joinPath(outputDir, release.artifactName('1.2.3', target)))
+								);
+							}).pipe(Effect.provide(BunServices.layer))
+						)
 					})
 				)
 			).rejects.toThrow('unexpected version');

@@ -79,6 +79,7 @@ export function smokeReleaseArtifact(input: {
 	version: string;
 	outputDir: string;
 	targetId: string;
+	archiveSha256: string;
 }): Effect.Effect<void, Error, ReleaseHost> {
 	return Effect.gen(function* () {
 		return yield* (yield* ReleaseHost).smokeReleaseArtifact(input);
@@ -133,12 +134,15 @@ const smokeCommand = Command.make(
 	{
 		version: versionFlag,
 		outputDir: outputFlag,
+		archiveSha256: Flag.String('archive-sha256').pipe(
+			Flag.withDescription('Expected archive SHA-256 from the admitted manifest')
+		),
 		targetId: Flag.String('target').pipe(
 			Flag.optional,
 			Flag.withDescription('Release target to smoke; defaults to the host target')
 		)
 	},
-	({ version, outputDir, targetId }) => {
+	({ version, outputDir, targetId, archiveSha256 }) => {
 		const target = Option.getOrUndefined(targetId);
 		return target === undefined
 			? hostTargetId().pipe(
@@ -146,11 +150,12 @@ const smokeCommand = Command.make(
 						smokeReleaseArtifact({
 							version,
 							outputDir,
-							targetId: hostTarget
+							targetId: hostTarget,
+							archiveSha256
 						})
 					)
 				)
-			: smokeReleaseArtifact({ version, outputDir, targetId: target });
+			: smokeReleaseArtifact({ version, outputDir, targetId: target, archiveSha256 });
 	}
 ).pipe(Command.withDescription('Install and smoke a release artifact'));
 
