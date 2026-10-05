@@ -1,4 +1,4 @@
-import { Context, Data, Effect } from 'effect';
+import { Context, Data, Effect, Schema } from 'effect';
 
 export class ReleaseFailure extends Data.TaggedError('ReleaseFailure')<{
 	readonly message: string;
@@ -329,6 +329,7 @@ export class ReleaseHost extends Context.Service<
 			version: string;
 			outputDir: string;
 			targetId: string;
+			archiveSha256: string;
 		}) => Effect.Effect<void, ReleaseFailure>;
 		readonly verifyReleaseDirectory: (
 			outputDir: string,
@@ -343,3 +344,24 @@ export function releaseFailure(
 ): Effect.Effect<never, ReleaseFailure> {
 	return Effect.fail(new ReleaseFailure({ message, cause }));
 }
+
+const ArchiveSha256 = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/));
+
+export const admitNativeSmokeArchive = Effect.fn('admitNativeSmokeArchive')(function* (input: {
+	readonly targetId: string;
+	readonly hostTargetId: string;
+	readonly archiveSha256: string;
+	readonly actualSha256: Effect.Effect<string, ReleaseFailure>;
+}) {
+	if (input.targetId !== input.hostTargetId) {
+		return yield* releaseFailure(
+			`Release smoke target ${input.targetId} does not match native host ${input.hostTargetId}`
+		);
+	}
+	const expected = yield* Schema.decodeUnknownEffect(ArchiveSha256)(input.archiveSha256).pipe(
+		Effect.mapError(() => new ReleaseFailure({ message: 'Invalid release smoke archive SHA-256' }))
+	);
+	if ((yield* input.actualSha256) !== expected) {
+		return yield* releaseFailure('Release smoke archive checksum mismatch');
+	}
+});

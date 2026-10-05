@@ -99,7 +99,9 @@ jobs:
           path: dist/release
       - name: Extract, install, and smoke ${{ matrix.target }}
         shell: bash
-        run: bun scripts/release.ts smoke --version "$VERSION" --output dist/release --target "${{ matrix.target }}"
+        run: |
+          archive_sha="$(bun -e 'const m = await Bun.file(process.argv[1]).json(); console.log(m.assets.find(a => a.target === process.argv[2]).sha256)' "dist/release/akua-v$VERSION-manifest.json" "${{ matrix.target }}")"
+          bun scripts/release.ts smoke --version "$VERSION" --output dist/release --target "${{ matrix.target }}" --archive-sha256 "$archive_sha"
 
   publish:
     needs: [package, install-smoke]

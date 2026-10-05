@@ -23,7 +23,7 @@ description = "Verify release manifests, archives, and checksums"
 run = "bun run release:verify"
 
 [tasks."release:smoke"]
-description = "Install and smoke the release archive for this host"
+description = "Verify and smoke this host archive (requires CLI_RELEASE_ARCHIVE_SHA256)"
 run = "bun run release:smoke"
 
 [tasks.test]

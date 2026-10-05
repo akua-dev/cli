@@ -58,4 +58,5 @@ jobs:
         shell: bash
         run: |
           version="$(bun -p "require('./package.json').version")"
-          bun scripts/release.ts smoke --version "$version" --output dist/release --target "${{ matrix.target }}"
+          archive_sha="$(bun -e 'const m = await Bun.file(process.argv[1]).json(); console.log(m.assets.find(a => a.target === process.argv[2]).sha256)' "dist/release/akua-v$version-manifest.json" "${{ matrix.target }}")"
+          bun scripts/release.ts smoke --version "$version" --output dist/release --target "${{ matrix.target }}" --archive-sha256 "$archive_sha"

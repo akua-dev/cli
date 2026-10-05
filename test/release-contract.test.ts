@@ -1,7 +1,10 @@
 import { describe, expect, it } from '@effect/vitest';
 import { Effect } from 'effect';
 
-import { makeReleaseProvenance } from '../scripts/runtime/release-services';
+import {
+	admitNativeSmokeArchive,
+	makeReleaseProvenance
+} from '../scripts/runtime/release-services';
 
 describe('release provenance contract', () => {
 	it.effect('binds the cnap source and embedded Akuapkg SDK identity', () =>
@@ -48,6 +51,51 @@ describe('release provenance contract', () => {
 
 			expect(malformedSource._tag).toBe('Failure');
 			expect(malformedDigest._tag).toBe('Failure');
+		})
+	);
+});
+
+describe('native smoke archive admission', () => {
+	it.effect('admits only the expected bytes on the actual native target', () =>
+		Effect.gen(function* () {
+			expect(
+				yield* admitNativeSmokeArchive({
+					targetId: 'linux-x64',
+					hostTargetId: 'linux-x64',
+					archiveSha256: 'a'.repeat(64),
+					actualSha256: Effect.succeed('a'.repeat(64))
+				})
+			).toBeUndefined();
+		})
+	);
+	it.effect('refuses altered bytes and malformed expected digests', () =>
+		Effect.gen(function* () {
+			for (const archiveSha256 of ['b'.repeat(64), 'not-a-digest']) {
+				const result = yield* Effect.exit(
+					admitNativeSmokeArchive({
+						targetId: 'linux-x64',
+						hostTargetId: 'linux-x64',
+						archiveSha256,
+						actualSha256: Effect.succeed('a'.repeat(64))
+					})
+				);
+				expect(result._tag).toBe('Failure');
+			}
+		})
+	);
+	it.effect('refuses a foreign OS or architecture even with matching bytes', () =>
+		Effect.gen(function* () {
+			for (const hostTargetId of ['linux-arm64', 'darwin-x64']) {
+				const result = yield* Effect.exit(
+					admitNativeSmokeArchive({
+						targetId: 'linux-x64',
+						hostTargetId,
+						archiveSha256: 'a'.repeat(64),
+						actualSha256: Effect.succeed('a'.repeat(64))
+					})
+				);
+				expect(result._tag).toBe('Failure');
+			}
 		})
 	);
 });
