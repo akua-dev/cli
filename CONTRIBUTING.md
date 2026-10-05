@@ -75,8 +75,10 @@ release-please files remain while the replacement publisher is disabled.
 `mise run release:package` cross-compiles all five targets, creates archives
 and checksums in `dist/release`, and verifies their manifest.
 `mise run release:verify` re-verifies an already-packaged release directory.
-`mise run release:smoke` extracts and runs the artifact for the current
-supported host. Authoritative archive labels under `//tools/cli:release_archive_*`
+`CLI_RELEASE_ARCHIVE_SHA256=<expected-sha256> mise run release:smoke` verifies,
+extracts, and runs the artifact for the current supported host. Supply the
+archive digest from the admitted manifest; the task refuses a missing, malformed,
+or mismatched digest before extraction. Authoritative archive labels under `//tools/cli:release_archive_*`
 are named for the published-source-view config; real Bazel compile wiring and
 the macOS/Windows native-smoke authority are still open (design §9).
 

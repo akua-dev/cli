@@ -15,12 +15,13 @@ import {
 	writeFileString
 } from './fs-test';
 import { BunServices } from '@effect/platform-bun';
-import { Console, Crypto, Effect, FileSystem, Layer } from 'effect';
+import { Console, Crypto, Effect, FileSystem, Layer, Path, Stream } from 'effect';
 import { Command } from 'effect/cli';
 import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { parse as parseToml } from 'smol-toml';
 
 import * as release from '../scripts/release';
+import packageJson from '../package.json';
 import { RELEASE_TARGETS, releaseCommand } from '../scripts/release';
 import { bytesToHex, ReleaseFailure, ReleaseHost } from '../scripts/runtime/release-services';
 import { ReleaseHostLive } from '../scripts/runtime/release-host-live';
@@ -745,6 +746,45 @@ describe('release target contract', () => {
 			"Expand-Archive -LiteralPath 'D:\\a\\Robin''s build\\akua.zip' -DestinationPath 'C:\\install dir'"
 		]);
 	});
+
+	it.effect('forwards the expected digest through the package smoke task', () =>
+		Effect.gen(function* () {
+			const fs = yield* FileSystem.FileSystem;
+			const path = yield* Path.Path;
+			const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+			const root = yield* fs.makeTempDirectoryScoped();
+			const source = yield* path.fromFileUrl(new URL('..', import.meta.url));
+			yield* fs.writeFileString(path.join(root, 'package.json'), JSON.stringify(packageJson));
+			yield* fs.symlink(path.join(source, 'scripts'), path.join(root, 'scripts'));
+			const output = path.join(root, 'dist', 'release');
+			yield* fs.makeDirectory(output, { recursive: true });
+			const host = yield* release.hostTargetId();
+			const target = RELEASE_TARGETS.find((candidate) => candidate.id === host);
+			if (target === undefined) return yield* Effect.die('Missing native release target');
+			yield* fs.writeFileString(
+				path.join(output, release.artifactName(packageJson.version, target)),
+				'not an archive: the task must reject this digest before extraction'
+			);
+			const child = yield* spawner.spawn(
+				ChildProcess.make('bun', ['run', 'release:smoke'], {
+					cwd: root,
+					detached: false,
+					extendEnv: true,
+					env: { CLI_RELEASE_ARCHIVE_SHA256: '0'.repeat(64) }
+				})
+			);
+			const [stdout, stderr, exitCode] = yield* Effect.all(
+				[
+					child.stdout.pipe(Stream.decodeText(), Stream.mkString),
+					child.stderr.pipe(Stream.decodeText(), Stream.mkString),
+					child.exitCode
+				],
+				{ concurrency: 'unbounded' }
+			);
+			expect(exitCode).not.toBe(0);
+			expect(stdout + stderr).toContain('Release smoke archive checksum mismatch');
+		}).pipe(Effect.scoped, Effect.provide(ReleaseHostLive), Effect.provide(BunServices.layer))
+	);
 
 	it.effect('rejects the wrong archive digest before extraction or execution', () =>
 		Effect.gen(function* () {
