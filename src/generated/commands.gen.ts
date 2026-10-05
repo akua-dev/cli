@@ -890,14 +890,14 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "required": true
       },
       {
-        "name": "akua-context",
-        "in": "header",
-        "required": false
-      },
-      {
         "name": "if-match",
         "in": "header",
         "required": true
+      },
+      {
+        "name": "akua-context",
+        "in": "header",
+        "required": false
       }
     ],
     "body": {
@@ -1715,13 +1715,8 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
     "requires_auth": true,
     "parameters": [
       {
-        "name": "cursor",
-        "in": "query",
-        "required": false
-      },
-      {
-        "name": "limit",
-        "in": "query",
+        "name": "akua-context",
+        "in": "header",
         "required": false
       },
       {
@@ -1740,8 +1735,13 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
         "required": false
       },
       {
-        "name": "akua-context",
-        "in": "header",
+        "name": "limit",
+        "in": "query",
+        "required": false
+      },
+      {
+        "name": "cursor",
+        "in": "query",
         "required": false
       }
     ]
