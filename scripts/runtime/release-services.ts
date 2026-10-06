@@ -347,11 +347,11 @@ export function releaseFailure(
 
 const ArchiveSha256 = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/));
 
-export const admitNativeSmokeArchive = Effect.fn('admitNativeSmokeArchive')(function* (input: {
+export const admitNativeSmokeArchive = Effect.fn('admitNativeSmokeArchive')(function* <R>(input: {
 	readonly targetId: string;
 	readonly hostTargetId: string;
 	readonly archiveSha256: string;
-	readonly actualSha256: Effect.Effect<string, ReleaseFailure>;
+	readonly actualSha256: Effect.Effect<string, ReleaseFailure, R>;
 }) {
 	if (input.targetId !== input.hostTargetId) {
 		return yield* releaseFailure(
