@@ -167,11 +167,12 @@ const writeReleaseMetadata = Effect.fn('writeReleaseMetadata')(function* (
 		assets
 	};
 	const homebrewManifest = yield* createHomebrewManifest(version, assets);
-	for (const [name, contents] of [
+	const metadata: ReadonlyArray<readonly [string, string]> = [
 		['checksums.txt', assets.map((asset) => checksumLine(asset.file, asset.sha256)).join('')],
 		[manifestName, stableJson(manifest)],
 		[homebrewName, stableJson(homebrewManifest)]
-	]) {
+	];
+	for (const [name, contents] of metadata) {
 		yield* fs
 			.writeFileString(path.join(outputDir, name), contents)
 			.pipe(Effect.mapError(toReleaseFailure('write release metadata')));
@@ -564,9 +565,9 @@ const verifyReleaseDirectory = Effect.fn('verifyReleaseDirectory')(function* (
 		'Release manifest does not match the requested release contract'
 	);
 	const aggregateLines: string[] = [];
-	for (let index = 0; index < RELEASE_TARGETS.length; index += 1) {
-		const target = RELEASE_TARGETS[index];
+	for (const [index, target] of RELEASE_TARGETS.entries()) {
 		const asset = manifest.assets[index];
+		if (asset === undefined) return yield* releaseFailure('Release target asset is missing');
 		const expectedFile = artifactName(version, target);
 		yield* check(
 			asset.target === target.id &&
@@ -720,10 +721,12 @@ const runCommand = Effect.fn('runCommand')(function* (
 	cwd?: string
 ) {
 	const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+	const executable = command[0];
+	if (executable === undefined) return yield* releaseFailure('Release command is empty');
 	const [stdout, stderr, exitCode] = yield* Effect.scoped(
 		Effect.gen(function* () {
 			const handle = yield* spawner.spawn(
-				ChildProcess.make(command[0], command.slice(1), {
+				ChildProcess.make(executable, command.slice(1), {
 					cwd,
 					env: extraEnv,
 					extendEnv: true
@@ -960,6 +963,7 @@ function parseReleaseManifest(value: unknown): Effect.Effect<ReleaseManifest, Re
 	if (!isRecord(value) || !Array.isArray(value.assets)) {
 		return releaseFailure('Release manifest is invalid');
 	}
+	const rawAssets = value.assets;
 	const version = value.version;
 	const homebrewManifest = value.homebrew_manifest;
 	if (
@@ -973,7 +977,7 @@ function parseReleaseManifest(value: unknown): Effect.Effect<ReleaseManifest, Re
 	}
 	return Effect.gen(function* () {
 		const provenance = yield* parseReleaseProvenance(value);
-		const assets = yield* Effect.all(value.assets.map(parseReleaseAsset));
+		const assets = yield* Effect.all(rawAssets.map(parseReleaseAsset));
 		return {
 			schema_version: 1,
 			executable: 'akua',
