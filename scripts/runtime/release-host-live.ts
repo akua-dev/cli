@@ -1117,23 +1117,26 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 	return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-export const ReleaseHostLive = Layer.succeed(ReleaseHost, {
-	sha256: (bytes) => sha256(bytes).pipe(Effect.provide(BunServices.layer)),
-	hostTargetId: attempt('read release host', () => ({
-		platform: process.platform,
-		arch: process.arch
-	})).pipe(Effect.flatMap(({ platform, arch }) => releaseTargetIdForHost(platform, arch))),
-	planUploads: (candidateDir, existingDir, version) =>
-		planReleaseUploads(candidateDir, existingDir, version).pipe(Effect.provide(BunServices.layer)),
-	assertSafeOutputDirectory: (outputDir) =>
-		assertSafeOutputDirectory(outputDir).pipe(Effect.provide(BunServices.layer)),
-	packageExistingExecutables: (input) =>
-		packageExistingExecutables(input).pipe(Effect.provide(BunServices.layer)),
-	assembleReleasePackages: (input) =>
-		assembleReleasePackages(input).pipe(Effect.provide(BunServices.layer)),
-	packageRelease: (input) => packageRelease(input).pipe(Effect.provide(BunServices.layer)),
-	smokeReleaseArtifact: (input) =>
-		smokeReleaseArtifact(input).pipe(Effect.provide(BunServices.layer)),
-	verifyReleaseDirectory: (outputDir, version) =>
-		verifyReleaseDirectory(outputDir, version).pipe(Effect.provide(BunServices.layer))
-});
+export const makeReleaseHostLive = (zipperPath?: string) =>
+	Layer.succeed(ReleaseHost, {
+		sha256: (bytes) => sha256(bytes).pipe(Effect.provide(BunServices.layer)),
+		hostTargetId: attempt('read release host', () => ({
+			platform: process.platform,
+			arch: process.arch
+		})).pipe(Effect.flatMap(({ platform, arch }) => releaseTargetIdForHost(platform, arch))),
+		planUploads: (candidateDir, existingDir, version) =>
+			planReleaseUploads(candidateDir, existingDir, version).pipe(
+				Effect.provide(BunServices.layer)
+			),
+		assertSafeOutputDirectory: (outputDir) =>
+			assertSafeOutputDirectory(outputDir).pipe(Effect.provide(BunServices.layer)),
+		packageExistingExecutables: (input) =>
+			packageExistingExecutables(input).pipe(Effect.provide(BunServices.layer)),
+		assembleReleasePackages: (input) =>
+			assembleReleasePackages(input).pipe(Effect.provide(BunServices.layer)),
+		packageRelease: (input) => packageRelease(input).pipe(Effect.provide(BunServices.layer)),
+		smokeReleaseArtifact: (input) =>
+			smokeReleaseArtifact(input).pipe(Effect.provide(BunServices.layer)),
+		verifyReleaseDirectory: (outputDir, version) =>
+			verifyReleaseDirectory(outputDir, version, zipperPath).pipe(Effect.provide(BunServices.layer))
+	});

@@ -24,13 +24,13 @@ import * as release from '../scripts/release';
 import packageJson from '../package.json';
 import { RELEASE_TARGETS, releaseCommand } from '../scripts/release';
 import { bytesToHex, ReleaseFailure, ReleaseHost } from '../scripts/runtime/release-services';
-import { ReleaseHostLive } from '../scripts/runtime/release-host-live';
+import { makeReleaseHostLive } from '../scripts/runtime/release-host-live';
 import { cliTestLayer } from './cli-test-layer';
 
 const TEST_SOURCE_SHA = '0123456789abcdef0123456789abcdef01234567';
 
 function runRelease<A, E>(program: Effect.Effect<A, E, ReleaseHost>): Promise<A> {
-	return Effect.runPromise(Effect.provide(program, ReleaseHostLive));
+	return Effect.runPromise(Effect.provide(program, makeReleaseHostLive()));
 }
 
 // Shared runner for the handful of independent-oracle/verification host
@@ -141,7 +141,7 @@ describe('release target contract', () => {
 			}) as Console.Console;
 
 			yield* Command.runWith(releaseCommand, { version: 'test' })(['matrix']).pipe(
-				Effect.provide(Layer.mergeAll(cliTestLayer, ReleaseHostLive)),
+				Effect.provide(Layer.mergeAll(cliTestLayer, makeReleaseHostLive())),
 				Effect.provideService(Console.Console, testConsole)
 			);
 
@@ -758,7 +758,7 @@ describe('release target contract', () => {
 			);
 			expect(exitCode).not.toBe(0);
 			expect(stdout + stderr).toContain('Release smoke archive checksum mismatch');
-		}).pipe(Effect.scoped, Effect.provide(ReleaseHostLive), Effect.provide(BunServices.layer))
+		}).pipe(Effect.scoped, Effect.provide(makeReleaseHostLive()), Effect.provide(BunServices.layer))
 	);
 
 	it.effect('rejects the wrong archive digest before extraction or execution', () =>
@@ -780,7 +780,7 @@ describe('release target contract', () => {
 				})
 				.pipe(Effect.flip);
 			expect(failure.message).toBe('Release smoke archive checksum mismatch');
-		}).pipe(Effect.scoped, Effect.provide(ReleaseHostLive), Effect.provide(BunServices.layer))
+		}).pipe(Effect.scoped, Effect.provide(makeReleaseHostLive()), Effect.provide(BunServices.layer))
 	);
 
 	it.effect('rejects a foreign native target before reading its archive', () =>
@@ -798,7 +798,7 @@ describe('release target contract', () => {
 			expect(failure.message).toBe(
 				`Release smoke target ${foreign} does not match native host ${host}`
 			);
-		}).pipe(Effect.provide(ReleaseHostLive))
+		}).pipe(Effect.provide(makeReleaseHostLive()))
 	);
 
 	test('extracts and executes all install-smoke commands for the native artifact', async () => {
