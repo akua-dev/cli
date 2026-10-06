@@ -74,16 +74,16 @@ describe('generated public commands', () => {
 		});
 
 		expect(urls.paths.legacy({ params: { id: 'document/id', format: 'json' } })).toBe(
-			'https://api.example.test/documents/document%2Fid.json'
+			'https://api.example.test/v1/documents/document%2Fid.json'
 		);
-		expect(urls.paths.optional({ params: {} })).toBe('https://api.example.test/documents');
+		expect(urls.paths.optional({ params: {} })).toBe('https://api.example.test/v1/documents');
 		expect(urls.paths.template({ params: { id: 'document/id', format: 'json' } })).toBe(
-			'https://api.example.test/documents/document%2Fid.json:selectWorkspace'
+			'https://api.example.test/v1/documents/document%2Fid.json:selectWorkspace'
 		);
 		expect(urls.paths.wildcard({ params: { path: 'api/v1/node:name' } })).toBe(
-			'https://api.example.test/documents/api/v1/node%3Aname'
+			'https://api.example.test/v1/documents/api/v1/node%3Aname'
 		);
-		expect(urls.paths.customVerb()).toBe('https://api.example.test/offers:resolve');
+		expect(urls.paths.customVerb()).toBe('https://api.example.test/v1/offers:resolve');
 	});
 
 	test('workspaces.list sends the decoded query and bearer token', async () => {
@@ -625,17 +625,17 @@ describe('generated public commands', () => {
 		).rejects.toMatchObject({ _tag: 'GeneratedCommandFailure', reason: 'input' });
 		await expect(
 			runGenerated(
-				'agents.archive',
+				'offers.archive',
 				['--input', '-'],
-				'{"path":{"id":"agt_123"},"query":{}}',
+				'{"path":{"id":"off_123"},"query":{}}',
 				transport
 			)
 		).rejects.toMatchObject({ _tag: 'GeneratedCommandFailure', reason: 'input' });
 		await expect(
 			runGenerated(
-				'agents.archive',
+				'offers.archive',
 				['--input', '-'],
-				'{"path":{"id":"agt_123"},"headers":{}}',
+				'{"path":{"id":"off_123"},"headers":{}}',
 				transport
 			)
 		).rejects.toMatchObject({ _tag: 'GeneratedCommandFailure', reason: 'input' });
