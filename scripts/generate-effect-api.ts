@@ -140,7 +140,8 @@ function collectPublicOperations(
 		for (const pathItem of Object.values(spec.paths)) {
 			if (!isRecord(pathItem)) continue;
 			const pathParameters = readParameters(readRecordField(pathItem, 'parameters'));
-			for (const [method, value] of Object.entries(pathItem)) {
+			for (const [method, entry] of Object.entries(pathItem)) {
+				const value: unknown = entry;
 				if (!isHttpMethod(method) || !hasPublicVisibility(value)) continue;
 				if (!isRecord(value) || typeof value.operationId !== 'string') {
 					return yield* executorGenerationFailure(

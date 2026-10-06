@@ -3,46 +3,38 @@
  * Backed by Effect FileSystem + BunServices so tests stay off node:builtins.
  */
 import { Effect, FileSystem, Path } from 'effect';
-import { BunServices } from '@effect/platform-bun';
+import { BunPath, BunServices } from '@effect/platform-bun';
 
-const provide = <A, E>(effect: Effect.Effect<A, E>) =>
-	effect.pipe(Effect.provide(BunServices.layer));
-
-const withFsSync = <A>(body: (fs: FileSystem.FileSystem, path: Path.Path) => Effect.Effect<A>): A =>
-	Effect.runSync(
-		Effect.gen(function* () {
-			const fs = yield* FileSystem.FileSystem;
-			const path = yield* Path.Path;
-			return yield* body(fs, path);
-		}).pipe(provide)
-	);
-
-const withFs = <A>(
-	body: (fs: FileSystem.FileSystem, path: Path.Path) => Effect.Effect<A>
+const withFs = <A, E>(
+	body: (fs: FileSystem.FileSystem, path: Path.Path) => Effect.Effect<A, E>
 ): Promise<A> =>
 	Effect.runPromise(
 		Effect.gen(function* () {
 			const fs = yield* FileSystem.FileSystem;
 			const path = yield* Path.Path;
 			return yield* body(fs, path);
-		}).pipe(provide)
+		}).pipe(Effect.provide(BunServices.layer))
 	);
 
-export const readFileStringSync = (filePath: string): string =>
-	withFsSync((fs) => fs.readFileString(filePath));
+const testPath = Effect.runSync(Path.Path.pipe(Effect.provide(BunPath.layer)));
 
-export const existsSync = (filePath: string): boolean => withFsSync((fs) => fs.exists(filePath));
+export const joinPath = (...parts: string[]): string => testPath.join(...parts);
+export const parsePath = (filePath: string) => testPath.parse(filePath);
 
-export const readDirSync = (dirPath: string): string[] =>
-	withFsSync((fs) =>
-		fs.readDirectory(dirPath).pipe(Effect.map((entries) => entries.slice().sort()))
-	);
-
-export const joinPath = (...parts: string[]): string =>
-	withFsSync((_fs, path) => Effect.succeed(path.join(...parts)));
-
-export const parsePath = (filePath: string) =>
-	withFsSync((_fs, path) => Effect.succeed(path.parse(filePath)));
+export const sourceFiles = Effect.fn('test.sourceFiles')(function* (
+	directory: string
+): Effect.fn.Return<string[], unknown, FileSystem.FileSystem | Path.Path> {
+	const fs = yield* FileSystem.FileSystem;
+	const path = yield* Path.Path;
+	const files: string[] = [];
+	for (const entry of yield* fs.readDirectory(directory)) {
+		const entryPath = path.join(directory, entry);
+		const stat = yield* fs.stat(entryPath);
+		if (stat.type === 'Directory') files.push(...(yield* sourceFiles(entryPath)));
+		else if (stat.type === 'File' && entryPath.endsWith('.ts')) files.push(entryPath);
+	}
+	return files.sort();
+});
 
 export const readFileString = (filePath: string): Promise<string> =>
 	withFs((fs) => fs.readFileString(filePath));
@@ -90,10 +82,10 @@ export const statMode = (filePath: string): Promise<number> =>
 		)
 	);
 
-export const mkdtempPath = (prefix: string): Promise<string> =>
+export const mkdtempPath = (prefix: string, directory: string = process.cwd()): Promise<string> =>
 	withFs((fs) =>
 		fs.makeTempDirectory({
-			directory: process.cwd(),
+			directory,
 			prefix
 		})
 	);

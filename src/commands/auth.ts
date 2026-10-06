@@ -143,7 +143,7 @@ function runDeviceLogin(noBrowser: boolean) {
 		const process = yield* Process;
 		return yield* completeDeviceLogin(noBrowser).pipe(
 			Effect.raceFirst(
-				process.awaitSignal.pipe(Effect.andThen(Effect.fail(new DeviceCancelledFailure())))
+				process.awaitSignal.pipe(Effect.andThen(Effect.fail(new DeviceCancelledFailure({}))))
 			)
 		);
 	});
@@ -202,7 +202,7 @@ function pollForDeviceToken(
 			return yield* Effect.fail(new DeviceAuthorizationFailure({ reason: error }));
 		}
 		if (error !== 'authorization_pending' && error !== 'slow_down') {
-			return yield* Effect.fail(new DeviceRequestFailure());
+			return yield* Effect.fail(new DeviceRequestFailure({}));
 		}
 		const nextInterval = error === 'slow_down' ? interval + 5_000 : interval;
 		if (now + nextInterval >= deadline) {
@@ -218,13 +218,13 @@ function requestDevice(url: string, body: Record<string, string>) {
 		const http = yield* Http;
 		return yield* http
 			.postJson({ url, body })
-			.pipe(Effect.mapError(() => new DeviceRequestFailure()));
+			.pipe(Effect.mapError(() => new DeviceRequestFailure({})));
 	});
 }
 
 function parseDeviceCode(response: DeviceResponse) {
 	if (response.status < 200 || response.status >= 300 || !isDeviceCodeResponse(response.body)) {
-		return Effect.fail(new DeviceRequestFailure());
+		return Effect.fail(new DeviceRequestFailure({}));
 	}
 	return Effect.succeed(response.body);
 }
@@ -234,7 +234,7 @@ function parseDeviceToken(response: DeviceResponse) {
 		return Effect.succeed(undefined);
 	}
 	if (!isDeviceTokenResponse(response.body)) {
-		return Effect.fail(new DeviceRequestFailure());
+		return Effect.fail(new DeviceRequestFailure({}));
 	}
 	return Effect.succeed(response.body.access_token);
 }

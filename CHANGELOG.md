@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.11.1](https://github.com/akua-dev/cli/compare/v0.11.0...v0.11.1)
+
+- Publish the Bazel-built CLI and bundled SDK 0.9.4 through the scoped Main release pipeline.
+- Resolve generated API path placeholders with the current Effect client.
+
 ## [0.11.0](https://github.com/akua-dev/cli/compare/v0.10.1...v0.11.0) (2026-09-14)
 
 ### Features

@@ -36,7 +36,7 @@ function runRelease<A, E>(program: Effect.Effect<A, E, ReleaseHost>): Promise<A>
 // Shared runner for the handful of independent-oracle/verification host
 // calls below that do have a real Effect equivalent (crypto digest,
 // subprocess spawn, file existence).
-function runNode<A, E>(effect: Effect.Effect<A, E>): Promise<A> {
+function runNode<A, E>(effect: Effect.Effect<A, E, BunServices.BunServices>): Promise<A> {
 	return Effect.runPromise(Effect.provide(effect, BunServices.layer));
 }
 
@@ -72,7 +72,7 @@ function extractTarSync(archivePath: string, extractDir: string): Promise<{ stat
 async function makeReleaseTempDir(): Promise<string> {
 	const releaseRoot = joinPath(process.cwd(), 'dist', 'release');
 	await mkdirp(releaseRoot);
-	return await mkdtempPath('.tmp-akua-release-');
+	return await mkdtempPath('.tmp-akua-release-', releaseRoot);
 }
 
 async function makePackageRuntimeFixture(root: string): Promise<string> {
@@ -145,7 +145,7 @@ describe('release target contract', () => {
 				Effect.provideService(Console.Console, testConsole)
 			);
 
-			expect(JSON.parsePath(stdout.joinPath('\n'))).toEqual({
+			expect(JSON.parse(stdout.join('\n'))).toEqual({
 				include: RELEASE_TARGETS.map((target) => ({
 					target: target.id,
 					runner: target.runner
@@ -193,8 +193,6 @@ describe('release target contract', () => {
 	});
 
 	test('defines the five tested Bun targets in stable order', async () => {
-		const release = (await import('../scripts/release')) as Record<string, unknown>;
-
 		expect(release.RELEASE_TARGETS).toEqual([
 			{
 				id: 'darwin-arm64',
@@ -254,7 +252,6 @@ describe('release target contract', () => {
 	});
 
 	test('derives the GitHub Actions matrix from the release target contract', async () => {
-		const release = (await import('../scripts/release')) as Record<string, unknown>;
 		const releaseMatrix = release.releaseMatrix as () => {
 			include: Array<{ target: string; runner: string }>;
 		};
@@ -271,11 +268,7 @@ describe('release target contract', () => {
 	});
 
 	test('derives versioned archive and checksum names', async () => {
-		const release = (await import('../scripts/release')) as Record<string, unknown>;
-		const targets = release.RELEASE_TARGETS as Array<{
-			id: string;
-			archive: string;
-		}>;
+		const targets = release.RELEASE_TARGETS;
 		const artifactName = release.artifactName as (
 			version: string,
 			target: { id: string; archive: string }
@@ -291,7 +284,6 @@ describe('release target contract', () => {
 	});
 
 	test('renders standard SHA-256 checksum lines', async () => {
-		const release = (await import('../scripts/release')) as Record<string, unknown>;
 		const sha256 = release.sha256 as (
 			bytes: Uint8Array
 		) => Effect.Effect<string, Error, ReleaseHost>;
@@ -306,7 +298,6 @@ describe('release target contract', () => {
 	});
 
 	test('rejects zero-filled compiled outputs before release packaging', async () => {
-		const release = (await import('../scripts/release')) as Record<string, unknown>;
 		const assertCompiledExecutable = release.assertCompiledExecutable as (
 			target: { id: string; os: 'darwin' | 'linux' | 'windows' },
 			bytes: Uint8Array
@@ -326,7 +317,6 @@ describe('release target contract', () => {
 	});
 
 	test('plans uploads for only release assets missing from an identical existing subset', async () => {
-		const release = (await import('../scripts/release')) as Record<string, unknown>;
 		expect(typeof release.planReleaseUploads).toBe('function');
 		if (typeof release.planReleaseUploads !== 'function') {
 			return;
@@ -370,7 +360,6 @@ describe('release target contract', () => {
 	});
 
 	test('rejects an existing release asset that differs from the candidate', async () => {
-		const release = (await import('../scripts/release')) as Record<string, unknown>;
 		expect(typeof release.planReleaseUploads).toBe('function');
 		if (typeof release.planReleaseUploads !== 'function') {
 			return;
@@ -405,11 +394,7 @@ describe('release target contract', () => {
 	});
 
 	test('packages executables with their target-native package runtime', async () => {
-		const release = (await import('../scripts/release')) as Record<string, unknown>;
-		const targets = release.RELEASE_TARGETS as Array<{
-			id: string;
-			bindingPackage: string;
-		}>;
+		const targets = release.RELEASE_TARGETS;
 		const packageExistingExecutables = release.packageExistingExecutables as (input: {
 			version: string;
 			outputDir: string;
@@ -440,8 +425,8 @@ describe('release target contract', () => {
 			);
 
 			expect(await runRelease(verifyReleaseDirectory(outputDir, '1.2.3'))).toBeUndefined();
-			const manifest = JSON.parsePath(
-				await readFileString(joinPath(outputDir, 'akua-v1.2.3-manifest.json'), 'utf8')
+			const manifest = JSON.parse(
+				await readFileString(joinPath(outputDir, 'akua-v1.2.3-manifest.json'))
 			);
 			expect(manifest).toMatchObject({
 				schema_version: 1,
@@ -467,8 +452,8 @@ describe('release target contract', () => {
 				targets.map((target) => target.id)
 			);
 
-			const homebrew = JSON.parsePath(
-				await readFileString(joinPath(outputDir, 'akua-v1.2.3-homebrew.json'), 'utf8')
+			const homebrew = JSON.parse(
+				await readFileString(joinPath(outputDir, 'akua-v1.2.3-homebrew.json'))
 			);
 			expect(homebrew).toMatchObject({
 				schema_version: 1,
@@ -499,20 +484,17 @@ describe('release target contract', () => {
 			);
 			expect(
 				await readFileString(
-					joinPath(extractDir, 'node_modules/@akua-dev/native/akua.linux-x64-gnu.node'),
-					'utf8'
+					joinPath(extractDir, 'node_modules/@akua-dev/native/akua.linux-x64-gnu.node')
 				)
 			).toBe('native-linux-x64-gnu/akua.linux-x64-gnu.node\n');
 			expect(
 				await readFileString(
-					joinPath(extractDir, 'node_modules/@akua-dev/native-engines/helm-engine.wasm'),
-					'utf8'
+					joinPath(extractDir, 'node_modules/@akua-dev/native-engines/helm-engine.wasm')
 				)
 			).toBe('native-engines/helm-engine.wasm\n');
 			expect(
 				await readFileString(
-					joinPath(extractDir, 'node_modules/@akua-dev/native/extra-runtime.txt'),
-					'utf8'
+					joinPath(extractDir, 'node_modules/@akua-dev/native/extra-runtime.txt')
 				)
 			).toBe('native/extra-runtime.txt\n');
 		} finally {
@@ -521,8 +503,7 @@ describe('release target contract', () => {
 	});
 
 	test('packages byte-identical release assets across repeated builds', async () => {
-		const release = (await import('../scripts/release')) as Record<string, unknown>;
-		const targets = release.RELEASE_TARGETS as Array<{ id: string }>;
+		const targets = release.RELEASE_TARGETS;
 		const releaseAssetNames = release.releaseAssetNames as (
 			version: string
 		) => Effect.Effect<string[], Error>;
@@ -569,7 +550,7 @@ describe('release target contract', () => {
 					readFileString(joinPath(firstOutputDir, name)),
 					readFileString(joinPath(secondOutputDir, name))
 				]);
-				if (!second.equals(first)) {
+				if (second !== first) {
 					throw new Error(`Repeated release packaging changed ${name}`);
 				}
 			}
@@ -579,8 +560,7 @@ describe('release target contract', () => {
 	});
 
 	test('verification rejects an archive changed after checksumming', async () => {
-		const release = (await import('../scripts/release')) as Record<string, unknown>;
-		const targets = release.RELEASE_TARGETS as Array<{ id: string }>;
+		const targets = release.RELEASE_TARGETS;
 		const packageExistingExecutables = release.packageExistingExecutables as (input: {
 			version: string;
 			outputDir: string;
@@ -620,7 +600,6 @@ describe('release target contract', () => {
 	});
 
 	test('rejects release output directories that could erase the checkout or filesystem root', async () => {
-		const release = (await import('../scripts/release')) as Record<string, unknown>;
 		const assertSafeOutputDirectory = release.assertSafeOutputDirectory as (
 			outputDir: string
 		) => Effect.Effect<void, Error>;
@@ -646,7 +625,6 @@ describe('release target contract', () => {
 	});
 
 	test('rejects release output paths beneath a symlinked ancestor', async () => {
-		const release = (await import('../scripts/release')) as Record<string, unknown>;
 		const assertSafeOutputDirectory = release.assertSafeOutputDirectory as (
 			outputDir: string
 		) => Effect.Effect<void, Error>;
@@ -666,8 +644,7 @@ describe('release target contract', () => {
 	});
 
 	test('verification rejects a Homebrew manifest that does not match verified assets', async () => {
-		const release = (await import('../scripts/release')) as Record<string, unknown>;
-		const targets = release.RELEASE_TARGETS as Array<{ id: string }>;
+		const targets = release.RELEASE_TARGETS;
 		const packageExistingExecutables = release.packageExistingExecutables as (input: {
 			version: string;
 			outputDir: string;
@@ -697,7 +674,7 @@ describe('release target contract', () => {
 				})
 			);
 			const manifestPath = joinPath(outputDir, 'akua-v1.2.3-homebrew.json');
-			const homebrew = JSON.parsePath(await readFileString(manifestPath));
+			const homebrew = JSON.parse(await readFileString(manifestPath));
 			homebrew.platforms.linux_intel.sha256 = '0'.repeat(64);
 			await writeFileString(manifestPath, `${JSON.stringify(homebrew, null, 2)}\n`);
 
@@ -710,7 +687,6 @@ describe('release target contract', () => {
 	});
 
 	test('maps supported native hosts to release target IDs', async () => {
-		const release = (await import('../scripts/release')) as Record<string, unknown>;
 		const releaseTargetIdForHost = release.releaseTargetIdForHost as (
 			platform: string,
 			arch: string
@@ -727,7 +703,6 @@ describe('release target contract', () => {
 	});
 
 	test('extracts Windows zip archives with native PowerShell', async () => {
-		const release = (await import('../scripts/release')) as Record<string, unknown>;
 		const archiveExtractCommand = release.archiveExtractCommand as (
 			archive: 'tar.gz' | 'zip',
 			archivePath: string,
@@ -827,8 +802,7 @@ describe('release target contract', () => {
 	);
 
 	test('extracts and executes all install-smoke commands for the native artifact', async () => {
-		const release = (await import('../scripts/release')) as Record<string, unknown>;
-		const targets = release.RELEASE_TARGETS as Array<{ id: string }>;
+		const targets = release.RELEASE_TARGETS;
 		const hostTargetId = release.hostTargetId as () => Effect.Effect<string, Error, ReleaseHost>;
 		const packageExistingExecutables = release.packageExistingExecutables as (input: {
 			version: string;
@@ -901,7 +875,6 @@ describe('release target contract', () => {
 	});
 
 	test("stages the sdk package's runtime files, including directory-listed entries, into the archive", async () => {
-		const release = (await import('../scripts/release')) as Record<string, unknown>;
 		const hostTargetId = release.hostTargetId as () => Effect.Effect<string, Error, ReleaseHost>;
 		const packageExistingExecutables = release.packageExistingExecutables as (input: {
 			version: string;
@@ -922,9 +895,7 @@ describe('release target contract', () => {
 			const packageRoot = await makePackageRuntimeFixture(root);
 			await writeFileString(source, '#!/bin/sh\nexit 0\n');
 			await chmodPath(source, 0o755);
-			const { RELEASE_TARGETS: targets } = release as {
-				RELEASE_TARGETS: Array<{ id: string }>;
-			};
+			const targets = release.RELEASE_TARGETS;
 			await runRelease(
 				packageExistingExecutables({
 					version: '1.2.3',
@@ -948,24 +919,19 @@ describe('release target contract', () => {
 			expect(extract.status).toBe(0);
 
 			const sdkDir = joinPath(extractDir, 'node_modules', '@akua-dev', 'sdk');
-			expect(await readFileString(joinPath(sdkDir, 'dist', 'mod.js'), 'utf8')).toBe(
-				'sdk/dist/mod.js\n'
-			);
-			expect(await readFileString(joinPath(sdkDir, 'dist', 'execute.js'), 'utf8')).toBe(
+			expect(await readFileString(joinPath(sdkDir, 'dist', 'mod.js'))).toBe('sdk/dist/mod.js\n');
+			expect(await readFileString(joinPath(sdkDir, 'dist', 'execute.js'))).toBe(
 				'sdk/dist/execute.js\n'
 			);
-			expect(await readFileString(joinPath(sdkDir, 'README.md'), 'utf8')).toBe('sdk/README.md\n');
-			expect(await readFileString(joinPath(sdkDir, 'package.json'), 'utf8')).toContain(
-				'"@akua-dev/sdk"'
-			);
+			expect(await readFileString(joinPath(sdkDir, 'README.md'))).toBe('sdk/README.md\n');
+			expect(await readFileString(joinPath(sdkDir, 'package.json'))).toContain('"@akua-dev/sdk"');
 		} finally {
 			await removePath(root, { recursive: true, force: true });
 		}
 	});
 
 	test('rejects an install-smoke executable whose longer version contains the expected version', async () => {
-		const release = (await import('../scripts/release')) as Record<string, unknown>;
-		const targets = release.RELEASE_TARGETS as Array<{ id: string }>;
+		const targets = release.RELEASE_TARGETS;
 		const hostTargetId = release.hostTargetId as () => Effect.Effect<string, Error, ReleaseHost>;
 		const packageExistingExecutables = release.packageExistingExecutables as (input: {
 			version: string;

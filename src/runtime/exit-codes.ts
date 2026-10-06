@@ -19,4 +19,4 @@ export const ExitCodes = {
 	ConfirmationRequired: 4,
 	Conflict: 5,
 	Retryable: 6
-} as const satisfies Record<string, ExitCode>;
+} satisfies Record<string, ExitCode>;

@@ -191,9 +191,9 @@ export const PublicInputLive = Layer.effect(
 				source === '-'
 					? Effect.tryPromise({
 							try: () => Bun.stdin.text(),
-							catch: () => new PublicInputFailure()
+							catch: () => new PublicInputFailure({})
 						})
-					: fs.readFileString(source).pipe(Effect.mapError(() => new PublicInputFailure()))
+					: fs.readFileString(source).pipe(Effect.mapError(() => new PublicInputFailure({})))
 		};
 	})
 );
@@ -329,8 +329,8 @@ function isNotFound(error: unknown): boolean {
 	if (typeof error !== 'object' || error === null || !('reason' in error)) {
 		return false;
 	}
-	const reason = (error as { reason?: { _tag?: string } }).reason;
-	return reason?._tag === 'NotFound';
+	const reason: unknown = error.reason;
+	return isRecord(reason) && reason._tag === 'NotFound';
 }
 
 // `bun build --compile` cannot statically bundle @akua-dev/sdk/execute: it

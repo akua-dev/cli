@@ -1,35 +1,41 @@
-import { expect, test } from '@effect/vitest';
-import { existsSync, readFileStringSync } from './fs-test';
+import { Effect, FileSystem } from 'effect';
+import { expect, it } from '@effect/vitest';
+import { BunServices } from '@effect/platform-bun';
 import ts from 'typescript';
 import { commandRegistry } from '../src/generated/commands.gen';
 
-const specPath = '../../../docs/openapi-public.json';
 const executorPath = 'src/generated/public-operation-executor.gen.ts';
 
-test('the generated executor represents every public OpenAPI operation', () => {
-	expect(existsSync(executorPath)).toBe(true);
+it.effect('the generated executor represents every public OpenAPI operation', () =>
+	Effect.gen(function* () {
+		const fs = yield* FileSystem.FileSystem;
+		expect(yield* fs.exists(executorPath)).toBe(true);
 
-	const source = readFileStringSync(executorPath, 'utf8');
-	const operationIds = publicOperationIds(JSON.parse(readFileStringSync(specPath, 'utf8')));
+		const source = yield* fs.readFileString(executorPath);
+		const operationIds = commandRegistry.map((command) => command.operation_id);
 
-	expect(operationIds.length).toBeGreaterThan(0);
-	for (const operationId of operationIds) {
-		expect(source).toContain(`case ${JSON.stringify(operationId)}:`);
-	}
-	expect((source.match(/\bcase\s+"[^"]+":/g) ?? []).length).toBe(operationIds.length);
-	expect(operationIds).toEqual(commandRegistry.map((command) => command.operation_id));
-});
+		expect(operationIds.length).toBeGreaterThan(0);
+		for (const operationId of operationIds) {
+			expect(source).toContain(`case ${JSON.stringify(operationId)}:`);
+		}
+		expect((source.match(/\bcase\s+"[^"]+":/g) ?? []).length).toBe(operationIds.length);
+		expect(operationIds).toEqual(commandRegistry.map((command) => command.operation_id));
+	}).pipe(Effect.provide(BunServices.layer))
+);
 
-test('the generated executor is static and assertion-free', () => {
-	expect(existsSync(executorPath)).toBe(true);
+it.effect('the generated executor is static and assertion-free', () =>
+	Effect.gen(function* () {
+		const fs = yield* FileSystem.FileSystem;
+		expect(yield* fs.exists(executorPath)).toBe(true);
 
-	const source = readFileStringSync(executorPath, 'utf8');
-	expect(source).toContain('export type PublicOperationId =');
-	expect(source).toContain('export function executePublicOperation(');
-	expect(source).not.toContain('Reflect');
-	expect(typeAssertions(source)).toEqual([]);
-	expect(source).not.toMatch(/\b(?:async|await|Promise|throw)\b/);
-});
+		const source = yield* fs.readFileString(executorPath);
+		expect(source).toContain('export type PublicOperationId =');
+		expect(source).toContain('export function executePublicOperation(');
+		expect(source).not.toContain('Reflect');
+		expect(typeAssertions(source)).toEqual([]);
+		expect(source).not.toMatch(/\b(?:async|await|Promise|throw)\b/);
+	}).pipe(Effect.provide(BunServices.layer))
+);
 
 function typeAssertions(source: string): string[] {
 	const file = ts.createSourceFile(executorPath, source, ts.ScriptTarget.Latest, true);
@@ -42,22 +48,4 @@ function typeAssertions(source: string): string[] {
 	};
 	visit(file);
 	return assertions;
-}
-
-function publicOperationIds(spec: unknown): string[] {
-	if (!isRecord(spec) || !isRecord(spec.paths)) return [];
-	return Object.values(spec.paths)
-		.filter(isRecord)
-		.flatMap((pathItem) =>
-			Object.values(pathItem)
-				.filter(isRecord)
-				.filter((operation) => operation['x-platform-visibility'] === 'PUBLIC')
-				.map((operation) => operation.operationId)
-				.filter((operationId): operationId is string => typeof operationId === 'string')
-		)
-		.sort((left, right) => left.localeCompare(right));
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return value !== null && typeof value === 'object' && !Array.isArray(value);
 }

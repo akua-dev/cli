@@ -90,8 +90,8 @@ describe('akua entrypoint', () => {
 			);
 
 			expect(exitCode).toBe(1);
-			expect(stdout.joinPath('\n')).toContain('AKUA_PACKAGE_UNAVAILABLE');
-			expect(stdout.joinPath('\n')).not.toContain('native detail');
+			expect(stdout.join('\n')).toContain('AKUA_PACKAGE_UNAVAILABLE');
+			expect(stdout.join('\n')).not.toContain('native detail');
 		})
 	);
 
@@ -105,9 +105,8 @@ describe('akua entrypoint', () => {
 		expect(root.stdout).toContain('commands');
 		expect(root.stdout).toContain('pkg');
 		expect(root.stdout).toContain('machines');
-		expect(root.stdout).toContain(
-			'agent-provider-exchanges  Run generated agent-provider-exchanges API commands'
-		);
+		expect(root.stdout).toContain('clusters');
+		expect(root.stdout).toContain('Run generated clusters API commands');
 
 		expect(auth.exitCode).toBe(0);
 		expect(auth.stdout).toContain('login');
@@ -518,7 +517,7 @@ describe('akua entrypoint', () => {
 			expect(rendered).not.toContain(deviceCode);
 			expect(rendered).not.toContain(accessToken);
 			expect(
-				JSON.parse(await readFileString(joinPath(home, '.config', 'akua', 'config.json'), 'utf8'))
+				JSON.parse(await readFileString(joinPath(home, '.config', 'akua', 'config.json')))
 			).toEqual({ token: accessToken });
 		} finally {
 			await removePath(home, { recursive: true, force: true });

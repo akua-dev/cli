@@ -15,10 +15,10 @@ import { Browser, CliClock, Console, Http, Process, SecureConfig } from '../src/
 import type { RenderEnvelope } from '../src/runtime/render';
 
 // authView is an Effect boundary; test adapters belong in test layers instead.
-// @ts-expect-error authView must not accept host-Promise dependencies.
 authView(
 	['status'],
 	{ HOME: '/test-home' },
+	// @ts-expect-error authView must not accept host-Promise dependencies.
 	{
 		request: async () => ({ status: 200, body: {} }),
 		sleep: async () => undefined,
@@ -140,10 +140,7 @@ describe('Effect auth command', () => {
 					];
 					const services = Layer.mergeAll(
 						Layer.succeed(Http, {
-							postJson: () =>
-								Effect.fromNullable(responses.shift()).pipe(
-									Effect.orDieWith(() => new Error('Expected a device authorization response.'))
-								)
+							postJson: () => Effect.fromNullishOr(responses.shift()).pipe(Effect.orDie)
 						}),
 						Layer.succeed(Browser, { launch: () => Effect.void }),
 						Layer.succeed(Process, { awaitSignal: Effect.never }),
@@ -218,7 +215,7 @@ describe('Effect auth command', () => {
 				exitCode: 1,
 				payload: { error: { type: 'runtime_error', code: 'AKUA_CONFIG_ERROR' } }
 			});
-			expect(yield* render(new DeviceRequestFailure())).toMatchObject({
+			expect(yield* render(new DeviceRequestFailure({}))).toMatchObject({
 				exitCode: 3,
 				payload: {
 					error: {
@@ -227,7 +224,7 @@ describe('Effect auth command', () => {
 					}
 				}
 			});
-			expect(yield* render(new DeviceCancelledFailure())).toMatchObject({
+			expect(yield* render(new DeviceCancelledFailure({}))).toMatchObject({
 				exitCode: 1,
 				payload: {
 					error: { type: 'runtime_error', code: 'AKUA_DEVICE_CANCELLED' }

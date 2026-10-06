@@ -41,4 +41,4 @@ run = "bazel test //:sdk_generated_drift_test"
 
 [tasks.check]
 description = "Run the local validation suite"
-depends = ["generate:check", "build", "test"]
+depends = ["build", "test"]

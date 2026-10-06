@@ -48,7 +48,7 @@ it.effect('patched Effect generator preserves headers and SSE contracts without 
 		expect(output).toContain('WidgetsCreate201Headers');
 		expect(output).toContain('HttpApiSchema.StreamSse({ events:');
 		expect(output).toContain('payload: [WidgetsCreateRequestJson, HttpApiSchema.NoContent]');
-		expect(output).toContain('readonly [x: string]: Schema.Json | undefined');
+		expect(output).toContain('readonly [x: string]: Schema.Json');
 	}).pipe(Effect.provide(BunServices.layer))
 );
 
@@ -135,7 +135,14 @@ function specification() {
 										},
 										required: ['event', 'data']
 									},
-									'x-effect-stream': { encoding: 'sse' }
+									'x-effect-stream': {
+										encoding: 'sse',
+										errorSchema: {
+											type: 'object',
+											properties: { message: { type: 'string' } },
+											required: ['message']
+										}
+									}
 								}
 							}
 						}

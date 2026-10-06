@@ -1,5 +1,6 @@
-import { describe, expect, test } from '@effect/vitest';
-import { existsSync, readFileStringSync } from './fs-test';
+import { Effect, FileSystem } from 'effect';
+import { describe, expect, it, test } from '@effect/vitest';
+import { BunServices } from '@effect/platform-bun';
 
 const EFFECT_SKILL_PATH = 'skills/effect-v4/SKILL.md';
 const AGENTS_PATH = 'AGENTS.md';
@@ -21,70 +22,82 @@ describe('Effect v4 CLI quality guidance', () => {
 		expect(BASELINE_PRESSURE_RESPONSE).toMatch(/\brunPromise\b/);
 	});
 
-	test('requires a discoverable, auditable Effect v4 skill', () => {
-		const skill = readFileStringSync(EFFECT_SKILL_PATH, 'utf8');
+	it.effect('requires a discoverable, auditable Effect v4 skill', () =>
+		Effect.gen(function* () {
+			const fs = yield* FileSystem.FileSystem;
+			const skill = yield* fs.readFileString(EFFECT_SKILL_PATH);
 
-		expect(skill).toMatch(/^---\nname: effect-v4\ndescription: Use when .*Effect v4.*CLI/m);
-		for (const rule of [
-			'effect@4.0.0-rc.109',
-			'Effect services and layers',
-			'Data.TaggedError',
-			'TestClock',
-			'test layers',
-			'`Promise`',
-			'`async`',
-			'`await`',
-			'`throw`',
-			'`runPromise`',
-			'`as`',
-			'`as const`',
-			'direct host I/O',
-			'production `src/` and `scripts/`',
-			'schema',
-			'type guard',
-			'`satisfies`',
-			'binary terminal',
-			'fiber',
-			'## Red flags',
-			'mise run check',
-			'bun run test'
-		]) {
-			expect(skill).toContain(rule);
-		}
-		expect(skill).toContain('do not use native `Promise`');
-	});
+			expect(skill).toMatch(/^---\nname: effect-v4\ndescription: Use when .*Effect v4.*CLI/m);
+			for (const rule of [
+				'effect@4.0.0-rc.109',
+				'Effect services and layers',
+				'Data.TaggedError',
+				'TestClock',
+				'test layers',
+				'`Promise`',
+				'`async`',
+				'`await`',
+				'`throw`',
+				'`runPromise`',
+				'`as`',
+				'`as const`',
+				'direct host I/O',
+				'production `src/` and `scripts/`',
+				'schema',
+				'type guard',
+				'`satisfies`',
+				'binary terminal',
+				'fiber',
+				'## Red flags',
+				'mise run check',
+				'bun run test'
+			]) {
+				expect(skill).toContain(rule);
+			}
+			expect(skill).toContain('do not use native `Promise`');
+		}).pipe(Effect.provide(BunServices.layer))
+	);
 
-	test('makes the Effect v4 skill and source scans mandatory for production CLI changes', () => {
-		const agents = readFileStringSync(AGENTS_PATH, 'utf8');
+	it.effect('makes the Effect v4 skill and source scans mandatory for production CLI changes', () =>
+		Effect.gen(function* () {
+			const fs = yield* FileSystem.FileSystem;
+			const agents = yield* fs.readFileString(AGENTS_PATH);
 
-		expect(agents).toContain('effect-v4');
-		expect(agents).toContain('production CLI');
-		expect(agents).toContain('source scan');
-		expect(agents).toContain('mise run check');
-	});
+			expect(agents).toContain('effect-v4');
+			expect(agents).toContain('production CLI');
+			expect(agents).toContain('source scan');
+			expect(agents).toContain('mise run check');
+		}).pipe(Effect.provide(BunServices.layer))
+	);
 
-	test('keeps generated public commands provider-neutral and Effect-only', () => {
-		const agents = readFileStringSync(AGENTS_PATH, 'utf8');
-		const skill = readFileStringSync(EFFECT_SKILL_PATH, 'utf8');
+	it.effect('keeps generated public commands provider-neutral and Effect-only', () =>
+		Effect.gen(function* () {
+			const fs = yield* FileSystem.FileSystem;
+			const agents = yield* fs.readFileString(AGENTS_PATH);
+			const skill = yield* fs.readFileString(EFFECT_SKILL_PATH);
 
-		for (const rule of [
-			'cnap `docs/openapi-public.json` is the only source of truth',
-			'provider-neutral',
-			'generated path, query, header, and body',
-			'fail on warnings, skipped public',
-			'raw `throw`',
-			'typed error channel',
-			'Pure immutable data'
-		]) {
-			expect(agents).toContain(rule);
-		}
+			for (const rule of [
+				'cnap `docs/openapi-public.json` is the only source of truth',
+				'provider-neutral',
+				'generated path, query, header, and body',
+				'fail on warnings, skipped public',
+				'raw `throw`',
+				'typed error channel',
+				'Pure immutable data'
+			]) {
+				expect(agents).toContain(rule);
+			}
 
-		expect(skill).toContain('raw `throw`');
-		expect(skill).toContain('typed `Data.TaggedError`');
-	});
+			expect(skill).toContain('raw `throw`');
+			expect(skill).toContain('typed `Data.TaggedError`');
+		}).pipe(Effect.provide(BunServices.layer))
+	);
 
-	test('keeps Effect v4 as the only repository-local skill', () => {
-		expect(existsSync('.agents/skills')).toBe(false);
-		expect(existsSync('.superpowers')).toBe(false);
-	});
+	it.effect('keeps Effect v4 as the only repository-local skill', () =>
+		Effect.gen(function* () {
+			const fs = yield* FileSystem.FileSystem;
+			expect(yield* fs.exists('.agents/skills')).toBe(false);
+			expect(yield* fs.exists('.superpowers')).toBe(false);
+		}).pipe(Effect.provide(BunServices.layer))
+	);
 });

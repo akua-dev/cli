@@ -26,8 +26,8 @@ mise run build:binary
 ./dist/akua commands --limit 1
 ```
 
-`mise run check` runs the drift check, typecheck/build, and tests — the same
-gate CI runs. Run it before opening a PR.
+`mise run check` typechecks, builds, and tests this standalone checkout.
+Public API changes also require the canonical cnap Bazel drift gate below.
 
 ## Command generation
 
@@ -59,42 +59,44 @@ the rest of the CLI's design contract.
 ## Testing
 
 ```sh
-bun test
+bun run test
 ```
 
-`mise run check` (drift check, build, tests) is the required gate before
+`mise run check` (build and tests) is the required gate before
 release changes; see [docs/architecture.md](docs/architecture.md#testing-strategy)
 for what current test coverage includes.
 
 ## Release process
 
-Bump `package.json` `version` in a reviewed cnap PR. That value is the only
-version source for a future cnap-owned public `v*` tag. The legacy
-release-please files remain while the replacement publisher is disabled.
+Bump `package.json` `version`, the binary version, and release metadata in a
+reviewed cnap PR when CLI changes need a release. This reviewed version bump
+is intentional; the Main pipeline does not invent a new version for unrelated
+changes. Legacy Release Please metadata remains only as version metadata.
 
-`mise run release:package` cross-compiles all five targets, creates archives
-and checksums in `dist/release`, and verifies their manifest.
-`mise run release:verify` re-verifies an already-packaged release directory.
+Bazel produces the five compiled archives and the thirteen immutable release
+assets under `//tools/cli:cli_release_archive`. Linux and available macOS hosts
+exercise the compiled cloud CLI and `pkg init` → `check` → `render` → `inspect`.
+Windows is cross-built and packaged without requiring native execution.
+
+The successful canonical Main pipeline projects the fixed public source tree,
+scans its full Git history, and hands public-only inputs to a dedicated writer.
+That writer fast-forwards public main, creates the immutable `v<version>` tag,
+and publishes the exact stamped Bazel assets. It downloads and re-verifies all
+published assets before sending the verified manifest through Access Proxy to
+`akua-dev/homebrew-tap`. No vendor token is mounted in the build or writer.
+Public CI provides read-only advisory build and install checks.
+
+`akua-dev/homebrew-tap` owns the `akua` formula, formula tests, and the reviewed
+formula-update PR. The publisher dispatches the verified manifest contract; the
+tap reviews and tests its generated formula change.
+
+`mise run release:package` remains a local packaging tool.
+`mise run release:verify` re-verifies the files in `dist/release`.
 `CLI_RELEASE_ARCHIVE_SHA256=<expected-sha256> mise run release:smoke` verifies,
-extracts, and runs the artifact for the current supported host. Supply the
-archive digest from the admitted manifest; the task refuses a missing, malformed,
-or mismatched digest before extraction. Authoritative archive labels under `//tools/cli:release_archive_*`
-are named for the published-source-view config; real Bazel compile wiring and
-the macOS/Windows native-smoke authority are still open (design §9).
-
-The previous public Release Please workflows are disabled. A future monorepo
-publisher must create immutable tags and assets from admitted Bazel outputs,
-then hand the verified manifest to the Homebrew tap through Access Proxy.
-The publisher is not active in this planning phase.
-
-`akua-dev/homebrew-tap` owns the `akua` formula, formula tests, and the
-reviewed formula-update PR. This repository requests a formula PR only after
-every archive has passed a native install smoke test and all published assets
-have passed post-upload verification; it never pushes formula commits itself.
-
-`scripts/release.ts` remains the source of truth for target IDs, Bun targets,
-archive names, executable names, SHA-256 files, and release manifests until the
-Bazel archive targets produce equivalent bytes.
+extracts, and executes the current host archive. Supply its digest from the
+verified manifest; a missing, malformed, or mismatched digest fails before
+extraction. `scripts/release.ts` defines the target IDs, archive names, checksums,
+and manifest contract consumed by the authoritative Bazel archive targets.
 
 ## Repository-specific engineering rules
 

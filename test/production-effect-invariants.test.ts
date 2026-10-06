@@ -1,8 +1,9 @@
-import { expect, test } from '@effect/vitest';
-import { joinPath, readDirSync, readFileStringSync } from './fs-test';
+import { expect, it, test } from '@effect/vitest';
+import { sourceFiles } from './fs-test';
+import { BunServices } from '@effect/platform-bun';
+import { Effect, FileSystem } from 'effect';
 import ts from 'typescript';
 
-const productionRoots = ['src', 'scripts'];
 const hostModules = new Set([
 	'node:child_process',
 	'node:crypto',
@@ -35,31 +36,55 @@ const forbiddenPatterns: readonly ForbiddenPattern[] = [
 	{ rule: 'Effect.runPromise', pattern: /\bEffect\.runPromise\b/ }
 ];
 
-test('production TypeScript is Effect-only and assertion-free', () => {
-	const violations = productionFiles().flatMap(inspectProductionFile);
-
-	expect(violations).toEqual([]);
-});
-
-test('production host I/O is isolated to live services and executable terminals', () => {
-	const program = ts.createProgram(productionFiles(), {});
-	const checker = program.getTypeChecker();
-	const violations = productionFiles().flatMap((file) => inspectHostIo(file, program, checker));
-
-	expect(violations).toEqual([]);
-});
-
-test('production runtime handoffs stay inside import.meta.main terminal guards', () => {
-	const violations = productionFiles().flatMap((file) => {
-		const source = readFileStringSync(file, 'utf8');
-		return inspectRuntimeHandoffs(
-			file,
-			ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true)
+it.effect('production TypeScript is Effect-only and assertion-free', () =>
+	Effect.gen(function* () {
+		const fs = yield* FileSystem.FileSystem;
+		const files = (yield* Effect.all(['src', 'scripts'].map(sourceFiles))).flat();
+		const contents = new Map(
+			yield* Effect.forEach(files, (file) =>
+				fs.readFileString(file).pipe(Effect.map((text): [string, string] => [file, text]))
+			)
 		);
-	});
+		const violations = files.flatMap((file) =>
+			inspectProductionFile(file, contents.get(file) ?? '')
+		);
 
-	expect(violations).toEqual([]);
-});
+		expect(violations).toEqual([]);
+	}).pipe(Effect.provide(BunServices.layer))
+);
+
+it.effect('production host I/O is isolated to live services and executable terminals', () =>
+	Effect.gen(function* () {
+		const files = (yield* Effect.all(['src', 'scripts'].map(sourceFiles))).flat();
+
+		const program = ts.createProgram(files, {});
+		const checker = program.getTypeChecker();
+		const violations = files.flatMap((file) => inspectHostIo(file, program, checker));
+
+		expect(violations).toEqual([]);
+	}).pipe(Effect.provide(BunServices.layer))
+);
+
+it.effect('production runtime handoffs stay inside import.meta.main terminal guards', () =>
+	Effect.gen(function* () {
+		const fs = yield* FileSystem.FileSystem;
+		const files = (yield* Effect.all(['src', 'scripts'].map(sourceFiles))).flat();
+		const contents = new Map(
+			yield* Effect.forEach(files, (file) =>
+				fs.readFileString(file).pipe(Effect.map((text): [string, string] => [file, text]))
+			)
+		);
+		const violations = files.flatMap((file) => {
+			const source = contents.get(file) ?? '';
+			return inspectRuntimeHandoffs(
+				file,
+				ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true)
+			);
+		});
+
+		expect(violations).toEqual([]);
+	}).pipe(Effect.provide(BunServices.layer))
+);
 
 test('runtime handoff inspection rejects Runtime.makeRunMain outside its terminal guard', () => {
 	const source = ts.createSourceFile(
@@ -197,59 +222,64 @@ test('runtime handoff inspection requires a block-bodied import.meta.main guard'
 	]);
 });
 
-test('test files import vitest primitives only through @effect/vitest', () => {
-	const violations = collectTypeScriptFiles('test').flatMap((file) => {
-		const source = readFileStringSync(file, 'utf8');
-		const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
-		const found: Violation[] = [];
-		visit(sourceFile, (node) => {
-			if (
-				ts.isImportDeclaration(node) &&
-				ts.isStringLiteral(node.moduleSpecifier) &&
-				node.moduleSpecifier.text === 'vitest'
-			) {
-				found.push({
-					file,
-					rule: 'import from "vitest" instead of "@effect/vitest"'
-				});
-			}
-		});
-		return found;
-	});
-
-	expect(violations).toEqual([]);
-});
-
-test('test files never monkey-patch globalThis.fetch', () => {
-	const violations = collectTypeScriptFiles('test').flatMap((file) => {
-		const source = readFileStringSync(file, 'utf8');
-		return /globalThis\.fetch\s*=/.test(source)
-			? [
-					{
+it.effect('test files import vitest primitives only through @effect/vitest', () =>
+	Effect.gen(function* () {
+		const fs = yield* FileSystem.FileSystem;
+		const files = (yield* Effect.all(['test'].map(sourceFiles))).flat();
+		const contents = new Map(
+			yield* Effect.forEach(files, (file) =>
+				fs.readFileString(file).pipe(Effect.map((text): [string, string] => [file, text]))
+			)
+		);
+		const violations = files.flatMap((file) => {
+			const source = contents.get(file) ?? '';
+			const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
+			const found: Violation[] = [];
+			visit(sourceFile, (node) => {
+				if (
+					ts.isImportDeclaration(node) &&
+					ts.isStringLiteral(node.moduleSpecifier) &&
+					node.moduleSpecifier.text === 'vitest'
+				) {
+					found.push({
 						file,
-						rule: 'globalThis.fetch assignment; use FetchHttpClient.Fetch or a service test layer instead'
-					}
-				]
-			: [];
-	});
+						rule: 'import from "vitest" instead of "@effect/vitest"'
+					});
+				}
+			});
+			return found;
+		});
 
-	expect(violations).toEqual([]);
-});
+		expect(violations).toEqual([]);
+	}).pipe(Effect.provide(BunServices.layer))
+);
 
-function productionFiles(): string[] {
-	return productionRoots.flatMap(collectTypeScriptFiles);
-}
+it.effect('test files never monkey-patch globalThis.fetch', () =>
+	Effect.gen(function* () {
+		const fs = yield* FileSystem.FileSystem;
+		const files = (yield* Effect.all(['test'].map(sourceFiles))).flat();
+		const contents = new Map(
+			yield* Effect.forEach(files, (file) =>
+				fs.readFileString(file).pipe(Effect.map((text): [string, string] => [file, text]))
+			)
+		);
+		const violations = files.flatMap((file) => {
+			const source = contents.get(file) ?? '';
+			return /globalThis\.fetch\s*=/.test(source)
+				? [
+						{
+							file,
+							rule: 'globalThis.fetch assignment; use FetchHttpClient.Fetch or a service test layer instead'
+						}
+					]
+				: [];
+		});
 
-function collectTypeScriptFiles(directory: string): string[] {
-	return readDirSync(directory, { withFileTypes: true }).flatMap((entry) => {
-		const path = joinPath(directory, entry.name);
-		if (entry.isDirectory()) return collectTypeScriptFiles(path);
-		return entry.isFile() && entry.name.endsWith('.ts') ? [path] : [];
-	});
-}
+		expect(violations).toEqual([]);
+	}).pipe(Effect.provide(BunServices.layer))
+);
 
-function inspectProductionFile(file: string): Violation[] {
-	const source = readFileStringSync(file, 'utf8');
+function inspectProductionFile(file: string, source: string): Violation[] {
 	const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest);
 	const violations = lexicalViolations(file, source);
 

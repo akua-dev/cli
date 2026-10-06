@@ -340,7 +340,9 @@ describe('generated public commands', () => {
 					Response.json({ data: [packageRecord], has_more: false, next_cursor: null })
 				)
 		);
-		const listedPackage = listResult.data.data[0];
+		const listedPackage = Schema.decodeUnknownSync(
+			Schema.Struct({ data: Schema.Array(Schema.Struct({ id: Schema.String })) })
+		)(listResult.data).data[0];
 		expect(listedPackage).toBeDefined();
 		if (listedPackage === undefined) return;
 
@@ -372,8 +374,8 @@ describe('generated public commands', () => {
 			}
 		);
 
-		expect(getResult.data.id).toBe(listedPackage.id);
-		expect(versionsResult.data.data[0]?.package_id).toBe(listedPackage.id);
+		expect(getResult.data).toMatchObject({ id: listedPackage.id });
+		expect(versionsResult.data).toMatchObject({ data: [{ package_id: listedPackage.id }] });
 		expect(requests.map((request) => request.url)).toEqual([
 			`https://api.akua.dev/v1/packages/${listedPackage.id}`,
 			`https://api.akua.dev/v1/packages/${listedPackage.id}/versions`
@@ -625,17 +627,17 @@ describe('generated public commands', () => {
 		).rejects.toMatchObject({ _tag: 'GeneratedCommandFailure', reason: 'input' });
 		await expect(
 			runGenerated(
-				'offers.archive',
+				'machines.delete',
 				['--input', '-'],
-				'{"path":{"id":"off_123"},"query":{}}',
+				'{"path":{"id":"mch_123"},"query":{}}',
 				transport
 			)
 		).rejects.toMatchObject({ _tag: 'GeneratedCommandFailure', reason: 'input' });
 		await expect(
 			runGenerated(
-				'offers.archive',
+				'machines.delete',
 				['--input', '-'],
-				'{"path":{"id":"off_123"},"headers":{}}',
+				'{"path":{"id":"mch_123"},"headers":{}}',
 				transport
 			)
 		).rejects.toMatchObject({ _tag: 'GeneratedCommandFailure', reason: 'input' });

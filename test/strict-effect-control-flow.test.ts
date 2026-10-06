@@ -1,19 +1,39 @@
-import { expect, test } from '@effect/vitest';
-import { joinPath, readDirSync, readFileStringSync } from './fs-test';
+import { expect, it, test } from '@effect/vitest';
+import { sourceFiles } from './fs-test';
+import { BunServices } from '@effect/platform-bun';
+import { Effect, FileSystem } from 'effect';
 
 import ts from 'typescript';
 
 import { runAkua } from './run-akua';
 
-const productionFiles = [...findTypeScriptFiles('src'), ...findTypeScriptFiles('scripts')];
+it.effect('production CLI source contains no raw throw statements', () =>
+	Effect.gen(function* () {
+		const fs = yield* FileSystem.FileSystem;
+		const files = (yield* Effect.all(['src', 'scripts'].map(sourceFiles))).flat();
+		const contents = new Map(
+			yield* Effect.forEach(files, (file) =>
+				fs.readFileString(file).pipe(Effect.map((text): [string, string] => [file, text]))
+			)
+		);
+		expect(findThrowStatements(contents)).toEqual([]);
+	}).pipe(Effect.provide(BunServices.layer))
+);
 
-test('production CLI source contains no raw throw statements', () => {
-	expect(findThrowStatements(productionFiles)).toEqual([]);
-});
-
-test('release entrypoint contains no aliased imports', () => {
-	expect(findAliasedImports('scripts/release.ts')).toEqual([]);
-});
+it.effect('release entrypoint contains no aliased imports', () =>
+	Effect.gen(function* () {
+		const fs = yield* FileSystem.FileSystem;
+		const files = (yield* Effect.all(['src', 'scripts'].map(sourceFiles))).flat();
+		const contents = new Map(
+			yield* Effect.forEach(files, (file) =>
+				fs.readFileString(file).pipe(Effect.map((text): [string, string] => [file, text]))
+			)
+		);
+		expect(
+			findAliasedImports('scripts/release.ts', contents.get('scripts/release.ts') ?? '')
+		).toEqual([]);
+	}).pipe(Effect.provide(BunServices.layer))
+);
 
 test('invalid commands arguments render a usage envelope', async () => {
 	const { stdout, exitCode } = await runAkua(['commands', 'unexpected', '--json']);
@@ -39,14 +59,9 @@ test('invalid auth arguments render a usage envelope', async () => {
 	});
 });
 
-function findThrowStatements(files: readonly string[]) {
-	return files.flatMap((file) => {
-		const source = ts.createSourceFile(
-			file,
-			readFileStringSync(file, 'utf8'),
-			ts.ScriptTarget.Latest,
-			true
-		);
+function findThrowStatements(contents: ReadonlyMap<string, string>) {
+	return [...contents].flatMap(([file, text]) => {
+		const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
 		const throws: string[] = [];
 		const visit = (node: ts.Node) => {
 			if (ts.isThrowStatement(node)) {
@@ -60,21 +75,8 @@ function findThrowStatements(files: readonly string[]) {
 	});
 }
 
-function findTypeScriptFiles(directory: string): string[] {
-	return readDirSync(directory, { withFileTypes: true }).flatMap((entry) => {
-		const path = joinPath(directory, entry.name);
-		if (entry.isDirectory()) return findTypeScriptFiles(path);
-		return entry.isFile() && path.endsWith('.ts') ? [path] : [];
-	});
-}
-
-function findAliasedImports(file: string): string[] {
-	const source = ts.createSourceFile(
-		file,
-		readFileStringSync(file, 'utf8'),
-		ts.ScriptTarget.Latest,
-		true
-	);
+function findAliasedImports(file: string, text: string): string[] {
+	const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
 	const aliases: string[] = [];
 	const visit = (node: ts.Node) => {
 		if (ts.isImportSpecifier(node) && node.propertyName !== undefined) {

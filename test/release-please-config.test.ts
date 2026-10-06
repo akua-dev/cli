@@ -1,9 +1,6 @@
-import { describe, expect, test } from '@effect/vitest';
-import changelog from '../CHANGELOG.md?raw';
-import releaseManifest from '../.release-please-manifest.json?raw';
-import packageManifest from '../package.json?raw';
-import releasePleaseConfig from '../release-please-config.json?raw';
-import cliSource from '../src/bin/akua.ts?raw';
+import { BunServices } from '@effect/platform-bun';
+import { Effect, FileSystem } from 'effect';
+import { describe, expect, it } from '@effect/vitest';
 
 interface ReleasePleaseConfig {
 	'include-component-in-tag'?: boolean;
@@ -23,46 +20,67 @@ interface ReleasePleaseConfig {
 }
 
 describe('release-please configuration', () => {
-	test('configures the root Bun CLI package without publish automation', () => {
-		const config = JSON.parse(releasePleaseConfig) as ReleasePleaseConfig;
+	it.effect('configures the root Bun CLI package without publish automation', () =>
+		Effect.gen(function* () {
+			const fs = yield* FileSystem.FileSystem;
+			const releasePleaseConfig = yield* fs.readFileString('release-please-config.json');
+			const config = JSON.parse(releasePleaseConfig) as ReleasePleaseConfig;
 
-		expect(config.packages?.['.']).toEqual({
-			'release-type': 'node',
-			'package-name': '@akua-dev/cli',
-			'changelog-path': 'CHANGELOG.md',
-			'extra-files': [
-				{
-					type: 'generic',
-					path: 'src/bin/akua.ts'
-				}
-			]
-		});
-		expect(config['include-component-in-tag']).toBe(false);
-		expect(JSON.stringify(config)).not.toContain('npm');
-		expect(JSON.stringify(config)).not.toContain('publish');
-	});
+			expect(config.packages?.['.']).toEqual({
+				'release-type': 'node',
+				'package-name': '@akua-dev/cli',
+				'changelog-path': 'CHANGELOG.md',
+				'extra-files': [
+					{
+						type: 'generic',
+						path: 'src/bin/akua.ts'
+					}
+				]
+			});
+			expect(config['include-component-in-tag']).toBe(false);
+			expect(JSON.stringify(config)).not.toContain('npm');
+			expect(JSON.stringify(config)).not.toContain('publish');
+		}).pipe(Effect.provide(BunServices.layer))
+	);
 
-	test('updates the CLI version reported by akua --version', () => {
-		expect(cliSource).toMatch(
-			/const VERSION = ['"]\d+\.\d+\.\d+(?:[-+][^'"]+)?['"]; \/\/ x-release-please-version/
-		);
-	});
+	it.effect('updates the CLI version reported by akua --version', () =>
+		Effect.gen(function* () {
+			const fs = yield* FileSystem.FileSystem;
+			const cliSource = yield* fs.readFileString('src/bin/akua.ts');
+			expect(cliSource).toMatch(
+				/const VERSION = ['"]\d+\.\d+\.\d+(?:[-+][^'"]+)?['"]; \/\/ x-release-please-version/
+			);
+		}).pipe(Effect.provide(BunServices.layer))
+	);
 
-	test('tracks the root package release version', () => {
-		const manifest = JSON.parse(releaseManifest) as Record<string, string>;
+	it.effect('tracks the root package release version', () =>
+		Effect.gen(function* () {
+			const fs = yield* FileSystem.FileSystem;
+			const releaseManifest = yield* fs.readFileString('.release-please-manifest.json');
+			const manifest = JSON.parse(releaseManifest) as Record<string, string>;
 
-		expect(Object.keys(manifest)).toEqual(['.']);
-		expect(manifest['.']).toMatch(/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/);
-	});
+			expect(Object.keys(manifest)).toEqual(['.']);
+			expect(manifest['.']).toMatch(/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/);
+		}).pipe(Effect.provide(BunServices.layer))
+	);
 
-	test('keeps package and binary release metadata coherent', () => {
-		const manifest = JSON.parse(releaseManifest) as Record<string, string>;
-		const packageVersion = JSON.parse(packageManifest) as {
-			version: string;
-		};
+	it.effect('keeps package and binary release metadata coherent', () =>
+		Effect.gen(function* () {
+			const fs = yield* FileSystem.FileSystem;
+			const changelog = yield* fs.readFileString('CHANGELOG.md');
+			const releaseManifest = yield* fs.readFileString('.release-please-manifest.json');
+			const packageManifest = yield* fs.readFileString('package.json');
+			const cliSource = yield* fs.readFileString('src/bin/akua.ts');
+			const manifest = JSON.parse(releaseManifest) as Record<string, string>;
+			const packageVersion = JSON.parse(packageManifest) as {
+				version: string;
+			};
 
-		expect(packageVersion.version).toBe(manifest['.']);
-		expect(cliSource).toContain(`const VERSION = '${manifest['.']}'; // x-release-please-version`);
-		expect(changelog).toContain(`## [${manifest['.']}]`);
-	});
+			expect(packageVersion.version).toBe(manifest['.']);
+			expect(cliSource).toContain(
+				`const VERSION = '${manifest['.']}'; // x-release-please-version`
+			);
+			expect(changelog).toContain(`## [${manifest['.']}]`);
+		}).pipe(Effect.provide(BunServices.layer))
+	);
 });

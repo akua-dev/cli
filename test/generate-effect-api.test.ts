@@ -1,6 +1,6 @@
 import { expect, it } from '@effect/vitest';
-import { readFileStringSync } from './fs-test';
-import { Effect, Layer } from 'effect';
+import { BunServices } from '@effect/platform-bun';
+import { Effect, FileSystem, Layer } from 'effect';
 import ts from 'typescript';
 
 import {
@@ -8,7 +8,11 @@ import {
 	EffectApiGenerationFailure,
 	generateEffectApi
 } from '../scripts/generate-effect-api';
-import { ScriptFiles, ScriptHostFailure } from '../scripts/runtime/services';
+import {
+	ScriptFiles,
+	ScriptHostFailure,
+	ScriptValidationFailure
+} from '../scripts/runtime/services';
 
 const sourcePath = '../../../docs/openapi-public.json';
 const outputPath = 'src/generated/openapi-api.gen.ts';
@@ -84,10 +88,10 @@ it.effect('fails with a typed error when the generator reports a public contract
 	})
 );
 
-it.effect('maps generator defects to a typed generation error', () =>
+it.effect('rejects missing OpenAPI metadata before generation', () =>
 	Effect.gen(function* () {
 		const layer = Layer.succeed(ScriptFiles, {
-			readText: () => Effect.succeed(JSON.stringify(specWithInvalidPattern())),
+			readText: () => Effect.succeed(JSON.stringify(specWithMissingInfo())),
 			writeText: () => Effect.void
 		});
 
@@ -95,7 +99,7 @@ it.effect('maps generator defects to a typed generation error', () =>
 			generateEffectApi(sourcePath, outputPath).pipe(Effect.provide(layer))
 		);
 
-		expect(failure).toBeInstanceOf(EffectApiGenerationFailure);
+		expect(failure).toBeInstanceOf(ScriptValidationFailure);
 	})
 );
 
@@ -138,24 +142,17 @@ it.effect('propagates generated artifact read failures instead of treating them 
 	})
 );
 
-it.effect('checked-in public contract produces the committed strict Effect API artifact', () =>
+it.effect('committed strict Effect API artifacts are assertion-free', () =>
 	Effect.gen(function* () {
-		const source = readFileStringSync(sourcePath, 'utf8');
-		const artifact = readFileStringSync(outputPath, 'utf8');
-		const executor = readFileStringSync(executorPath, 'utf8');
-		const layer = Layer.succeed(ScriptFiles, {
-			readText: (path) =>
-				Effect.succeed(path === sourcePath ? source : path === outputPath ? artifact : executor),
-			writeText: () => Effect.void
-		});
-
-		yield* checkEffectApi(sourcePath, outputPath).pipe(Effect.provide(layer));
+		const fs = yield* FileSystem.FileSystem;
+		const artifact = yield* fs.readFileString(outputPath);
+		const executor = yield* fs.readFileString(executorPath);
 
 		expect(artifact).toContain('annotate(OpenApi.Identifier, "secrets.create")');
 		expect(typeAssertions(artifact)).toEqual([]);
 		expect(artifact).not.toMatch(/[ \t]+$/m);
 		expect(executor).toContain('case "machines.create":');
-	})
+	}).pipe(Effect.provide(BunServices.layer))
 );
 
 function publicSpec() {
@@ -209,10 +206,9 @@ function specWithUnannotatedSse() {
 	};
 }
 
-function specWithInvalidPattern() {
+function specWithMissingInfo() {
 	return {
 		openapi: '3.1.0',
-		info: { title: 'Public API', version: '1.0.0' },
 		paths: {
 			'/v1/name': {
 				get: {
@@ -236,7 +232,7 @@ function specWithInvalidPattern() {
 		},
 		components: {
 			schemas: {
-				Name: { type: 'string', pattern: '^[\\p{L}]$/u' }
+				Name: { type: 'string' }
 			},
 			securitySchemes: {}
 		},

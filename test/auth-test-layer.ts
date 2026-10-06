@@ -40,13 +40,14 @@ export function runAuthView(
 	env: Record<string, string | undefined>,
 	dependencies: AuthTestDependencies
 ): Promise<RenderEnvelope> {
-	if (dependencies.signal?.aborted) return Promise.reject(toCliError(new DeviceCancelledFailure()));
+	if (dependencies.signal?.aborted)
+		return Promise.reject(toCliError(new DeviceCancelledFailure({})));
 	return Effect.runPromise(
 		authView(argv, env).pipe(
 			Effect.catchIf(
 				(failure): failure is DeviceRequestFailure =>
 					dependencies.signal?.aborted === true && failure._tag === 'DeviceRequestFailure',
-				() => Effect.fail(new DeviceCancelledFailure())
+				() => Effect.fail(new DeviceCancelledFailure({}))
 			),
 			Effect.mapError(toCliError),
 			Effect.provide(testServices(dependencies))
@@ -96,7 +97,7 @@ function testServices(dependencies: AuthTestDependencies) {
 			sleep: (duration) =>
 				Effect.tryPromise({
 					try: () => dependencies.sleep(Duration.toMillis(duration)),
-					catch: () => new DeviceRequestFailure()
+					catch: () => new DeviceRequestFailure({})
 				}).pipe(Effect.orDie)
 		}),
 		SecureConfigLive.pipe(Layer.provide(BunServices.layer))
