@@ -290,8 +290,8 @@ function successNextSteps(context: OperationCommandContext, value: Schema.Json):
 	const steps: NextStep[] = [];
 	if (Predicate.isString(value.id) && value.id.startsWith('op_') && value.done === false) {
 		steps.push({
-			command: `akua operations get ${value.id}`,
-			description: 'Check progress until done is true.'
+			command: `akua operations wait ${value.id}`,
+			description: 'Wait for it to finish; repeat while done is false.'
 		});
 	}
 	if (

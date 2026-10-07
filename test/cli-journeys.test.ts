@@ -412,7 +412,10 @@ describe('output', () => {
 			);
 
 			expect(JSON.parse(result.stdout).next_steps).toEqual([
-				{ command: 'akua operations get op_123', description: 'Check progress until done is true.' }
+				{
+					command: 'akua operations wait op_123',
+					description: 'Wait for it to finish; repeat while done is false.'
+				}
 			]);
 		}).pipe(Effect.scoped)
 	);
