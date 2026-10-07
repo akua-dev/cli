@@ -92,6 +92,7 @@ export const runAkua = Effect.fnUntraced(function* (
 		Layer.succeed(HttpClient.HttpClient, httpClient),
 		Layer.succeed(Console, {
 			stdoutIsTTY: options.tty === true,
+			stdinIsTTY: options.tty === true,
 			writeStdout: (value) => Ref.update(stdout, (all) => all + value),
 			writeStderr: () => Effect.void
 		}),

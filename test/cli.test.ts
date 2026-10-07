@@ -34,6 +34,7 @@ describe('akua entrypoint', () => {
 					}),
 					Effect.provideService(Console, {
 						stdoutIsTTY: true,
+						stdinIsTTY: false,
 						writeStderr: () => Effect.void,
 						writeStdout: () => Effect.void
 					}),
@@ -79,6 +80,7 @@ describe('akua entrypoint', () => {
 				}),
 				Effect.provideService(Console, {
 					stdoutIsTTY: false,
+					stdinIsTTY: false,
 					writeStderr: () => Effect.void,
 					writeStdout: (value) =>
 						Effect.sync(() => {

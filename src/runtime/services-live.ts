@@ -110,6 +110,7 @@ export const ConsoleLive = Layer.succeed(Console, {
 	// isTTY is undefined (not false) when stdout is piped; normalize so the
 	// declared boolean service contract holds at runtime.
 	stdoutIsTTY: process.stdout.isTTY === true,
+	stdinIsTTY: process.stdin.isTTY === true,
 	writeStderr: (value) => Effect.sync(() => process.stderr.write(value)),
 	writeStdout: (value) => Effect.sync(() => process.stdout.write(value))
 });

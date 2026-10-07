@@ -78,6 +78,7 @@ describe('Effect auth command', () => {
 				Layer.succeed(Process, { awaitSignal: Effect.never }),
 				Layer.succeed(Console, {
 					stdoutIsTTY: false,
+					stdinIsTTY: false,
 					writeStderr: (value) => Effect.sync(() => stderr.push(value)),
 					writeStdout: () => Effect.void
 				}),
@@ -152,6 +153,7 @@ describe('Effect auth command', () => {
 						Layer.succeed(Process, { awaitSignal: Effect.never }),
 						Layer.succeed(Console, {
 							stdoutIsTTY: false,
+							stdinIsTTY: false,
 							writeStderr: () => Effect.void,
 							writeStdout: (value) => Effect.sync(() => stdout.push(value))
 						}),
@@ -194,6 +196,7 @@ describe('Effect auth command', () => {
 						runCli(Effect.fail(failure), { mode: 'json' }),
 						Layer.succeed(Console, {
 							stdoutIsTTY: false,
+							stdinIsTTY: false,
 							writeStderr: () => Effect.void,
 							writeStdout: (value) => Effect.sync(() => stdout.push(value))
 						})

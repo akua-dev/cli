@@ -1,19 +1,21 @@
 import { Effect, Option } from 'effect';
-import { Argument, Command, Flag } from 'effect/cli';
+import { Argument, Command, Flag, Prompt } from 'effect/cli';
 
 import type { ApiClient } from '../api/client';
 import type { ApiContract } from '../api/contract';
 import { optionalEnv, requiredConfigPath } from '../runtime/credentials';
 import { type CliFailure, UsageFailure } from '../runtime/effect-runtime';
 import type { RenderEnvelope } from '../runtime/render';
-import { SecureConfig } from '../runtime/services';
-import { respond } from './invocation';
+import { Console, SecureConfig } from '../runtime/services';
+import { Invocation, respond } from './invocation';
 import { failWorkspaceLookup } from './operation-errors';
 import { akua } from './root';
 import {
 	findWorkspace,
 	isWorkspaceId,
+	listWorkspaces,
 	selectWorkspace,
+	type Workspace,
 	type WorkspaceSource
 } from './workspace-context';
 
@@ -70,16 +72,16 @@ export function workspaceContextCommands(contract: ApiContract) {
 const useWorkspace = Effect.fnUntraced(function* (
 	contract: ApiContract,
 	reference: Option.Option<string>
-): Effect.fn.Return<RenderEnvelope, CliFailure, SecureConfig | ApiClient> {
-	if (Option.isNone(reference) || reference.value === '') {
-		return yield* new UsageFailure({
-			message: 'Name the workspace: akua workspaces use <name|id>. See akua workspaces list.'
-		});
-	}
+): Effect.fn.Return<
+	RenderEnvelope,
+	CliFailure,
+	SecureConfig | ApiClient | Console | Invocation | Prompt.Environment
+> {
 	const path = yield* requiredConfigPath;
-	const workspace = yield* findWorkspace(contract, reference.value).pipe(
-		Effect.catch(failWorkspaceLookup(contract))
-	);
+	const named = reference.pipe(Option.filter((value) => value !== ''));
+	const workspace = Option.isSome(named)
+		? yield* findWorkspace(contract, named.value).pipe(Effect.catch(failWorkspaceLookup(contract)))
+		: yield* pickWorkspace(contract);
 	yield* (yield* SecureConfig).saveWorkspace(path, { id: workspace.id, name: workspace.name });
 	const lines = [
 		`Now using ${workspace.name} (${workspace.id}).`,
@@ -95,6 +97,51 @@ const useWorkspace = Effect.fnUntraced(function* (
 		next_steps: [{ command: 'akua clusters list', description: 'List clusters in this workspace.' }]
 	};
 });
+
+/**
+ * `akua workspaces use` without a name: on a terminal, choose from a list
+ * (like `vercel switch`); anywhere else, a usage error, because scripts and
+ * agents cannot answer a prompt.
+ */
+const pickWorkspace = Effect.fnUntraced(function* (contract: ApiContract) {
+	const console = yield* Console;
+	const { mode } = yield* Invocation;
+	if (mode !== 'human' || !console.stdinIsTTY || !console.stdoutIsTTY) {
+		return yield* new UsageFailure({
+			message: 'Name the workspace: akua workspaces use <name|id>. See akua workspaces list.'
+		});
+	}
+	const workspaces = (yield* listWorkspaces(contract).pipe(
+		Effect.catch(failWorkspaceLookup(contract))
+	)).filter((workspace) => workspace.state === undefined || workspace.state === 'ACTIVE');
+	const [only, ...others] = workspaces;
+	if (only === undefined) {
+		return yield* new UsageFailure({
+			message: 'You have no workspaces yet. Create one with akua workspaces create --name <name>.'
+		});
+	}
+	if (others.length === 0) return only;
+	return yield* chooseWorkspace(workspaces).pipe(
+		Effect.catchTag('QuitError', () =>
+			Effect.fail(new UsageFailure({ message: 'No workspace chosen; nothing was saved.' }))
+		)
+	);
+});
+
+/** The terminal list; exported so it can be driven by a test terminal. */
+export const chooseWorkspace = (workspaces: ReadonlyArray<Workspace>) =>
+	Prompt.run(
+		Prompt.Select({
+			message: 'Choose the workspace for later commands',
+			choices: workspaces.map((workspace) => ({
+				title: workspace.name,
+				...(workspace.slug === undefined || workspace.slug === workspace.name
+					? {}
+					: { description: workspace.slug }),
+				value: workspace
+			}))
+		})
+	);
 
 const clearWorkspace: Effect.Effect<RenderEnvelope, CliFailure, SecureConfig> = Effect.gen(
 	function* () {

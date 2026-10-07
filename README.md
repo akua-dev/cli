@@ -94,6 +94,7 @@ A browser login can reach more than one workspace. Save the one you work in:
 
 ```sh
 akua workspaces use my-team     # by slug, name, or ws_... ID
+akua workspaces use             # on a terminal: choose from a list
 akua workspace switch other     # the same command
 akua workspaces current         # which workspace, and where the choice comes from
 akua workspaces use --clear     # forget it
@@ -146,8 +147,9 @@ akua installs get-logs inst_123 --tail 100
 ```
 
 On a terminal, lists print as tables and objects as aligned fields; `--json`
-prints the full API response. Errors name the flag to fix and the command to
-run next.
+prints the full API response, ready for `jq`
+(`akua clusters list --json | jq -r '.data.data[].id'`). Errors name the flag
+to fix and the command to run next.
 
 Scripts and agents can also send the whole request as one JSON object from
 stdin or a named file. Generated commands accept one JSON object whose only

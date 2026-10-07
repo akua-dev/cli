@@ -24,6 +24,8 @@ export interface Workspace {
 	readonly id: string;
 	readonly name: string;
 	readonly slug?: string;
+	/** Lifecycle state, for example `ACTIVE` or `DELETING`. */
+	readonly state?: string;
 }
 
 /**
@@ -80,7 +82,8 @@ const WorkspacePage = Schema.Struct({
 		Schema.Struct({
 			id: Schema.String,
 			name: Schema.String,
-			slug: Schema.optionalKey(Schema.NullOr(Schema.String))
+			slug: Schema.optionalKey(Schema.NullOr(Schema.String)),
+			lifecycle: Schema.optionalKey(Schema.Struct({ state: Schema.optionalKey(Schema.String) }))
 		})
 	),
 	has_more: Schema.optionalKey(Schema.Boolean),
@@ -112,7 +115,8 @@ export const findWorkspace = Effect.fnUntraced(function* (
 	});
 });
 
-const listWorkspaces = Effect.fnUntraced(function* (contract: ApiContract) {
+/** Every workspace the caller can access, across all pages. */
+export const listWorkspaces = Effect.fnUntraced(function* (contract: ApiContract) {
 	const operation = yield* findOperation(contract, 'workspaces.list');
 	const api = yield* ApiClient;
 	const workspaces: Workspace[] = [];
@@ -133,7 +137,8 @@ const listWorkspaces = Effect.fnUntraced(function* (contract: ApiContract) {
 			workspaces.push({
 				id: workspace.id,
 				name: workspace.name,
-				...(Predicate.isString(workspace.slug) ? { slug: workspace.slug } : {})
+				...(Predicate.isString(workspace.slug) ? { slug: workspace.slug } : {}),
+				...(workspace.lifecycle?.state === undefined ? {} : { state: workspace.lifecycle.state })
 			});
 		}
 		cursor =

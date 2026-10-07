@@ -58,6 +58,8 @@ export class Console extends Context.Service<
 	Console,
 	{
 		readonly stdoutIsTTY: boolean;
+		/** Whether a person can answer a prompt: stdin is a terminal. */
+		readonly stdinIsTTY: boolean;
 		readonly writeStderr: (value: string) => Effect.Effect<void>;
 		readonly writeStdout: (value: string) => Effect.Effect<void>;
 	}

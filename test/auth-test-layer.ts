@@ -91,6 +91,7 @@ function testServices(dependencies: AuthTestDependencies) {
 		}),
 		Layer.succeed(Console, {
 			stdoutIsTTY: false,
+			stdinIsTTY: false,
 			writeStderr: (value) =>
 				Effect.sync(() => {
 					const [open, code] = value.trimEnd().split('\n');

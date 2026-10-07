@@ -20,6 +20,7 @@ describe('Effect CLI runtime', () => {
 				),
 				Layer.succeed(Console, {
 					stdoutIsTTY: false,
+					stdinIsTTY: false,
 					writeStderr: () => Effect.void,
 					writeStdout: (value) => Effect.sync(() => stdout.push(value))
 				})
@@ -47,6 +48,7 @@ describe('Effect CLI runtime', () => {
 				),
 				Layer.succeed(Console, {
 					stdoutIsTTY: false,
+					stdinIsTTY: false,
 					writeStderr: () => Effect.void,
 					writeStdout: (value) => Effect.sync(() => stdout.push(value))
 				})
@@ -76,6 +78,7 @@ describe('Effect CLI runtime', () => {
 				Layer.succeed(Process, { awaitSignal: Effect.never }),
 				Layer.succeed(Console, {
 					stdoutIsTTY: false,
+					stdinIsTTY: false,
 					writeStderr: () => Effect.void,
 					writeStdout: () => Effect.void
 				}),
