@@ -43,10 +43,11 @@ archives.
 ## First commands
 
 ```sh
-akua                         # complete interactive command tree
-akua auth --help              # authentication subcommands and options
-akua workspaces --help        # generated resource commands
-akua commands --limit 5       # discover the full command surface
+akua auth login               # sign in with your browser
+akua workspaces list          # see your workspaces
+akua workspaces use my-team   # run later commands in this workspace
+akua clusters list            # list clusters in it
+akua clusters create --help   # every command documents its arguments and flags
 ```
 
 ## Sign in
@@ -87,6 +88,21 @@ akua auth logout
 removes only the stored `token`, also preserving unknown config keys, and cannot
 clear `AKUA_API_TOKEN` from the parent process.
 
+## Choose a workspace
+
+A browser login can reach more than one workspace. Save the one you work in:
+
+```sh
+akua workspaces use my-team     # by slug, name, or ws_... ID
+akua workspace switch other     # the same command
+akua workspaces current         # which workspace, and where the choice comes from
+akua workspaces use --clear     # forget it
+```
+
+Workspace-scoped commands send the workspace as the `Akua-Context` header for
+you, chosen in this order: the `--workspace` (`-w`) flag, then
+`AKUA_WORKSPACE`, then the workspace saved in `~/.config/akua/config.json`.
+
 ## Built for humans, CI, and agents
 
 An interactive TTY defaults to human prose. The CLI switches to compact agent
@@ -115,25 +131,40 @@ The supported modes are `human`, `agent`, `json`, and `quiet`. Success data is
 written to stdout; progress and warnings belong on stderr. Unknown commands,
 flags, and output modes fail loudly with stable nonzero exit codes.
 
-## Discover and run commands
+## Run commands
 
 Every public Akua operation is available as a generated command, kept current
-with the API automatically. Discover the current surface instead of relying on
-a fixed list:
+with the API automatically: `operationId: clusters.create` becomes
+`akua clusters create`. Path parameters are arguments and request fields are
+typed flags, generated from the API schema:
+
+```sh
+akua clusters create --name demo --region-id reg_123
+akua clusters get clu_123
+akua machines create --cluster-id clu_123 --instance-type cax11
+akua installs get-logs inst_123 --tail 100
+```
+
+On a terminal, lists print as tables and objects as aligned fields; `--json`
+prints the full API response. Errors name the flag to fix and the command to
+run next.
+
+Scripts and agents can also send the whole request as one JSON object from
+stdin or a named file. Generated commands accept one JSON object whose only
+keys are `path`, `query`, `headers`, and `body`; flags override its fields.
+Use it for secret values, which never belong on a command line:
+
+```sh
+printf '{"query":{"limit":5}}' | akua workspaces list --input -
+akua machines create --input - < ./machine.json
+```
+
+Discover the current surface instead of relying on a fixed list:
 
 ```sh
 akua commands --json
 akua commands --resource workspaces
 akua commands --operation-id workspaces.list
-```
-
-For example, `operationId: workspaces.list` becomes `akua workspaces list`.
-Generated commands accept one JSON object from stdin or a named file. Its only
-keys are `path`, `query`, `headers`, and `body`:
-
-```sh
-printf '{"query":{"limit":5}}' | akua workspaces list --input -
-akua machines create --input - < ./machine.json
 ```
 
 Request input is schema-validated before it is sent and never included in

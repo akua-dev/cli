@@ -24,16 +24,13 @@ new repository shape is:
 ```text
 docs/openapi-public.json         cnap public OpenAPI (generator input)
 //tools/cli:generate             Bazel hermetic generator
-scripts/generate-commands.ts     operationId-driven command registry generator
-scripts/generate-effect-api.ts   typed Effect API generator
+scripts/generate-contract.ts     OpenAPI to request-contract generator
 scripts/release.ts               release target, packaging, and manifest contract
 src/bin/akua.ts                  executable entrypoint
-src/commands/auth.ts             local auth/config command implementation
-src/runtime/                     output, errors, exit codes, command contracts
-src/generated/commands.gen.ts    generated public command registry
-src/generated/openapi-api.gen.ts generated typed public Effect API
-src/generated/public-operation-executor.gen.ts
-                                 generated static public operation executor
+src/cli/                         the effect/cli command tree: auth, workspaces, discovery, API commands
+src/api/                         contract types, flag derivation, request validation, HTTP executor
+src/runtime/                     output, errors, exit codes, config, live services
+src/generated/contract.gen.ts    generated public API request contract
 release-please-config.json       Release Please manifest-mode config
 .release-please-manifest.json    Release Please root package version manifest
 docs/architecture.md             this spec
@@ -42,9 +39,8 @@ test/                            Bun tests for CLI, generation, and release cont
 
 ## OpenAPI And Command Generation
 
-The CLI is operationId-driven. Every public OpenAPI operation produces both a
-generated command definition and a typed Effect HTTP API endpoint when all of
-these are true:
+The CLI is operationId-driven. Every public OpenAPI operation becomes a command
+when all of these are true:
 
 - `x-platform-visibility` is `PUBLIC`;
 - `operationId` is present;
@@ -70,16 +66,37 @@ segment becomes the action, and single-segment operationIds fall back to the
 HTTP method as the action. The generator assumes OpenAPI operationIds are
 unique; it does not currently enforce uniqueness itself.
 
-`src/generated/commands.gen.ts` supplies command discovery. The checked-in
-`src/generated/openapi-api.gen.ts` supplies the typed Effect representation of
-the same public contract, including routes, request/response schemas, and typed
-errors. Neither artifact is hand-written API coverage.
+`src/generated/contract.gen.ts` is the request side of the public contract as
+data: every operation's method, path template, parameters (shared between
+operations, not repeated), request body JSON Schema, and whether the success
+response is a Server-Sent Events stream, plus the component schemas those
+reference (`$ref` into `definitions`). It carries no response schemas: the CLI
+renders the JSON the API returns and has no use for decoding it, which keeps
+the generated file and the binary small. The generator fails on anything the
+CLI cannot represent: a non-JSON request or error body, an unknown stream
+format, a request schema Effect cannot import, or two inputs mapping to one
+flag.
 
-The generated static executor connects every command to its exact Effect client
-method. Commands accept only a JSON object with generated `path`, `query`,
-`headers`, and `body` partitions via `--input -` or `--input <file>`. Each
-partition is decoded strictly before transport, and request values are never
-included in diagnostics. Do not add resource- or provider-specific overlays.
+From that contract the CLI derives, with the same pure functions the generator
+verifies (`src/api/inputs.ts`):
+
+- one command per operation, `akua <resource> <action>`;
+- a positional argument per path parameter, in template order;
+- a typed flag per query parameter, header (except `akua-context`), and
+  top-level request body field, across every branch of a union body. Strings,
+  numbers, booleans, and enums parse as such; objects, arrays, and mixed unions
+  take a JSON value. A flag that would shadow a global flag or another input is
+  prefixed with its location (`--query-workspace`);
+- the `akua-context` header from `--workspace`, `AKUA_WORKSPACE`, or the saved
+  workspace (in that order) for every operation that declares it.
+
+`--input -` or `--input <file>` still takes the whole request as a JSON object
+with `path`, `query`, `headers`, and `body` partitions; arguments and flags
+override its fields. One generic executor (`src/api/client.ts`) validates the
+envelope against the operation's JSON Schema, imported with Effect's
+`SchemaRepresentation.fromJsonSchemaDocument`, rejects unknown fields, builds
+the request, and sends it. Request values are never included in diagnostics.
+Do not add resource- or provider-specific overlays.
 
 Generation tasks:
 
@@ -119,8 +136,9 @@ Configuration should live under the Akua namespace:
 ~/.config/akua/config.json
 ```
 
-The implemented config file is JSON. The local auth MVP stores a `token` string
-there while preserving unrelated keys. Writes create `~/.config/akua` with
+The implemented config file is JSON. It stores a `token` string and the
+`workspace` (`{ "id", "name" }`) saved by `akua workspaces use`, while
+preserving unrelated keys. Writes create `~/.config/akua` with
 user-only `0700` permissions and `config.json` with user-only `0600`
 permissions.
 
@@ -166,11 +184,20 @@ Agent mode follows AXI patterns studied from `https://axi.md/` and the public
 - no spinners or prompts in agent, JSON, quiet, CI, or non-TTY modes;
 - unknown routed commands and flags must fail loudly.
 
-Human mode uses Effect CLI's generated command tree and content-first help. A
-no-args `akua` invocation lists authentication, discovery, and every generated
-public resource group; `akua <resource> --help` lists that resource's actions
-and `akua <resource> <action> --help` documents `--input`. It does not fetch
-live API state.
+Every mode parses with the same effect/cli command tree; only rendering
+differs. effect/cli's own output (help, version, completions) is captured so a
+usage error in agent or JSON mode is one structured error document, never a
+help page followed by an error. A no-args `akua` invocation lists
+authentication, discovery, and every generated public resource group;
+`akua <resource> --help` lists that resource's actions and
+`akua <resource> <action> --help` documents its arguments, flags, and examples
+(the flag form first, the `--input` form second). It does not fetch live API
+state.
+
+Human output renders list responses as tables (identity, kind, and state
+columns first, one timestamp, at most six columns), objects as aligned
+key/value lines, timestamps as UTC dates, and log streams as their content
+lines. JSON and agent output keep the API body untouched.
 
 The implemented command surface includes generated public operations:
 
@@ -185,6 +212,10 @@ akua commands                            # first 20 generated public commands
 akua commands --resource workspaces      # resource filter
 akua commands --operation-id workspaces.list
 akua commands --limit 5                  # positive integer limit
+akua workspaces use my-team              # save the workspace (alias: akua workspace switch)
+akua workspaces current                  # active workspace and its source
+akua clusters create --name demo --region-id reg_123
+akua clusters get clu_123                # path parameters are arguments
 akua workspaces list --input -           # stdin JSON request
 akua machines create --input request.json # file JSON request
 akua --help                              # also -h
@@ -228,7 +259,7 @@ This can be simplified later, but it must remain deterministic and tested.
 
 ## Public-Only First Release
 
-The public command registry and typed Effect API contain only operations marked
+The generated contract contains only operations marked
 `x-platform-visibility: PUBLIC`. Internal, admin, preview, trusted-partner, and
 private operations must be absent unless a separate build target is deliberately
 added later. The CLI has no provider-specific command, flag, credential loader,

@@ -70,6 +70,9 @@ describe('distribution documentation', () => {
 			"generated directly from Akua's public API",
 			'akua workspaces list --input -',
 			'akua machines create --input -',
+			'akua workspaces use my-team',
+			'AKUA_WORKSPACE',
+			'akua clusters create --name demo --region-id reg_123',
 			'provider-specific commands',
 			'brew upgrade akua'
 		]) {
@@ -120,7 +123,7 @@ describe('distribution documentation', () => {
 			'mise run release:smoke',
 			'Release Please',
 			'Access Proxy',
-			'src/generated/commands.gen.ts',
+			'src/generated/contract.gen.ts',
 			'docs/architecture.md',
 			'AGENTS.md',
 			'docs/openapi-public.json'
@@ -131,13 +134,11 @@ describe('distribution documentation', () => {
 		expect(contributing).not.toContain('https://api.akua.dev/v1/openapi.json');
 	});
 
-	test('architecture records device authentication and all generated API artifacts', async () => {
+	test('architecture records device authentication and the generated API contract', async () => {
 		const architecture = await text('docs/architecture.md');
 
 		for (const value of [
-			'src/generated/commands.gen.ts',
-			'src/generated/openapi-api.gen.ts',
-			'src/generated/public-operation-executor.gen.ts',
+			'src/generated/contract.gen.ts',
 			'Browser/device login',
 			'akua auth login --no-browser',
 			'--input -',

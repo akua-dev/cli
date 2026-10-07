@@ -1,30 +1,40 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Clock, Effect, Fiber, Layer } from 'effect';
+import { Clock, ConfigProvider, Effect, Fiber, Layer, Option } from 'effect';
 import { TestClock } from 'effect/testing';
 
-import { authView } from '../src/commands/auth';
+import { login } from '../src/cli/auth';
 import {
-	ConfigFailure,
 	DeviceAuthorizationFailure,
 	DeviceCancelledFailure,
 	DeviceRequestFailure,
 	runCli,
 	UsageFailure
 } from '../src/runtime/effect-runtime';
-import { Browser, CliClock, Console, Http, Process, SecureConfig } from '../src/runtime/services';
+import {
+	Browser,
+	CliClock,
+	Console,
+	Http,
+	Process,
+	SecureConfig,
+	SecureConfigFailure
+} from '../src/runtime/services';
 import type { RenderEnvelope } from '../src/runtime/render';
 
-// authView is an Effect boundary; test adapters belong in test layers instead.
-authView(
-	['status'],
-	{ HOME: '/test-home' },
-	// @ts-expect-error authView must not accept host-Promise dependencies.
-	{
-		request: async () => ({ status: 200, body: {} }),
-		sleep: async () => undefined,
-		launchBrowser: async () => undefined
-	}
-);
+const loginWithBrowser = (noBrowser: boolean) =>
+	login({ token: Option.none(), noBrowser }).pipe(
+		Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnvRecord({ HOME: '/test-home' })))
+	);
+
+const memoryConfig = (saved: Array<{ path: string; token: string }> = []) =>
+	Layer.succeed(SecureConfig, {
+		readToken: () => Effect.succeed(undefined),
+		saveToken: (path, token) => Effect.sync(() => saved.push({ path, token })),
+		removeToken: () => Effect.succeed(false),
+		readWorkspace: () => Effect.succeed(undefined),
+		saveWorkspace: () => Effect.void,
+		removeWorkspace: () => Effect.succeed(false)
+	});
 
 const testClockLayer = Layer.succeed(CliClock, {
 	currentTimeMillis: Clock.currentTimeMillis,
@@ -71,16 +81,12 @@ describe('Effect auth command', () => {
 					writeStderr: (value) => Effect.sync(() => stderr.push(value)),
 					writeStdout: () => Effect.void
 				}),
-				Layer.succeed(SecureConfig, {
-					readToken: () => Effect.succeed(undefined),
-					saveToken: (path, token) => Effect.sync(() => saved.push({ path, token })),
-					removeToken: () => Effect.succeed(false)
-				}),
+				memoryConfig(saved),
 				testClockLayer,
 				TestClock.layer()
 			);
 			const program = Effect.gen(function* () {
-				const fiber = yield* authView(['login'], { HOME: '/test-home' }).pipe(Effect.forkChild);
+				const fiber = yield* loginWithBrowser(false).pipe(Effect.forkChild);
 				yield* TestClock.adjust('2 seconds');
 				return yield* Fiber.join(fiber);
 			});
@@ -149,17 +155,13 @@ describe('Effect auth command', () => {
 							writeStderr: () => Effect.void,
 							writeStdout: (value) => Effect.sync(() => stdout.push(value))
 						}),
-						Layer.succeed(SecureConfig, {
-							readToken: () => Effect.succeed(undefined),
-							saveToken: () => Effect.void,
-							removeToken: () => Effect.succeed(false)
-						}),
+						memoryConfig(),
 						testClockLayer,
 						TestClock.layer()
 					);
 
 					const exitCode = yield* Effect.provide(
-						runCli(authView(['login', '--no-browser'], { HOME: '/test-home' }), { mode: 'json' }),
+						runCli(loginWithBrowser(true), { mode: 'json' }),
 						services
 					) as Effect.Effect<number>;
 					return { exitCode, payload: JSON.parse(stdout.join('')) };
@@ -181,7 +183,7 @@ describe('Effect auth command', () => {
 			const render = (
 				failure:
 					| UsageFailure
-					| ConfigFailure
+					| SecureConfigFailure
 					| DeviceRequestFailure
 					| DeviceCancelledFailure
 					| DeviceAuthorizationFailure
@@ -205,7 +207,7 @@ describe('Effect auth command', () => {
 			});
 			expect(
 				yield* render(
-					new ConfigFailure({
+					new SecureConfigFailure({
 						operation: 'read',
 						path: '/config',
 						cause: new Error('denied')

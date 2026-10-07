@@ -1,7 +1,6 @@
 import { Schema } from 'effect';
 
 import { ExitCodes, type ExitCode } from './exit-codes';
-import type { GeneratedCommandFailure, PublicInputIssue } from '../commands/generated';
 
 const NextStepSchema = Schema.Struct({
 	command: Schema.String,
@@ -66,13 +65,13 @@ export class AkuaCliError extends Error {
 	}
 }
 
-export function usageError(message: string): AkuaCliError {
+export function usageError(message: string, helpCommand = 'akua --help'): AkuaCliError {
 	return new AkuaCliError({
 		type: 'usage_error',
 		code: 'AKUA_USAGE_ERROR',
 		message,
 		exitCode: ExitCodes.Usage,
-		nextSteps: [{ command: 'akua --help' }]
+		nextSteps: [{ command: helpCommand }]
 	});
 }
 
@@ -89,100 +88,6 @@ export function packageCommandError(): AkuaCliError {
 			}
 		]
 	});
-}
-
-export function generatedCommandError(failure: GeneratedCommandFailure): AkuaCliError {
-	if (failure.reason === 'usage') {
-		return usageError(`Operation ${failure.operationId} accepts only --input - or --input <file>.`);
-	}
-	if (failure.reason === 'input') {
-		const detail = (failure.issues ?? []).map(formatInputIssue).join('; ');
-		return new AkuaCliError({
-			type: 'input_error',
-			code: 'AKUA_INPUT_INVALID',
-			message:
-				detail === ''
-					? `Input for ${failure.operationId} does not match the public API contract.`
-					: `Input for ${failure.operationId} does not match the public API contract: ${detail}.`,
-			exitCode: ExitCodes.Usage,
-			nextSteps: inputNextSteps(failure)
-		});
-	}
-	if (failure.reason === 'source') {
-		return new AkuaCliError({
-			type: 'input_error',
-			code: 'AKUA_INPUT_UNREADABLE',
-			message: `Input for ${failure.operationId} could not be read.`,
-			exitCode: ExitCodes.Usage
-		});
-	}
-	if (failure.reason === 'auth') {
-		return new AkuaCliError({
-			type: 'authentication_error',
-			code: 'AKUA_AUTH_REQUIRED',
-			message: 'Authenticate with akua auth login before calling the public API.',
-			exitCode: ExitCodes.AuthRequired,
-			nextSteps: [{ command: 'akua auth login' }]
-		});
-	}
-	if (failure.reason === 'api') {
-		const first = failure.apiError?.errors[0];
-		return new AkuaCliError({
-			type: 'api_error',
-			code: first === undefined ? 'AKUA_API_ERROR' : `AKUA_API_${first.code}`,
-			message: first?.message ?? failure.responseMessage ?? 'The public API rejected the request.',
-			status: failure.status,
-			response: failure.apiError ?? rawResponse(failure.responseBody)
-		});
-	}
-	if (failure.reason === 'internal') {
-		return new AkuaCliError({
-			type: 'internal_error',
-			code: 'AKUA_CLI_INTERNAL',
-			message: `The CLI failed internally while executing ${failure.operationId}. This is a CLI bug, not an input problem.`,
-			exitCode: ExitCodes.Runtime
-		});
-	}
-	if (failure.reason === 'response') {
-		return new AkuaCliError({
-			type: 'response_error',
-			code: 'AKUA_API_CONTRACT_ERROR',
-			message: 'The public API response did not match its generated contract.',
-			status: failure.status,
-			exitCode: ExitCodes.Retryable
-		});
-	}
-	return new AkuaCliError({
-		type: 'transport_error',
-		code: 'AKUA_API_UNAVAILABLE',
-		message: 'The public API request could not be completed.',
-		exitCode: ExitCodes.Retryable
-	});
-}
-
-// Raw bodies are wrapped so the JSON-mode response field stays object-typed
-// (matching structured ApiErrorResponse payloads) and flattened so the
-// line-oriented agent renderer emits one value per line.
-function rawResponse(body: string | undefined): { readonly raw: string } | undefined {
-	if (body === undefined) return undefined;
-	return { raw: body.split(/\r\n|[\r\n]/).join('\\n') };
-}
-
-function formatInputIssue(issue: PublicInputIssue): string {
-	return issue.path.length === 0 ? issue.message : `${issue.path.join('.')}: ${issue.message}`;
-}
-
-function inputNextSteps(failure: GeneratedCommandFailure): readonly NextStep[] {
-	if (failure.command === undefined || failure.inputExample === undefined) {
-		return [];
-	}
-	return [
-		{
-			command: `echo '${failure.inputExample}' | akua ${failure.command} --input -`,
-			description:
-				'Pass a JSON envelope whose keys mirror the OpenAPI parameter locations: {"path":{...},"query":{...},"headers":{...},"body":{...}}.'
-		}
-	];
 }
 
 function exitCodeForStatus(status: number | undefined): ExitCode {

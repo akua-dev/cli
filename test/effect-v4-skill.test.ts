@@ -80,7 +80,7 @@ describe('Effect v4 CLI quality guidance', () => {
 				'cnap `docs/openapi-public.json` is the only source of truth',
 				'provider-neutral',
 				'generated path, query, header, and body',
-				'fail on warnings, skipped public',
+				'fail on skipped public operations',
 				'raw `throw`',
 				'typed error channel',
 				'Pure immutable data'

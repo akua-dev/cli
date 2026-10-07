@@ -13,8 +13,7 @@ import { BunServices } from '@effect/platform-bun';
 import { Effect, Layer } from 'effect';
 
 import { main, VERSION } from '../src/bin/akua';
-import { authView } from '../src/commands/auth';
-import { renderSuccess, type RenderEnvelope } from '../src/runtime/render';
+import { renderSuccess } from '../src/runtime/render';
 import { CliLive } from '../src/runtime/services-live';
 import { Console, PackageCli, PackageCliFailure } from '../src/runtime/services';
 import { runAuthView } from './auth-test-layer';
@@ -106,11 +105,11 @@ describe('akua entrypoint', () => {
 		expect(root.stdout).toContain('pkg');
 		expect(root.stdout).toContain('machines');
 		expect(root.stdout).toContain('clusters');
-		expect(root.stdout).toContain('Run generated clusters API commands');
+		expect(root.stdout).toContain('Kubernetes clusters and cluster access operations.');
 
 		expect(auth.exitCode).toBe(0);
 		expect(auth.stdout).toContain('login');
-		expect(auth.stdout).toContain('browser/device flow');
+		expect(auth.stdout).toContain('Sign in with your browser');
 	});
 
 	test('returns a usage exit code when Effect CLI rejects interactive input', async () => {
@@ -122,27 +121,30 @@ describe('akua entrypoint', () => {
 		expect(invalid.stdout).toContain('--not-a-real-flag');
 	});
 
-	test('home and help describe executable generated commands', async () => {
-		const home = await runAkua(['--json']);
-		const help = await runAkua(['--help', '--json']);
+	test('home and help lead with the human journey and keep machine output parseable', async () => {
+		const home = await runAkua([]);
+		const help = await runAkua(['--help']);
+		const version = await runAkua(['--version', '--json']);
 
 		expect(home.exitCode).toBe(0);
-		expect(home.stdout).not.toContain('stubbed');
-		expect(home.stdout).not.toContain('mise run');
-		expect(home.stdout).toContain('executable public OpenAPI operations');
-		expect(help.stdout).toContain('akua <resource> <action> [--input -|<file>]');
-		expect(help.stdout).toContain('akua auth login       Sign in with a browser/device flow');
-		expect(home.stdout).toContain('akua pkg --help');
-		expect(help.stdout).toContain('akua pkg --help');
-		expect(help.stdout).not.toContain('Save a local API token');
+		expect(home.stdout).toBe(help.stdout);
+		expect(help.stdout).toContain('akua auth login');
+		expect(help.stdout).toContain('akua workspaces use my-team');
+		expect(help.stdout).toContain('pkg');
+		expect(help.stdout).toContain('--workspace, -w');
+		expect(JSON.parse(version.stdout)).toEqual({
+			status: 'ok',
+			command: 'akua --version',
+			data: { version: VERSION }
+		});
 	});
 
 	test('shows command-specific help before parsing commands filters', async () => {
-		const { stdout, exitCode } = await runAkua(['commands', '--help', '--json']);
+		const { stdout, exitCode } = await runAkua(['commands', '--help']);
 
 		expect(exitCode).toBe(0);
-		expect(stdout).toContain('Usage: akua commands [filters]');
-		expect(stdout).toContain('--operation-id <id>');
+		expect(stdout).toContain('akua commands [flags]');
+		expect(stdout).toContain('--operation-id string');
 		expect(stdout).not.toContain('akua auth login');
 	});
 
@@ -167,18 +169,19 @@ describe('akua entrypoint', () => {
 				}
 			]
 		});
+		expect(payload.data[0].usage).toBe('akua offers resolve --short-hash <short-hash>');
 		expect(payload.next_steps[0]).toEqual({
-			command: 'echo \'{"query":{"short_hash":"<short_hash>"}}\' | akua offers resolve --input -'
+			command: 'akua offers resolve --short-hash <short-hash>'
 		});
 	});
 
 	test('shows browser/device login options in auth help', async () => {
-		const { stdout, exitCode } = await runAkua(['auth', 'login', '--help', '--json']);
+		const { stdout, exitCode } = await runAkua(['auth', 'login', '--help']);
 
 		expect(exitCode).toBe(0);
-		expect(stdout).toContain('Usage: akua auth login');
+		expect(stdout).toContain('akua auth login [flags]');
 		expect(stdout).toContain('--no-browser');
-		expect(stdout).toContain('browser/device flow');
+		expect(stdout).toContain('Sign in with your browser');
 	});
 
 	test('fails loudly on unknown flags', async () => {
@@ -188,7 +191,7 @@ describe('akua entrypoint', () => {
 			error: {
 				type: 'usage_error',
 				code: 'AKUA_USAGE_ERROR',
-				message: 'Unknown flag: --bogus'
+				message: 'Unrecognized flag: --bogus in command akua commands'
 			}
 		});
 	});
@@ -207,7 +210,7 @@ describe('akua entrypoint', () => {
 			error: {
 				type: 'usage_error',
 				code: 'AKUA_USAGE_ERROR',
-				message: 'Unknown command: agent-os load-hcloud-provider'
+				message: 'Unknown command for akua.'
 			}
 		});
 	});
@@ -249,7 +252,7 @@ describe('akua entrypoint', () => {
 			error: {
 				type: 'usage_error',
 				code: 'AKUA_USAGE_ERROR',
-				message: 'Missing value for --operation-id.'
+				message: 'Missing value for flag --operation-id. Expected: string'
 			}
 		});
 	});
@@ -269,7 +272,7 @@ describe('akua entrypoint', () => {
 		expect(invalid.exitCode).toBe(2);
 		expect(JSON.parse(invalid.stdout)).toMatchObject({
 			error: {
-				message: 'Invalid value for --limit: banana. Expected a positive integer.'
+				message: 'Invalid value for flag --limit. Expected a string representing a finite number'
 			}
 		});
 
@@ -289,7 +292,7 @@ describe('akua entrypoint', () => {
 			error: {
 				type: 'usage_error',
 				code: 'AKUA_USAGE_ERROR',
-				message: 'Unexpected argument for commands: workspaces'
+				message: 'Unexpected argument for akua commands.'
 			}
 		});
 
@@ -297,7 +300,7 @@ describe('akua entrypoint', () => {
 		expect(extra.exitCode).toBe(2);
 		expect(JSON.parse(extra.stdout)).toMatchObject({
 			error: {
-				message: 'Unexpected argument for commands: extra'
+				message: 'Unexpected argument for akua commands.'
 			}
 		});
 	});
@@ -329,7 +332,7 @@ describe('akua entrypoint', () => {
 				error: {
 					code: 'AKUA_INPUT_INVALID',
 					message:
-						'Input for machines.create does not match the public API contract: body.undeclared: Expected no excess property.'
+						'Invalid input for akua machines create: body.undeclared: Expected no excess property.'
 				}
 			});
 			expect(result.stdout).not.toContain(sentinel);
@@ -795,13 +798,17 @@ describe('akua entrypoint', () => {
 	it.effect('auth status honors AKUA_API_TOKEN without HOME', () =>
 		Effect.gen(function* () {
 			for (const home of [undefined, '']) {
-				const envelope = yield* Effect.provide(
-					authView(['status'], {
-						HOME: home,
-						AKUA_API_TOKEN: 'sk_akua_env'
-					}),
-					CliLive(VERSION).pipe(Layer.provide(BunServices.layer))
-				) as Effect.Effect<RenderEnvelope>;
+				const envelope = yield* Effect.promise(() =>
+					runAuthView(
+						['status'],
+						{ HOME: home, AKUA_API_TOKEN: 'sk_akua_env' },
+						{
+							request: () => Promise.reject(new Error('no device flow')),
+							sleep: () => Promise.resolve(),
+							launchBrowser: () => Promise.resolve()
+						}
+					)
+				);
 				const stdout = renderSuccess(envelope, 'json');
 				const payload = JSON.parse(stdout);
 
@@ -964,7 +971,7 @@ describe('akua entrypoint', () => {
 			expect(missingValue.exitCode).toBe(2);
 			expect(JSON.parse(missingValue.stdout)).toMatchObject({
 				error: {
-					message: 'Missing value for --token.'
+					message: 'Missing value for flag --token. Expected: string'
 				}
 			});
 
@@ -975,7 +982,7 @@ describe('akua entrypoint', () => {
 			expect(positional.exitCode).toBe(2);
 			expect(JSON.parse(positional.stdout)).toMatchObject({
 				error: {
-					message: 'Unexpected argument for auth login.'
+					message: 'Unexpected argument for akua auth login.'
 				}
 			});
 			expect(positional.stdout).not.toContain(tokenLikePositional);
@@ -992,7 +999,7 @@ describe('akua entrypoint', () => {
 			expect(unknownSubcommand.exitCode).toBe(2);
 			expect(JSON.parse(unknownSubcommand.stdout)).toMatchObject({
 				error: {
-					message: 'Unknown auth subcommand.'
+					message: 'Unknown command for akua auth.'
 				}
 			});
 			expect(unknownSubcommand.stdout).not.toContain(tokenLikeValue);
@@ -1003,7 +1010,7 @@ describe('akua entrypoint', () => {
 			expect(statusExtra.exitCode).toBe(2);
 			expect(JSON.parse(statusExtra.stdout)).toMatchObject({
 				error: {
-					message: 'Unexpected argument for auth status.'
+					message: 'Unexpected argument for akua auth status.'
 				}
 			});
 			expect(statusExtra.stdout).not.toContain(tokenLikeValue);
@@ -1014,7 +1021,7 @@ describe('akua entrypoint', () => {
 			expect(logoutExtra.exitCode).toBe(2);
 			expect(JSON.parse(logoutExtra.stdout)).toMatchObject({
 				error: {
-					message: 'Unexpected argument for auth logout.'
+					message: 'Unexpected argument for akua auth logout.'
 				}
 			});
 			expect(logoutExtra.stdout).not.toContain(tokenLikeValue);

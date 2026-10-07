@@ -46,9 +46,11 @@ compiled archive smoke through `mise run release:smoke`.
   Regenerate with `bazel run //tools/cli:write_generated`. Do not duplicate
   endpoint definitions, request types, or status-error maps in handwritten CLI
   code.
-- Generate the typed Effect API surface from that contract. Keep handwritten
-  code limited to generic command parsing, request assembly, authentication
-  composition, rendering, and terminal wiring.
+- Generate the request contract (`src/generated/contract.gen.ts`) from that
+  document; commands, arguments, and flags are derived from it at runtime by
+  the same functions the generator verifies (`src/api/inputs.ts`). Keep
+  handwritten code limited to generic command parsing, request assembly,
+  authentication and workspace context, rendering, and terminal wiring.
 - Public commands remain provider-neutral. Do not add commands, flags, file
   readers, environment variables, or credential loaders for a particular cloud
   provider, cluster vendor, or product integration. Users pass provider-specific
@@ -56,10 +58,11 @@ compiled archive smoke through `mise run release:smoke`.
   `akua secrets create --input -`.
 - The generic executor accepts only generated path, query, header, and body
   inputs. It must reject unknown fields before sending a request, redact
-  sensitive input in diagnostics, and preserve the generated structured error
-  union for callers and JSON output.
-- Generation must be deterministic and fail on warnings, skipped public
-  operations, or unrepresented request/response/error contracts. Add support to
+  sensitive input in diagnostics, and pass API error bodies through unchanged
+  in JSON output.
+- Generation must be deterministic and fail on skipped public operations,
+  unrepresented request bodies, non-JSON error bodies, unknown stream formats,
+  or flag collisions. Add support to
   the OpenAPI producer or generator; never hide a contract gap with a manual
   endpoint implementation.
 

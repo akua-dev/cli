@@ -1,5 +1,5 @@
-import { Context, Data, Effect } from 'effect';
-import { Duration } from 'effect';
+import { Context, Data, Duration, Effect, Schema } from 'effect';
+import type { HttpClient } from 'effect/http';
 
 export interface HttpResponse {
 	readonly status: number;
@@ -63,12 +63,31 @@ export class Console extends Context.Service<
 	}
 >()('platform/cli/Console') {}
 
+/** The workspace `akua workspaces use` saved, under `workspace` in the config file. */
+export const StoredWorkspace = Schema.Struct({
+	id: Schema.String,
+	name: Schema.optionalKey(Schema.String)
+});
+export type StoredWorkspace = typeof StoredWorkspace.Type;
+
+/**
+ * The user-only `~/.config/akua/config.json` file. Writes are atomic and keep
+ * keys this CLI version does not know.
+ */
 export class SecureConfig extends Context.Service<
 	SecureConfig,
 	{
 		readonly readToken: (path: string) => Effect.Effect<string | undefined, SecureConfigFailure>;
 		readonly saveToken: (path: string, token: string) => Effect.Effect<void, SecureConfigFailure>;
 		readonly removeToken: (path: string) => Effect.Effect<boolean, SecureConfigFailure>;
+		readonly readWorkspace: (
+			path: string
+		) => Effect.Effect<StoredWorkspace | undefined, SecureConfigFailure>;
+		readonly saveWorkspace: (
+			path: string,
+			workspace: StoredWorkspace
+		) => Effect.Effect<void, SecureConfigFailure>;
+		readonly removeWorkspace: (path: string) => Effect.Effect<boolean, SecureConfigFailure>;
 	}
 >()('platform/cli/SecureConfig') {}
 
@@ -96,6 +115,7 @@ export class CliClock extends Context.Service<
 
 export type CliServices =
 	| Http
+	| HttpClient.HttpClient
 	| Browser
 	| Process
 	| Console

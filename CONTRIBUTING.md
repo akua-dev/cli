@@ -47,9 +47,7 @@ mise run generate:check
 
 Generation is deterministic and operationId-driven; only operations marked
 `x-platform-visibility: PUBLIC` are included, and registry rows are sorted by
-operationId. The generated outputs are `src/generated/commands.gen.ts`,
-`src/generated/openapi-api.gen.ts`, and
-`src/generated/public-operation-executor.gen.ts`. Never hand-edit generated
+operationId. The generated output is `src/generated/contract.gen.ts`. Never hand-edit generated
 files; run `bazel run //tools/cli:write_generated` and commit the result.
 
 See [docs/architecture.md](docs/architecture.md) for the full command

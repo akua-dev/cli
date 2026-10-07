@@ -42,7 +42,7 @@ test('invalid commands arguments render a usage envelope', async () => {
 	expect(JSON.parse(stdout)).toMatchObject({
 		error: {
 			code: 'AKUA_USAGE_ERROR',
-			message: 'Unexpected argument for commands: unexpected'
+			message: 'Unexpected argument for akua commands.'
 		}
 	});
 });
@@ -54,7 +54,7 @@ test('invalid auth arguments render a usage envelope', async () => {
 	expect(JSON.parse(stdout)).toMatchObject({
 		error: {
 			code: 'AKUA_USAGE_ERROR',
-			message: 'Unexpected argument for auth login.'
+			message: 'Unexpected argument for akua auth login.'
 		}
 	});
 });
