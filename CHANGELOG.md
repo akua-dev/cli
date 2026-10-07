@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.11.2](https://github.com/akua-dev/cli/compare/v0.11.1...v0.11.2)
+
+### Fixes
+
+- Resume release drafts safely and verify all immutable archives before publication.
+
 ## [0.11.1](https://github.com/akua-dev/cli/compare/v0.11.0...v0.11.1)
 
 - Publish the Bazel-built CLI and bundled SDK 0.9.4 through the scoped Main release pipeline.
