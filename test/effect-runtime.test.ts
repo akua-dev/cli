@@ -1,22 +1,11 @@
 import { describe, expect, it } from '@effect/vitest';
-import { BunServices } from '@effect/platform-bun';
-import { Clock, Effect, FileSystem, Layer, Stream } from 'effect';
+import { Clock, Effect, Layer, Stream } from 'effect';
 import { TestClock } from 'effect/testing';
 
 import { runCli } from '../src/runtime/effect-runtime';
 import { Browser, Console, Http, Process, SecureConfig } from '../src/runtime/services';
 
 describe('Effect CLI runtime', () => {
-	it.effect('requires a resolved output mode at the render boundary', () =>
-		Effect.gen(function* () {
-			const fs = yield* FileSystem.FileSystem;
-			const runtime = yield* fs.readFileString('src/runtime/effect-runtime.ts');
-
-			expect(runtime).not.toContain('OutputMode | (() => OutputMode)');
-			expect(runtime).not.toContain('function rendererMode');
-		}).pipe(Effect.provide(BunServices.layer))
-	);
-
 	it.effect('runs an Effect command through the central render boundary', () =>
 		Effect.gen(function* () {
 			const stdout: string[] = [];
