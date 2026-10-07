@@ -17,7 +17,7 @@ import { Console, PackageCli, type CliServices } from '../runtime/services';
 import { PublicApiAuthenticationFailure, PublicApiClientLive } from '../runtime/public-api';
 import { commandInputExample, commandInputExampleJson } from '../runtime/registry';
 
-export const VERSION = '0.11.2'; // x-release-please-version
+export const VERSION = '0.11.3'; // x-release-please-version
 
 export function main(
 	argv: readonly string[],

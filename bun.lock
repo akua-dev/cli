@@ -4,7 +4,7 @@
   "workspaces": {
     "": {
       "name": "@akua-dev/cli",
-      "version": "0.11.2",
+      "version": "0.11.3",
       "dependencies": {
         "@akua-dev/sdk": "^0.9.4",
         "@effect/platform-bun": "4.0.1",
@@ -22,7 +22,8 @@
   },
   "patchedDependencies": {
     "@effect/openapi-generator@4.0.1": "patches/@effect%2Fopenapi-generator@4.0.1.patch",
-    "effect@4.0.1": "patches/effect@4.0.1.patch"
+    "effect@4.0.1": "patches/effect@4.0.1.patch",
+    "@akua-dev/sdk@0.9.4": "patches/@akua-dev%2Fsdk@0.9.4.patch"
   },
   "packages": {
     "@akua-dev/native": [

@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.11.3](https://github.com/akua-dev/cli/compare/v0.11.2...v0.11.3)
+
+### Fixes
+
+- Initialize bundled native engines before offline Package renders.
+
 ## [0.11.2](https://github.com/akua-dev/cli/compare/v0.11.1...v0.11.2)
 
 ### Fixes
