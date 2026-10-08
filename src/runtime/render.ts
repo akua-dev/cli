@@ -1,4 +1,5 @@
 import type { AkuaCliError, NextStep } from './errors';
+import { humanData, humanNextSteps, humanStreamItem } from './human';
 import type { OutputMode } from './mode';
 import type * as Stream from 'effect/Stream';
 
@@ -9,6 +10,8 @@ export interface RenderEnvelope<StreamFailure = never> {
 	data?: unknown;
 	stream?: Stream.Stream<unknown, StreamFailure, never>;
 	next_steps?: readonly NextStep[];
+	/** Lines a person reads instead of `observations` and `data`; never part of JSON or agent output. */
+	human?: readonly string[];
 }
 
 export function renderStreamSuccess(
@@ -22,7 +25,8 @@ export function renderStreamSuccess(
 		command: envelope.command,
 		data
 	};
-	return mode === 'json' ? `${JSON.stringify(item)}\n` : renderSuccess(item, mode);
+	if (mode === 'json') return `${JSON.stringify(item)}\n`;
+	return mode === 'human' ? humanStreamItem(data) : renderSuccess(item, mode);
 }
 
 export function renderSuccess(envelope: RenderEnvelope<unknown>, mode: OutputMode): string {
@@ -35,13 +39,14 @@ export function renderSuccess(envelope: RenderEnvelope<unknown>, mode: OutputMod
 		command: envelope.command,
 		observations: envelope.observations,
 		data: envelope.data,
-		next_steps: envelope.next_steps
+		next_steps: envelope.next_steps,
+		human: envelope.human
 	};
 	if (mode === 'json') {
-		return `${JSON.stringify(payload, null, 2)}\n`;
+		return `${JSON.stringify({ ...payload, human: undefined }, null, 2)}\n`;
 	}
 	if (mode === 'agent') {
-		return renderToon(payload);
+		return renderToon({ ...payload, human: undefined });
 	}
 
 	return renderHuman(payload);
@@ -63,12 +68,7 @@ export function renderError(error: AkuaCliError, mode: OutputMode): string {
 	if (error.requestId) {
 		lines.push(`Request ID: ${error.requestId}`);
 	}
-	if (error.nextSteps.length > 0) {
-		lines.push('', 'Next steps:');
-		for (const step of error.nextSteps) {
-			lines.push(`  ${step.command}`);
-		}
-	}
+	lines.push(...humanNextSteps(error.nextSteps));
 	return `${lines.join('\n')}\n`;
 }
 
@@ -77,44 +77,11 @@ export function renderToon(value: unknown): string {
 }
 
 function renderHuman(envelope: RenderEnvelope<unknown>): string {
-	const lines: string[] = [];
-	if (envelope.observations) {
-		lines.push(...envelope.observations);
-	}
-	if (envelope.data !== undefined) {
-		if (Array.isArray(envelope.data)) {
-			lines.push(...renderHumanTable(envelope.data));
-		} else {
-			lines.push(JSON.stringify(envelope.data, null, 2));
-		}
-	}
-	if (envelope.next_steps && envelope.next_steps.length > 0) {
-		lines.push('', 'Next steps:');
-		for (const step of envelope.next_steps) {
-			lines.push(`  ${step.command}`);
-		}
-	}
-	return `${lines.join('\n')}\n`;
-}
-
-function renderHumanTable(rows: readonly unknown[]): string[] {
-	if (rows.length === 0) {
-		return ['No results.'];
-	}
-	const objects = rows.filter(isRecord);
-	if (objects.length !== rows.length) {
-		return rows.map((row) => String(row));
-	}
-	const keys = Object.keys(objects[0] ?? {}).slice(0, 5);
-	const widths = keys.map((key) =>
-		Math.max(key.length, ...objects.map((row) => String(row[key] ?? '').length))
-	);
-	const header = keys.map((key, index) => key.padEnd(widths[index])).join('  ');
-	const divider = widths.map((width) => '-'.repeat(width)).join('  ');
-	const body = objects.map((row) =>
-		keys.map((key, index) => String(row[key] ?? '').padEnd(widths[index])).join('  ')
-	);
-	return [header, divider, ...body];
+	const lines = [
+		...(envelope.human ?? [...(envelope.observations ?? []), ...humanData(envelope.data)]),
+		...humanNextSteps(envelope.next_steps ?? [])
+	];
+	return lines.length === 0 ? '' : `${lines.join('\n')}\n`;
 }
 
 function renderValue(value: unknown, indent: number, key?: string): string[] {

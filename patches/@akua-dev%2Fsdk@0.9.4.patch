@@ -1,0 +1,24 @@
+diff --git a/dist/execute.js b/dist/execute.js
+--- a/dist/execute.js
++++ b/dist/execute.js
+@@ -158,7 +158,7 @@
+   const errors = [];
+   const require_ = createRequire(import.meta.url);
+   try {
+-    cached = require_("@akua-dev/native");
++    cached = require_("@akua-dev/native/loader.js");
+     return cached;
+   } catch (err) {
+     errors.push(`@akua-dev/native: ${err.message}`);
+diff --git a/dist/mod.js b/dist/mod.js
+--- a/dist/mod.js
++++ b/dist/mod.js
+@@ -158,7 +158,7 @@
+   const errors = [];
+   const require_ = createRequire(import.meta.url);
+   try {
+-    cached = require_("@akua-dev/native");
++    cached = require_("@akua-dev/native/loader.js");
+     return cached;
+   } catch (err) {
+     errors.push(`@akua-dev/native: ${err.message}`);

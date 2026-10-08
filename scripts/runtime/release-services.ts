@@ -134,6 +134,7 @@ export interface PackageExistingExecutablesInput {
 	version: string;
 	outputDir: string;
 	binaries: Record<string, string>;
+	nativeBindings?: Readonly<Partial<Record<ReleaseTargetId, string>>>;
 	packageRoot: string;
 	sourceSha: string;
 	targetId?: ReleaseTargetId;

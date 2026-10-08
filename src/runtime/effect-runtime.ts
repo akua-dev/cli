@@ -3,16 +3,12 @@ import { Data, Effect, Stream } from 'effect';
 import { AkuaCliError, usageError } from './errors';
 import type { OutputMode } from './mode';
 import { renderError, renderStreamSuccess, renderSuccess, type RenderEnvelope } from './render';
-import { Console } from './services';
+import { Console, type SecureConfigFailure } from './services';
 
 export class UsageFailure extends Data.TaggedError('UsageFailure')<{
 	readonly message: string;
-}> {}
-
-export class ConfigFailure extends Data.TaggedError('ConfigFailure')<{
-	readonly operation: 'read' | 'write' | 'remove';
-	readonly path: string;
-	readonly cause: unknown;
+	/** Help command to suggest, for example `akua clusters create --help`. */
+	readonly help?: string;
 }> {}
 
 export class DeviceRequestFailure extends Data.TaggedError('DeviceRequestFailure')<
@@ -33,7 +29,7 @@ export class CommandFailure extends Data.TaggedError('CommandFailure')<{
 
 export type CliFailure =
 	| UsageFailure
-	| ConfigFailure
+	| SecureConfigFailure
 	| DeviceRequestFailure
 	| DeviceCancelledFailure
 	| DeviceAuthorizationFailure
@@ -80,8 +76,8 @@ function writeCliFailure(
 export function toCliError(failure: CliFailure): AkuaCliError {
 	switch (failure._tag) {
 		case 'UsageFailure':
-			return usageError(failure.message);
-		case 'ConfigFailure':
+			return usageError(failure.message, failure.help);
+		case 'SecureConfigFailure':
 			return new AkuaCliError({
 				type: 'runtime_error',
 				code: 'AKUA_CONFIG_ERROR',

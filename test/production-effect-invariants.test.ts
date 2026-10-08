@@ -371,10 +371,7 @@ function isApprovedLiveServiceModule(file: string): boolean {
 }
 
 function isExecutableTerminal(file: string, node: ts.Node): boolean {
-	if (
-		file !== 'src/bin/akua.ts' &&
-		!/^scripts\/(?:generate-commands|generate-effect-api|release)\.ts$/.test(file)
-	)
+	if (file !== 'src/bin/akua.ts' && !/^scripts\/(?:generate-contract|release)\.ts$/.test(file))
 		return false;
 	let current: ts.Node | undefined = node;
 	while (current !== undefined) {
@@ -495,10 +492,7 @@ function isMakeRunMainBinding(element: ts.BindingElement): boolean {
 }
 
 function isRuntimeTerminalBody(file: string, node: ts.Node): boolean {
-	if (
-		file !== 'src/bin/akua.ts' &&
-		!/^scripts\/(?:generate-commands|generate-effect-api|release)\.ts$/.test(file)
-	)
+	if (file !== 'src/bin/akua.ts' && !/^scripts\/(?:generate-contract|release)\.ts$/.test(file))
 		return false;
 	let current: ts.Node | undefined = node;
 	while (current !== undefined && !ts.isStatement(current)) current = current.parent;

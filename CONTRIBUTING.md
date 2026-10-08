@@ -29,6 +29,12 @@ mise run build:binary
 `mise run check` typechecks, builds, and tests this standalone checkout.
 Public API changes also require the canonical cnap Bazel drift gate below.
 
+Standalone development uses the committed npm SDK 0.9.4 lock. Canonical cnap
+Bazel releases select the source SDK, native bindings, and WASM engines at
+0.9.6 through the private workspace graph. Each release archive contains its
+matching source-built native binding; its manifest records the packed SDK
+and native versions.
+
 ## Command generation
 
 The command surface is generated from cnap's committed public OpenAPI document,
@@ -47,9 +53,7 @@ mise run generate:check
 
 Generation is deterministic and operationId-driven; only operations marked
 `x-platform-visibility: PUBLIC` are included, and registry rows are sorted by
-operationId. The generated outputs are `src/generated/commands.gen.ts`,
-`src/generated/openapi-api.gen.ts`, and
-`src/generated/public-operation-executor.gen.ts`. Never hand-edit generated
+operationId. The generated output is `src/generated/contract.gen.ts`. Never hand-edit generated
 files; run `bazel run //tools/cli:write_generated` and commit the result.
 
 See [docs/architecture.md](docs/architecture.md) for the full command

@@ -240,7 +240,12 @@ const packageExistingExecutables = Effect.fn('packageExistingExecutables')(funct
 					yield* fs
 						.utimes(stagedExecutable, ARCHIVE_TIMESTAMP, ARCHIVE_TIMESTAMP)
 						.pipe(Effect.mapError(toReleaseFailure('set staged executable timestamp')));
-					const runtimeFiles = yield* stagePackageRuntime(input.packageRoot, stagingDir, target);
+					const runtimeFiles = yield* stagePackageRuntime(
+						input.packageRoot,
+						stagingDir,
+						target,
+						input.nativeBindings
+					);
 					if (target.archive === 'tar.gz') {
 						const metadataArguments =
 							process.platform === 'linux'
@@ -778,7 +783,8 @@ const readSdkRuntimeIdentity = Effect.fn('readSdkRuntimeIdentity')(function* (pa
 const stagePackageRuntime = Effect.fn('stagePackageRuntime')(function* (
 	packageRoot: string,
 	stagingDir: string,
-	target: ReleaseTarget
+	target: ReleaseTarget,
+	nativeBindings?: PackageExistingExecutablesInput['nativeBindings']
 ) {
 	const fs = yield* FileSystem.FileSystem;
 	const path = yield* Path.Path;
@@ -801,13 +807,21 @@ const stagePackageRuntime = Effect.fn('stagePackageRuntime')(function* (
 			runtimeDirectories.add(path.dirname(destination));
 		}
 	}
-	const bindingManifest = yield* readPackageManifest(packageRoot, target.bindingPackage);
-	const bindingFile = yield* packageManifestMain(path, bindingManifest, target.bindingPackage);
+	let bindingFile: string;
+	let bindingSource: string;
+	if (nativeBindings === undefined) {
+		const bindingManifest = yield* readPackageManifest(packageRoot, target.bindingPackage);
+		bindingFile = yield* packageManifestMain(path, bindingManifest, target.bindingPackage);
+		bindingSource = path.join(packageRoot, target.bindingPackage, bindingFile);
+	} else {
+		const declaredSource = nativeBindings[target.id];
+		if (!declaredSource)
+			return yield* releaseFailure(`Missing source native binding for ${target.id}`);
+		bindingFile = `akua.${target.bindingPackage.slice('native-'.length)}.node`;
+		bindingSource = declaredSource;
+	}
 	const bindingDestination = path.join(nativeDestination, bindingFile);
-	yield* stagePackageRuntimeFile(
-		path.join(packageRoot, target.bindingPackage, bindingFile),
-		bindingDestination
-	);
+	yield* stagePackageRuntimeFile(bindingSource, bindingDestination);
 	archiveFiles.push(`node_modules/@akua-dev/native/${bindingFile.replaceAll('\\', '/')}`);
 	runtimeDirectories.add(path.dirname(bindingDestination));
 	runtimeDirectories.add(scopeRoot);
@@ -1117,23 +1131,26 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 	return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-export const ReleaseHostLive = Layer.succeed(ReleaseHost, {
-	sha256: (bytes) => sha256(bytes).pipe(Effect.provide(BunServices.layer)),
-	hostTargetId: attempt('read release host', () => ({
-		platform: process.platform,
-		arch: process.arch
-	})).pipe(Effect.flatMap(({ platform, arch }) => releaseTargetIdForHost(platform, arch))),
-	planUploads: (candidateDir, existingDir, version) =>
-		planReleaseUploads(candidateDir, existingDir, version).pipe(Effect.provide(BunServices.layer)),
-	assertSafeOutputDirectory: (outputDir) =>
-		assertSafeOutputDirectory(outputDir).pipe(Effect.provide(BunServices.layer)),
-	packageExistingExecutables: (input) =>
-		packageExistingExecutables(input).pipe(Effect.provide(BunServices.layer)),
-	assembleReleasePackages: (input) =>
-		assembleReleasePackages(input).pipe(Effect.provide(BunServices.layer)),
-	packageRelease: (input) => packageRelease(input).pipe(Effect.provide(BunServices.layer)),
-	smokeReleaseArtifact: (input) =>
-		smokeReleaseArtifact(input).pipe(Effect.provide(BunServices.layer)),
-	verifyReleaseDirectory: (outputDir, version) =>
-		verifyReleaseDirectory(outputDir, version).pipe(Effect.provide(BunServices.layer))
-});
+export const makeReleaseHostLive = (zipperPath?: string) =>
+	Layer.succeed(ReleaseHost, {
+		sha256: (bytes) => sha256(bytes).pipe(Effect.provide(BunServices.layer)),
+		hostTargetId: attempt('read release host', () => ({
+			platform: process.platform,
+			arch: process.arch
+		})).pipe(Effect.flatMap(({ platform, arch }) => releaseTargetIdForHost(platform, arch))),
+		planUploads: (candidateDir, existingDir, version) =>
+			planReleaseUploads(candidateDir, existingDir, version).pipe(
+				Effect.provide(BunServices.layer)
+			),
+		assertSafeOutputDirectory: (outputDir) =>
+			assertSafeOutputDirectory(outputDir).pipe(Effect.provide(BunServices.layer)),
+		packageExistingExecutables: (input) =>
+			packageExistingExecutables(input).pipe(Effect.provide(BunServices.layer)),
+		assembleReleasePackages: (input) =>
+			assembleReleasePackages(input).pipe(Effect.provide(BunServices.layer)),
+		packageRelease: (input) => packageRelease(input).pipe(Effect.provide(BunServices.layer)),
+		smokeReleaseArtifact: (input) =>
+			smokeReleaseArtifact(input).pipe(Effect.provide(BunServices.layer)),
+		verifyReleaseDirectory: (outputDir, version) =>
+			verifyReleaseDirectory(outputDir, version, zipperPath).pipe(Effect.provide(BunServices.layer))
+	});

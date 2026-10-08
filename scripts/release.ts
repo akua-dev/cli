@@ -15,7 +15,7 @@ import {
 	releaseMatrix,
 	validateVersion
 } from './runtime/release-services';
-import { ReleaseHostLive } from './runtime/release-host-live';
+import { makeReleaseHostLive } from './runtime/release-host-live';
 import { ScriptCliLive } from './runtime/cli-live';
 import type {
 	PackageExistingExecutablesInput,
@@ -194,7 +194,7 @@ if (import.meta.main) {
 		);
 	})(
 		Command.run(releaseCommand, { version: '0.9.0' }).pipe(
-			Effect.provide(ReleaseHostLive),
+			Effect.provide(makeReleaseHostLive()),
 			Effect.provide(ScriptCliLive)
 		)
 	);

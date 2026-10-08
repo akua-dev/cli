@@ -1,4 +1,4 @@
-import { Crypto, Data, Duration, Effect, FileSystem, Layer, Path } from 'effect';
+import { Crypto, Data, Duration, Effect, FileSystem, Layer, Option, Path, Schema } from 'effect';
 import type * as PackageExecuteModule from '@akua-dev/sdk/execute';
 import {
 	HttpBody,
@@ -23,7 +23,8 @@ import {
 	PublicInput,
 	PublicInputFailure,
 	SecureConfig,
-	SecureConfigFailure
+	SecureConfigFailure,
+	StoredWorkspace
 } from './services';
 
 const CONFIG_FILE_MODE = 0o600;
@@ -34,23 +35,26 @@ class ConfigParseFailure extends Data.TaggedError('ConfigParseFailure')<{
 	readonly cause: Error;
 }> {}
 
+/** The device-login HTTP service over the shared CLI HTTP client. */
+const DeviceHttpLive: Layer.Layer<Http, never, HttpClient.HttpClient> = Layer.effect(
+	Http,
+	Effect.gen(function* () {
+		const client = yield* HttpClient.HttpClient;
+		return {
+			postJson: (request) =>
+				readJsonResponse(
+					HttpClientRequest.post(request.url).pipe(
+						HttpClientRequest.bodyJson(request.body),
+						Effect.flatMap(client.execute)
+					),
+					'Device response is too large.'
+				)
+		};
+	})
+);
+
 export function HttpLive(cliVersion: string): Layer.Layer<Http> {
-	return Layer.effect(
-		Http,
-		Effect.gen(function* () {
-			const client = yield* HttpClient.HttpClient;
-			return {
-				postJson: (request) =>
-					readJsonResponse(
-						HttpClientRequest.post(request.url).pipe(
-							HttpClientRequest.bodyJson(request.body),
-							Effect.flatMap(client.execute)
-						),
-						'Device response is too large.'
-					)
-			};
-		})
-	).pipe(Layer.provide(AkuaHttpClientLive(cliVersion)));
+	return DeviceHttpLive.pipe(Layer.provide(AkuaHttpClientLive(cliVersion)));
 }
 
 export const BrowserLive = Layer.succeed(Browser, {
@@ -106,6 +110,7 @@ export const ConsoleLive = Layer.succeed(Console, {
 	// isTTY is undefined (not false) when stdout is piped; normalize so the
 	// declared boolean service contract holds at runtime.
 	stdoutIsTTY: process.stdout.isTTY === true,
+	stdinIsTTY: process.stdin.isTTY === true,
 	writeStderr: (value) => Effect.sync(() => process.stderr.write(value)),
 	writeStdout: (value) => Effect.sync(() => process.stdout.write(value))
 });
@@ -177,6 +182,35 @@ export const SecureConfigLive = Layer.effect(
 								cause
 							})
 					)
+				),
+			readWorkspace: (configPath) =>
+				readConfig(fs, configPath).pipe(
+					Effect.map((config) =>
+						Option.getOrUndefined(Schema.decodeUnknownOption(StoredWorkspace)(config.workspace))
+					),
+					Effect.mapError(
+						(cause) => new SecureConfigFailure({ operation: 'read', path: configPath, cause })
+					)
+				),
+			saveWorkspace: (configPath, workspace) =>
+				readConfig(fs, configPath).pipe(
+					Effect.flatMap((config) =>
+						writeConfig(fs, path, crypto, configPath, { ...config, workspace })
+					),
+					Effect.mapError(
+						(cause) => new SecureConfigFailure({ operation: 'write', path: configPath, cause })
+					)
+				),
+			removeWorkspace: (configPath) =>
+				readConfig(fs, configPath).pipe(
+					Effect.flatMap((config) => {
+						if (!('workspace' in config)) return Effect.succeed(false);
+						const { workspace: _workspace, ...remaining } = config;
+						return writeConfig(fs, path, crypto, configPath, remaining).pipe(Effect.as(true));
+					}),
+					Effect.mapError(
+						(cause) => new SecureConfigFailure({ operation: 'remove', path: configPath, cause })
+					)
 				)
 		};
 	})
@@ -225,7 +259,7 @@ export function CliLive(
 	cliVersion: string
 ): Layer.Layer<CliServices, never, FileSystem.FileSystem | Path.Path | Crypto.Crypto> {
 	return Layer.mergeAll(
-		HttpLive(cliVersion),
+		DeviceHttpLive,
 		BrowserLive,
 		ProcessLive,
 		ConsoleLive,
@@ -233,7 +267,7 @@ export function CliLive(
 		PublicInputLive,
 		PackageCliLive,
 		ClockLive
-	);
+	).pipe(Layer.provideMerge(AkuaHttpClientLive(cliVersion)));
 }
 
 function readJsonResponse(

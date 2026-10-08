@@ -1,7 +1,7 @@
 import { BunServices } from '@effect/platform-bun';
-import { Duration, Effect, Layer } from 'effect';
+import { ConfigProvider, Duration, Effect, Layer, Option } from 'effect';
 
-import { authView } from '../src/commands/auth';
+import { login, logout, status } from '../src/cli/auth';
 import {
 	DeviceCancelledFailure,
 	DeviceRequestFailure,
@@ -43,16 +43,25 @@ export function runAuthView(
 	if (dependencies.signal?.aborted)
 		return Promise.reject(toCliError(new DeviceCancelledFailure({})));
 	return Effect.runPromise(
-		authView(argv, env).pipe(
+		authProgram(argv).pipe(
 			Effect.catchIf(
 				(failure): failure is DeviceRequestFailure =>
 					dependencies.signal?.aborted === true && failure._tag === 'DeviceRequestFailure',
 				() => Effect.fail(new DeviceCancelledFailure({}))
 			),
 			Effect.mapError(toCliError),
-			Effect.provide(testServices(dependencies))
+			Effect.provide(testServices(dependencies)),
+			Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnvRecord(env)))
 		) as Effect.Effect<RenderEnvelope, never>
 	);
+}
+
+/** The `akua auth` subcommand an argv selects, run without the argument parser. */
+function authProgram(argv: readonly string[]) {
+	const [subcommand, ...flags] = argv;
+	if (subcommand === 'status') return status;
+	if (subcommand === 'logout') return logout;
+	return login({ token: Option.none(), noBrowser: flags.includes('--no-browser') });
 }
 
 function testServices(dependencies: AuthTestDependencies) {
@@ -82,6 +91,7 @@ function testServices(dependencies: AuthTestDependencies) {
 		}),
 		Layer.succeed(Console, {
 			stdoutIsTTY: false,
+			stdinIsTTY: false,
 			writeStderr: (value) =>
 				Effect.sync(() => {
 					const [open, code] = value.trimEnd().split('\n');
