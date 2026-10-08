@@ -57,7 +57,7 @@ export function operationError(
 			return new AkuaCliError({
 				type: 'input_error',
 				code: 'AKUA_INPUT_UNREADABLE',
-				message: `Could not read the --input file for ${context.command}.`,
+				message: `Could not read the ${failure.detail ?? '--input'} file for ${context.command}.`,
 				exitCode: ExitCodes.Usage,
 				nextSteps: [help]
 			});

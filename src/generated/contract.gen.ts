@@ -5406,12 +5406,14 @@ export const contract: ApiContract = {
 								"password": {
 									"type": "string",
 									"description": "Password for basic auth",
+									"format": "password",
 									"minLength": 1,
 									"maxLength": 500
 								},
 								"token": {
 									"type": "string",
 									"description": "Bearer token for token auth",
+									"format": "password",
 									"minLength": 1,
 									"maxLength": 2000
 								},
@@ -5424,6 +5426,7 @@ export const contract: ApiContract = {
 								"client_secret": {
 									"type": "string",
 									"description": "Client secret for OAuth",
+									"format": "password",
 									"minLength": 1,
 									"maxLength": 500
 								},
@@ -6766,7 +6769,8 @@ export const contract: ApiContract = {
 			"type": "object",
 			"properties": {
 				"claim_token": {
-					"type": "string"
+					"type": "string",
+					"format": "password"
 				}
 			},
 			"required": [
@@ -6860,6 +6864,7 @@ export const contract: ApiContract = {
 				"api_token": {
 					"type": "string",
 					"description": "Cloudflare API token. Stored as a platform Secret; never returned.",
+					"format": "password",
 					"minLength": 1,
 					"maxLength": 2000
 				}
@@ -8455,6 +8460,7 @@ export const contract: ApiContract = {
 						},
 						"value": {
 							"type": "string",
+							"format": "password",
 							"minLength": 1
 						}
 					},
@@ -8492,6 +8498,7 @@ export const contract: ApiContract = {
 						},
 						"value": {
 							"type": "string",
+							"format": "password",
 							"minLength": 1
 						},
 						"aws_access_key_id": {
@@ -8532,6 +8539,7 @@ export const contract: ApiContract = {
 						},
 						"value": {
 							"type": "string",
+							"format": "password",
 							"minLength": 1
 						}
 					},
@@ -8569,6 +8577,7 @@ export const contract: ApiContract = {
 						},
 						"value": {
 							"type": "string",
+							"format": "password",
 							"minLength": 1
 						}
 					},
@@ -8606,6 +8615,7 @@ export const contract: ApiContract = {
 						},
 						"value": {
 							"type": "string",
+							"format": "password",
 							"minLength": 1
 						},
 						"username": {
@@ -8646,6 +8656,7 @@ export const contract: ApiContract = {
 						},
 						"value": {
 							"type": "string",
+							"format": "password",
 							"minLength": 1
 						}
 					},
@@ -8683,6 +8694,7 @@ export const contract: ApiContract = {
 						},
 						"value": {
 							"type": "string",
+							"format": "password",
 							"minLength": 16
 						}
 					},
@@ -8720,6 +8732,7 @@ export const contract: ApiContract = {
 						},
 						"value": {
 							"type": "string",
+							"format": "password",
 							"minLength": 1
 						}
 					},
@@ -8737,6 +8750,7 @@ export const contract: ApiContract = {
 			"properties": {
 				"value": {
 					"type": "string",
+					"format": "password",
 					"minLength": 1
 				},
 				"comment": {
@@ -11436,6 +11450,7 @@ export const contract: ApiContract = {
 			"properties": {
 				"token": {
 					"type": "string",
+					"format": "password",
 					"minLength": 32,
 					"maxLength": 512
 				}
@@ -13252,6 +13267,7 @@ export const contract: ApiContract = {
 				"value": {
 					"type": "string",
 					"description": "The provider API token to probe. Consumed, never stored.",
+					"format": "password",
 					"minLength": 1
 				}
 			},
