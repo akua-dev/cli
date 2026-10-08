@@ -1462,7 +1462,7 @@ export const contract: ApiContract = {
 				"header:akua-context"
 			],
 			"body": {
-				"required": false,
+				"required": true,
 				"schema": {
 					"$ref": "#/$defs/ExplainAccessDecisionBody"
 				}
@@ -1478,7 +1478,7 @@ export const contract: ApiContract = {
 				"header:akua-context"
 			],
 			"body": {
-				"required": false,
+				"required": true,
 				"schema": {
 					"$ref": "#/$defs/ExplainAccessDecisionsBatchBody"
 				}
@@ -1526,7 +1526,7 @@ export const contract: ApiContract = {
 				"header:akua-context"
 			],
 			"body": {
-				"required": false,
+				"required": true,
 				"schema": {
 					"$ref": "#/$defs/CreateApiTokenRequest"
 				}
@@ -1565,7 +1565,7 @@ export const contract: ApiContract = {
 				"header:akua-context"
 			],
 			"body": {
-				"required": false,
+				"required": true,
 				"schema": {
 					"$ref": "#/$defs/CreateCloudflareCredentialBody"
 				}
@@ -1605,7 +1605,7 @@ export const contract: ApiContract = {
 				"header:idempotency-key:4"
 			],
 			"body": {
-				"required": false,
+				"required": true,
 				"schema": {
 					"type": "object",
 					"properties": {
@@ -1691,7 +1691,7 @@ export const contract: ApiContract = {
 				"header:if-match"
 			],
 			"body": {
-				"required": false,
+				"required": true,
 				"schema": {
 					"$ref": "#/$defs/ExecBody"
 				}
@@ -1764,7 +1764,7 @@ export const contract: ApiContract = {
 				"header:idempotency-key"
 			],
 			"body": {
-				"required": false,
+				"required": true,
 				"schema": {
 					"type": "object",
 					"properties": {
@@ -2003,7 +2003,7 @@ export const contract: ApiContract = {
 				"header:idempotency-key"
 			],
 			"body": {
-				"required": false,
+				"required": true,
 				"schema": {
 					"type": "object",
 					"properties": {
@@ -2146,7 +2146,7 @@ export const contract: ApiContract = {
 				"header:idempotency-key:2"
 			],
 			"body": {
-				"required": false,
+				"required": true,
 				"schema": {
 					"$ref": "#/$defs/CreateCustomDomainBody"
 				}
@@ -2219,7 +2219,7 @@ export const contract: ApiContract = {
 				"header:akua-context"
 			],
 			"body": {
-				"required": false,
+				"required": true,
 				"schema": {
 					"type": "object",
 					"properties": {
@@ -3826,7 +3826,7 @@ export const contract: ApiContract = {
 				"header:idempotency-key"
 			],
 			"body": {
-				"required": false,
+				"required": true,
 				"schema": {
 					"$ref": "#/$defs/CreateDashboardWidgetBody"
 				}
@@ -4053,7 +4053,7 @@ export const contract: ApiContract = {
 				"header:idempotency-key"
 			],
 			"body": {
-				"required": false,
+				"required": true,
 				"schema": {
 					"$ref": "#/$defs/CreateInstallBody"
 				}
@@ -4248,7 +4248,7 @@ export const contract: ApiContract = {
 				"header:idempotency-key"
 			],
 			"body": {
-				"required": false,
+				"required": true,
 				"schema": {
 					"type": "object",
 					"properties": {
@@ -4719,7 +4719,7 @@ export const contract: ApiContract = {
 			"auth": true,
 			"parameters": [],
 			"body": {
-				"required": false,
+				"required": true,
 				"schema": {
 					"$ref": "#/$defs/OrganizationInvitationAcceptRequest"
 				}
@@ -4737,7 +4737,7 @@ export const contract: ApiContract = {
 				"header:if-match"
 			],
 			"body": {
-				"required": false,
+				"required": true,
 				"schema": {
 					"$ref": "#/$defs/OrganizationAddMemberRequest"
 				}
@@ -4764,7 +4764,7 @@ export const contract: ApiContract = {
 				"header:idempotency-key"
 			],
 			"body": {
-				"required": false,
+				"required": true,
 				"schema": {
 					"$ref": "#/$defs/OrganizationCreateRequest"
 				}
@@ -4780,7 +4780,7 @@ export const contract: ApiContract = {
 				"path:id:2"
 			],
 			"body": {
-				"required": false,
+				"required": true,
 				"schema": {
 					"$ref": "#/$defs/OrganizationInvitationCreateRequest"
 				}
@@ -4910,7 +4910,7 @@ export const contract: ApiContract = {
 				"header:if-match"
 			],
 			"body": {
-				"required": false,
+				"required": true,
 				"schema": {
 					"$ref": "#/$defs/OrganizationUpdateMemberRoleRequest"
 				}
@@ -4927,7 +4927,7 @@ export const contract: ApiContract = {
 				"header:idempotency-key"
 			],
 			"body": {
-				"required": false,
+				"required": true,
 				"schema": {
 					"$ref": "#/$defs/CreatePackageBody"
 				}
@@ -5023,7 +5023,7 @@ export const contract: ApiContract = {
 				"header:idempotency-key"
 			],
 			"body": {
-				"required": false,
+				"required": true,
 				"schema": {
 					"$ref": "#/$defs/ImportPackageBody"
 				}
@@ -5067,7 +5067,7 @@ export const contract: ApiContract = {
 				"header:idempotency-key:2"
 			],
 			"body": {
-				"required": false,
+				"required": true,
 				"schema": {
 					"$ref": "#/$defs/BindFloatingPreviewHostnameBody"
 				}
@@ -5085,7 +5085,7 @@ export const contract: ApiContract = {
 				"header:idempotency-key:2"
 			],
 			"body": {
-				"required": false,
+				"required": true,
 				"schema": {
 					"$ref": "#/$defs/BindPinnedPreviewHostnameBody"
 				}
@@ -5163,7 +5163,7 @@ export const contract: ApiContract = {
 				"header:idempotency-key"
 			],
 			"body": {
-				"required": false,
+				"required": true,
 				"schema": {
 					"$ref": "#/$defs/CreateProductBody"
 				}
@@ -5265,7 +5265,7 @@ export const contract: ApiContract = {
 				"header:akua-context"
 			],
 			"body": {
-				"required": false,
+				"required": true,
 				"schema": {
 					"type": "object",
 					"properties": {
@@ -5358,7 +5358,7 @@ export const contract: ApiContract = {
 				"header:idempotency-key"
 			],
 			"body": {
-				"required": false,
+				"required": true,
 				"schema": {
 					"type": "object",
 					"properties": {
@@ -5468,7 +5468,7 @@ export const contract: ApiContract = {
 				"header:idempotency-key:2"
 			],
 			"body": {
-				"required": false,
+				"required": true,
 				"schema": {
 					"$ref": "#/$defs/CreateRepositoryBody"
 				}
@@ -5542,7 +5542,7 @@ export const contract: ApiContract = {
 				"header:idempotency-key:2"
 			],
 			"body": {
-				"required": false,
+				"required": true,
 				"schema": {
 					"$ref": "#/$defs/CreateRepositoryChangeRequestBody"
 				}
@@ -5606,7 +5606,7 @@ export const contract: ApiContract = {
 				"header:idempotency-key:2"
 			],
 			"body": {
-				"required": false,
+				"required": true,
 				"schema": {
 					"$ref": "#/$defs/RejectRepositoryChangeRequestBody"
 				}
@@ -5648,7 +5648,7 @@ export const contract: ApiContract = {
 				"header:idempotency-key"
 			],
 			"body": {
-				"required": false,
+				"required": true,
 				"schema": {
 					"$ref": "#/$defs/CreateSecretBody"
 				}
@@ -5666,7 +5666,7 @@ export const contract: ApiContract = {
 				"header:idempotency-key"
 			],
 			"body": {
-				"required": false,
+				"required": true,
 				"schema": {
 					"$ref": "#/$defs/CreateSecretVersionBody"
 				}
@@ -5814,7 +5814,7 @@ export const contract: ApiContract = {
 			"auth": true,
 			"parameters": [],
 			"body": {
-				"required": false,
+				"required": true,
 				"schema": {
 					"$ref": "#/$defs/ValidateProviderTokenBody"
 				}
@@ -5856,7 +5856,7 @@ export const contract: ApiContract = {
 			"auth": true,
 			"parameters": [],
 			"body": {
-				"required": false,
+				"required": true,
 				"schema": {
 					"$ref": "#/$defs/CreateSnippetBody"
 				}
@@ -5901,7 +5901,7 @@ export const contract: ApiContract = {
 				"header:akua-context"
 			],
 			"body": {
-				"required": false,
+				"required": true,
 				"schema": {
 					"$ref": "#/$defs/ExecuteSnippetBody"
 				}
@@ -6019,7 +6019,7 @@ export const contract: ApiContract = {
 				"header:idempotency-key"
 			],
 			"body": {
-				"required": false,
+				"required": true,
 				"schema": {
 					"type": "object",
 					"properties": {
@@ -6056,7 +6056,7 @@ export const contract: ApiContract = {
 				"header:if-match"
 			],
 			"body": {
-				"required": false,
+				"required": true,
 				"schema": {
 					"type": "object",
 					"properties": {
@@ -6086,7 +6086,7 @@ export const contract: ApiContract = {
 				"header:if-match"
 			],
 			"body": {
-				"required": false,
+				"required": true,
 				"schema": {
 					"type": "object",
 					"properties": {
@@ -6109,7 +6109,7 @@ export const contract: ApiContract = {
 			"auth": true,
 			"parameters": [],
 			"body": {
-				"required": false,
+				"required": true,
 				"schema": {
 					"type": "object",
 					"properties": {
@@ -6326,7 +6326,7 @@ export const contract: ApiContract = {
 				"header:idempotency-key"
 			],
 			"body": {
-				"required": false,
+				"required": true,
 				"schema": {
 					"type": "object",
 					"properties": {
@@ -6367,7 +6367,7 @@ export const contract: ApiContract = {
 				"header:idempotency-key:2"
 			],
 			"body": {
-				"required": false,
+				"required": true,
 				"schema": {
 					"$ref": "#/$defs/SetWorkspaceSubdomainNameBody"
 				}

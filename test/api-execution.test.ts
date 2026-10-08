@@ -265,6 +265,20 @@ describe('responses', () => {
 });
 
 describe('inputs that must not reach the API or the terminal', () => {
+	it.effect('a create without its required flags fails locally and names them', () =>
+		Effect.gen(function* () {
+			const env = yield* signedIn;
+
+			const result = yield* runAkua(['clusters', 'create', '--json'], { env, api: accepted });
+
+			expect(result.exitCode).toBe(2);
+			expect(result.requests).toEqual([]);
+			expect(JSON.parse(result.stdout).error.message).toBe(
+				'Invalid input for akua clusters create: --name is required; --region-id is required.'
+			);
+		}).pipe(Effect.scoped)
+	);
+
 	it.effect('a dot segment in a path argument is rejected before transport', () =>
 		Effect.gen(function* () {
 			const env = yield* signedIn;

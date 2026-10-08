@@ -117,6 +117,12 @@ export function operationError(
 function describeIssue(issue: InputIssue, context: OperationCommandContext): string {
 	const [partition, key] = issue.path;
 	const message = issue.message === 'Missing key' ? 'is required' : issue.message;
+	if (issue.path.length === 1 && partition === 'body' && issue.message === 'Missing key') {
+		const required = context.inputs.flags.filter((flag) => flag.target === 'body' && flag.required);
+		return required.length === 0
+			? 'pass the request body as flags (see --help) or with --input'
+			: required.map((flag) => `--${flag.name} is required`).join('; ');
+	}
 	if (issue.path.length === 2 && partition === 'path' && key !== undefined) {
 		return `<${key}> ${message}`;
 	}
