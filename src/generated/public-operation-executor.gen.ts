@@ -8,8 +8,14 @@ import type { PublicApiClientValue } from "../runtime/public-api";
 export type PublicOperationId =
   | "accessDecisions.explain"
   | "accessDecisions.explainBatch"
+  | "agentCommands.decideApproval"
+  | "agentCommands.openSession"
+  | "agentCommands.stopTurn"
+  | "agentCommands.submitPrompt"
+  | "agentEvents.getSession"
   | "agentEvents.list"
   | "agentEvents.listResponseParts"
+  | "agentEvents.streamResponseParts"
   | "apiTokens.create"
   | "apiTokens.list"
   | "apiTokens.revoke"
@@ -234,8 +240,14 @@ type WithCommandFailure<Value> = Value extends Effect.Effect<
 export interface PublicOperationEffectMap {
   readonly "accessDecisions.explain": WithCommandFailure<ReturnType<PublicApiClientValue["client"]["Access Decisions"]["accessDecisionsExplain"]>>;
   readonly "accessDecisions.explainBatch": WithCommandFailure<ReturnType<PublicApiClientValue["client"]["Access Decisions"]["accessDecisionsExplainBatch"]>>;
+  readonly "agentCommands.decideApproval": WithCommandFailure<ReturnType<PublicApiClientValue["client"]["Agent commands"]["agentCommandsDecideApproval"]>>;
+  readonly "agentCommands.openSession": WithCommandFailure<ReturnType<PublicApiClientValue["client"]["Agent commands"]["agentCommandsOpenSession"]>>;
+  readonly "agentCommands.stopTurn": WithCommandFailure<ReturnType<PublicApiClientValue["client"]["Agent commands"]["agentCommandsStopTurn"]>>;
+  readonly "agentCommands.submitPrompt": WithCommandFailure<ReturnType<PublicApiClientValue["client"]["Agent commands"]["agentCommandsSubmitPrompt"]>>;
+  readonly "agentEvents.getSession": WithCommandFailure<ReturnType<PublicApiClientValue["client"]["Agent events"]["agentEventsGetSession"]>>;
   readonly "agentEvents.list": WithCommandFailure<ReturnType<PublicApiClientValue["client"]["Agent events"]["agentEventsList"]>>;
   readonly "agentEvents.listResponseParts": WithCommandFailure<ReturnType<PublicApiClientValue["client"]["Agent events"]["agentEventsListResponseParts"]>>;
+  readonly "agentEvents.streamResponseParts": WithCommandFailure<ReturnType<PublicApiClientValue["client"]["Agent events"]["agentEventsStreamResponseParts"]>>;
   readonly "apiTokens.create": WithCommandFailure<ReturnType<PublicApiClientValue["client"]["API Tokens"]["apiTokensCreate"]>>;
   readonly "apiTokens.list": WithCommandFailure<ReturnType<PublicApiClientValue["client"]["API Tokens"]["apiTokensList"]>>;
   readonly "apiTokens.revoke": WithCommandFailure<ReturnType<PublicApiClientValue["client"]["API Tokens"]["apiTokensRevoke"]>>;
@@ -547,6 +559,91 @@ function executeOperation(
         const value = yield* executeClientOperation(client, client.client["Access Decisions"]["accessDecisionsExplainBatch"]({ headers, payload }));
         return mode === "raw" ? value : { _tag: "Value", value };
       });
+    case "agentCommands.decideApproval":
+      return Effect.gen(function* () {
+        const input = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ headers: Schema.optionalKey(Schema.Unknown), body: Schema.optionalKey(Schema.Unknown) }),
+          strictParseOptions,
+        )(rawInput);
+        const headers = yield* atEnvelopeKey("headers", Schema.decodeUnknownEffect(
+          Api.AgentCommandsDecideApprovalHeaders,
+          strictParseOptions,
+        )(input.headers ?? {}));
+        const payload = yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
+          Api.AgentCommandsDecideApprovalRequestJson,
+          strictParseOptions,
+        )(input.body));
+        const value = yield* executeClientOperation(client, client.client["Agent commands"]["agentCommandsDecideApproval"]({ headers, payload }));
+        return mode === "raw" ? value : { _tag: "Value", value };
+      });
+    case "agentCommands.openSession":
+      return Effect.gen(function* () {
+        const input = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ headers: Schema.optionalKey(Schema.Unknown), body: Schema.optionalKey(Schema.Unknown) }),
+          strictParseOptions,
+        )(rawInput);
+        const headers = yield* atEnvelopeKey("headers", Schema.decodeUnknownEffect(
+          Api.AgentCommandsOpenSessionHeaders,
+          strictParseOptions,
+        )(input.headers ?? {}));
+        const payload = yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
+          Api.AgentCommandsOpenSessionRequestJson,
+          strictParseOptions,
+        )(input.body));
+        const value = yield* executeClientOperation(client, client.client["Agent commands"]["agentCommandsOpenSession"]({ headers, payload }));
+        return mode === "raw" ? value : { _tag: "Value", value };
+      });
+    case "agentCommands.stopTurn":
+      return Effect.gen(function* () {
+        const input = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ headers: Schema.optionalKey(Schema.Unknown), body: Schema.optionalKey(Schema.Unknown) }),
+          strictParseOptions,
+        )(rawInput);
+        const headers = yield* atEnvelopeKey("headers", Schema.decodeUnknownEffect(
+          Api.AgentCommandsStopTurnHeaders,
+          strictParseOptions,
+        )(input.headers ?? {}));
+        const payload = yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
+          Api.AgentCommandsStopTurnRequestJson,
+          strictParseOptions,
+        )(input.body));
+        const value = yield* executeClientOperation(client, client.client["Agent commands"]["agentCommandsStopTurn"]({ headers, payload }));
+        return mode === "raw" ? value : { _tag: "Value", value };
+      });
+    case "agentCommands.submitPrompt":
+      return Effect.gen(function* () {
+        const input = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ headers: Schema.optionalKey(Schema.Unknown), body: Schema.optionalKey(Schema.Unknown) }),
+          strictParseOptions,
+        )(rawInput);
+        const headers = yield* atEnvelopeKey("headers", Schema.decodeUnknownEffect(
+          Api.AgentCommandsSubmitPromptHeaders,
+          strictParseOptions,
+        )(input.headers ?? {}));
+        const payload = yield* atEnvelopeKey("body", Schema.decodeUnknownEffect(
+          Api.AgentCommandsSubmitPromptRequestJson,
+          strictParseOptions,
+        )(input.body));
+        const value = yield* executeClientOperation(client, client.client["Agent commands"]["agentCommandsSubmitPrompt"]({ headers, payload }));
+        return mode === "raw" ? value : { _tag: "Value", value };
+      });
+    case "agentEvents.getSession":
+      return Effect.gen(function* () {
+        const input = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ path: Schema.optionalKey(Schema.Unknown), headers: Schema.optionalKey(Schema.Unknown) }),
+          strictParseOptions,
+        )(rawInput);
+        const path = yield* atEnvelopeKey("path", Schema.decodeUnknownEffect(
+          Api.AgentEventsGetSessionPathParams,
+          strictParseOptions,
+        )(input.path ?? {}));
+        const headers = yield* atEnvelopeKey("headers", Schema.decodeUnknownEffect(
+          Api.AgentEventsGetSessionHeaders,
+          strictParseOptions,
+        )(input.headers ?? {}));
+        const value = yield* executeClientOperation(client, client.client["Agent events"]["agentEventsGetSession"]({ params: path, headers }));
+        return mode === "raw" ? value : { _tag: "Value", value };
+      });
     case "agentEvents.list":
       return Effect.gen(function* () {
         const input = yield* Schema.decodeUnknownEffect(
@@ -580,6 +677,33 @@ function executeOperation(
         )(input.headers ?? {}));
         const value = yield* executeClientOperation(client, client.client["Agent events"]["agentEventsListResponseParts"]({ query, headers }));
         return mode === "raw" ? value : { _tag: "Value", value };
+      });
+    case "agentEvents.streamResponseParts":
+      return Effect.gen(function* () {
+        const input = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ query: Schema.optionalKey(Schema.Unknown), headers: Schema.optionalKey(Schema.Unknown) }),
+          strictParseOptions,
+        )(rawInput);
+        const query = yield* atEnvelopeKey("query", Schema.decodeUnknownEffect(
+          Api.AgentEventsStreamResponsePartsQuery,
+          strictParseOptions,
+        )(input.query ?? {}));
+        const headers = yield* atEnvelopeKey("headers", Schema.decodeUnknownEffect(
+          Api.AgentEventsStreamResponsePartsHeaders,
+          strictParseOptions,
+        )(input.headers ?? {}));
+        const stream = yield* executeClientOperation(client, client.client["Agent events"]["agentEventsStreamResponseParts"]({ query, headers }));
+        if (mode === "raw") return stream;
+        const status = yield* Ref.get(client.responseStatus);
+        return {
+          _tag: "Stream",
+          stream: stream.pipe(
+            Stream.mapError(
+              (error) =>
+                new PublicOperationResponseFailure({ status, error }),
+            ),
+          ),
+        };
       });
     case "apiTokens.create":
       return Effect.gen(function* () {

@@ -52,6 +52,140 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
     }
   },
   {
+    "operation_id": "agentCommands.decideApproval",
+    "command": "agent-commands decide-approval",
+    "resource": "agent-commands",
+    "action": "decide-approval",
+    "method": "POST",
+    "path": "/agent_approvals:decide",
+    "tag": "Agent commands",
+    "summary": "Decide an exact agent tool approval",
+    "visibility": "PUBLIC",
+    "requires_auth": true,
+    "parameters": [
+      {
+        "name": "akua-context",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "body": {
+      "required": true,
+      "example": {
+        "approval_id": "<approval_id>",
+        "binding": "<binding>",
+        "revision": 0,
+        "decision": "APPROVE"
+      }
+    }
+  },
+  {
+    "operation_id": "agentCommands.openSession",
+    "command": "agent-commands open-session",
+    "resource": "agent-commands",
+    "action": "open-session",
+    "method": "POST",
+    "path": "/agent_sessions",
+    "tag": "Agent commands",
+    "summary": "Open an agent conversation",
+    "visibility": "PUBLIC",
+    "requires_auth": true,
+    "parameters": [
+      {
+        "name": "akua-context",
+        "in": "header",
+        "required": false
+      },
+      {
+        "name": "idempotency-key",
+        "in": "header",
+        "required": true
+      }
+    ],
+    "body": {
+      "required": true,
+      "example": {
+        "agent_id": "<agent_id>"
+      }
+    }
+  },
+  {
+    "operation_id": "agentCommands.stopTurn",
+    "command": "agent-commands stop-turn",
+    "resource": "agent-commands",
+    "action": "stop-turn",
+    "method": "POST",
+    "path": "/agent_turns:stop",
+    "tag": "Agent commands",
+    "summary": "Stop an exact agent Turn",
+    "visibility": "PUBLIC",
+    "requires_auth": true,
+    "parameters": [
+      {
+        "name": "akua-context",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "body": {
+      "required": true,
+      "example": {
+        "session_id": "<session_id>",
+        "turn_id": "<turn_id>"
+      }
+    }
+  },
+  {
+    "operation_id": "agentCommands.submitPrompt",
+    "command": "agent-commands submit-prompt",
+    "resource": "agent-commands",
+    "action": "submit-prompt",
+    "method": "POST",
+    "path": "/agent_prompts",
+    "tag": "Agent commands",
+    "summary": "Submit an agent prompt",
+    "visibility": "PUBLIC",
+    "requires_auth": true,
+    "parameters": [
+      {
+        "name": "akua-context",
+        "in": "header",
+        "required": false
+      }
+    ],
+    "body": {
+      "required": true,
+      "example": {
+        "session_id": "<session_id>",
+        "message": {}
+      }
+    }
+  },
+  {
+    "operation_id": "agentEvents.getSession",
+    "command": "agent-events get-session",
+    "resource": "agent-events",
+    "action": "get-session",
+    "method": "GET",
+    "path": "/agent_sessions/{id}",
+    "tag": "Agent events",
+    "summary": "Recover persisted agent Session state",
+    "visibility": "PUBLIC",
+    "requires_auth": true,
+    "parameters": [
+      {
+        "name": "id",
+        "in": "path",
+        "required": true
+      },
+      {
+        "name": "akua-context",
+        "in": "header",
+        "required": false
+      }
+    ]
+  },
+  {
     "operation_id": "agentEvents.list",
     "command": "agent-events list",
     "resource": "agent-events",
@@ -144,6 +278,35 @@ export const commandRegistry: readonly CommandDefinition<PublicOperationId>[] = 
       },
       {
         "name": "limit",
+        "in": "query",
+        "required": false
+      }
+    ]
+  },
+  {
+    "operation_id": "agentEvents.streamResponseParts",
+    "command": "agent-events stream-response-parts",
+    "resource": "agent-events",
+    "action": "stream-response-parts",
+    "method": "GET",
+    "path": "/agent_response_parts:stream",
+    "tag": "Agent events",
+    "summary": "Follow committed agent response parts",
+    "visibility": "PUBLIC",
+    "requires_auth": true,
+    "parameters": [
+      {
+        "name": "akua-context",
+        "in": "header",
+        "required": false
+      },
+      {
+        "name": "session",
+        "in": "query",
+        "required": true
+      },
+      {
+        "name": "after",
         "in": "query",
         "required": false
       }
