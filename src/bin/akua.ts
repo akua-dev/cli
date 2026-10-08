@@ -6,7 +6,7 @@ import { runAkua } from '../cli/main';
 import { CliLive } from '../runtime/services-live';
 import type { CliServices } from '../runtime/services';
 
-export const VERSION = '0.11.3'; // x-release-please-version
+export const VERSION = '0.11.4'; // x-release-please-version
 
 export function main(
 	argv: readonly string[],

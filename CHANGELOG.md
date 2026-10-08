@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.11.4](https://github.com/akua-dev/cli/compare/v0.11.3...v0.11.4)
+
+### Features
+
+- Canonical Bazel release archives bundle the source-built Package SDK, native bindings, and render engines at version 0.9.6.
+
 ## [0.11.3](https://github.com/akua-dev/cli/compare/v0.11.2...v0.11.3)
 
 ### Fixes

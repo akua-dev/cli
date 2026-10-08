@@ -29,6 +29,12 @@ mise run build:binary
 `mise run check` typechecks, builds, and tests this standalone checkout.
 Public API changes also require the canonical cnap Bazel drift gate below.
 
+Standalone development uses the committed npm SDK 0.9.4 lock. Canonical cnap
+Bazel releases select the source SDK, native bindings, and WASM engines at
+0.9.6 through the private workspace graph. Each release archive contains its
+matching source-built native binding; its manifest records the packed SDK
+and native versions.
+
 ## Command generation
 
 The command surface is generated from cnap's committed public OpenAPI document,
