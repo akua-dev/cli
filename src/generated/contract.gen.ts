@@ -151,12 +151,11 @@ export const contract: ApiContract = {
 			"name": "akua-context",
 			"in": "header",
 			"required": false,
-			"description": "Optional workspace/scope context for the request. Carries a single workspace wire id (`ws_…`) today. Only needed for broad tokens — a workspace-owned token implies its workspace.",
 			"schema": {
 				"type": "string",
 				"minLength": 1,
 				"maxLength": 53,
-				"description": "Optional workspace/scope context for the request. Carries a single workspace wire id (`ws_…`) today. Only needed for broad tokens — a workspace-owned token implies its workspace."
+				"description": "Optional workspace/scope context for the request. Carries a single workspace wire id (`ws_…`) today. Only needed for broad tokens - a workspace-owned token implies its workspace."
 			}
 		},
 		"header:akua-context:2": {
@@ -181,7 +180,17 @@ export const contract: ApiContract = {
 			"name": "idempotency-key",
 			"in": "header",
 			"required": false,
-			"description": "Optional caller-supplied idempotency key. Any non-empty key up to 64 characters is accepted. Endpoint-specific documentation describes how the key is used.",
+			"schema": {
+				"type": "string",
+				"description": "Optional caller-supplied idempotency key. Any non-empty key up to 64 characters is accepted; repeated requests with the same key in the same workspace resolve consistently instead of creating a duplicate. When omitted, the server mints a key for this request.",
+				"minLength": 1,
+				"maxLength": 64
+			}
+		},
+		"header:idempotency-key:2": {
+			"name": "idempotency-key",
+			"in": "header",
+			"required": false,
 			"schema": {
 				"type": "string",
 				"minLength": 1,
@@ -189,11 +198,10 @@ export const contract: ApiContract = {
 				"description": "Optional caller-supplied idempotency key. Any non-empty key up to 64 characters is accepted. Endpoint-specific documentation describes how the key is used."
 			}
 		},
-		"header:idempotency-key:2": {
+		"header:idempotency-key:3": {
 			"name": "idempotency-key",
 			"in": "header",
 			"required": true,
-			"description": "Required caller-supplied idempotency key. Any non-empty key up to 64 characters is accepted. Endpoint-specific documentation describes how the key is used.",
 			"schema": {
 				"type": "string",
 				"minLength": 1,
@@ -201,35 +209,21 @@ export const contract: ApiContract = {
 				"description": "Required caller-supplied idempotency key. Any non-empty key up to 64 characters is accepted. Endpoint-specific documentation describes how the key is used."
 			}
 		},
-		"header:idempotency-key:3": {
-			"name": "idempotency-key",
-			"in": "header",
-			"required": true,
-			"description": "Required caller key for idempotent machine lifecycle operations.",
-			"schema": {
-				"type": "string",
-				"minLength": 1,
-				"maxLength": 64,
-				"description": "Required caller key for idempotent machine lifecycle operations."
-			}
-		},
 		"header:idempotency-key:4": {
 			"name": "idempotency-key",
 			"in": "header",
-			"required": false,
-			"description": "Optional caller-supplied idempotency key. Any non-empty key up to 64 characters is accepted; repeated requests with the same key in the same workspace resolve consistently instead of creating a duplicate. When omitted, the server mints a key for this request.",
+			"required": true,
 			"schema": {
 				"type": "string",
+				"description": "Required caller key for idempotent machine lifecycle operations.",
 				"minLength": 1,
-				"maxLength": 64,
-				"description": "Optional caller-supplied idempotency key. Any non-empty key up to 64 characters is accepted; repeated requests with the same key in the same workspace resolve consistently instead of creating a duplicate. When omitted, the server mints a key for this request."
+				"maxLength": 64
 			}
 		},
 		"header:if-match": {
 			"name": "if-match",
 			"in": "header",
 			"required": true,
-			"description": "The `etag` of the resource version the client last read. Required on writes when the resource exposes an `etag` field. Mismatch returns 409 `ABORTED` with the current etag in the error metadata.",
 			"schema": {
 				"type": "string",
 				"minLength": 1,
@@ -241,12 +235,11 @@ export const contract: ApiContract = {
 			"name": "if-match",
 			"in": "header",
 			"required": false,
-			"description": "Optional optimistic concurrency token for clients that track the latest operation revision.",
 			"schema": {
 				"type": "string",
+				"description": "Optional optimistic concurrency token for clients that track the latest operation revision.",
 				"minLength": 1,
-				"maxLength": 64,
-				"description": "Optional optimistic concurrency token for clients that track the latest operation revision."
+				"maxLength": 64
 			}
 		},
 		"header:if-match:3": {
@@ -261,7 +254,6 @@ export const contract: ApiContract = {
 			"name": "chk_id",
 			"in": "path",
 			"required": true,
-			"description": "Checkout session ID",
 			"schema": {
 				"type": "string",
 				"description": "Checkout session ID"
@@ -271,144 +263,132 @@ export const contract: ApiContract = {
 			"name": "custom_domain_id",
 			"in": "path",
 			"required": true,
-			"description": "Custom domain ID",
 			"schema": {
 				"type": "string",
+				"description": "Custom domain ID",
 				"minLength": 1,
-				"maxLength": 54,
-				"description": "Custom domain ID"
+				"maxLength": 54
 			}
 		},
 		"path:id": {
 			"name": "id",
 			"in": "path",
 			"required": true,
-			"description": "Snippet ID",
 			"schema": {
 				"type": "string",
+				"description": "Token ID. Prefixed form `tok_<id>` is canonical.",
 				"minLength": 1,
-				"maxLength": 54,
-				"description": "Snippet ID"
+				"maxLength": 54
 			}
 		},
 		"path:id:10": {
 			"name": "id",
 			"in": "path",
 			"required": true,
-			"description": "Workspace ID",
 			"schema": {
 				"type": "string",
+				"description": "Offer ID",
 				"minLength": 1,
-				"maxLength": 53,
-				"description": "Workspace ID"
+				"maxLength": 56
 			}
 		},
 		"path:id:11": {
 			"name": "id",
 			"in": "path",
 			"required": true,
-			"description": "Token ID. Prefixed form `tok_<id>` is canonical.",
 			"schema": {
 				"type": "string",
+				"description": "Operation ID. Prefixed form `op_<id>` is canonical; bare IDs accepted during transition.",
 				"minLength": 1,
-				"maxLength": 54,
-				"description": "Token ID. Prefixed form `tok_<id>` is canonical."
+				"maxLength": 53
 			}
 		},
 		"path:id:12": {
 			"name": "id",
 			"in": "path",
 			"required": true,
-			"description": "Cluster ID.",
 			"schema": {
 				"type": "string",
+				"description": "Order draft ID",
 				"minLength": 1,
-				"maxLength": 54,
-				"description": "Cluster ID."
+				"maxLength": 55
 			}
 		},
 		"path:id:13": {
 			"name": "id",
 			"in": "path",
 			"required": true,
-			"description": "Install ID",
 			"schema": {
 				"type": "string",
+				"description": "Organization ID. Prefixed form `org_<id>` is canonical.",
 				"minLength": 1,
-				"maxLength": 55,
-				"description": "Install ID"
+				"maxLength": 54
 			}
 		},
 		"path:id:14": {
 			"name": "id",
 			"in": "path",
 			"required": true,
-			"description": "Repository ID",
 			"schema": {
 				"type": "string",
+				"description": "Package ID",
 				"minLength": 1,
-				"maxLength": 55,
-				"description": "Repository ID"
+				"maxLength": 54
 			}
 		},
 		"path:id:15": {
 			"name": "id",
 			"in": "path",
 			"required": true,
-			"description": "Secret ID. Prefixed form `sec_<id>` is canonical.",
 			"schema": {
 				"type": "string",
+				"description": "Product ID",
 				"minLength": 1,
-				"maxLength": 54,
-				"description": "Secret ID. Prefixed form `sec_<id>` is canonical."
+				"maxLength": 55
 			}
 		},
 		"path:id:16": {
 			"name": "id",
 			"in": "path",
 			"required": true,
-			"description": "Organization ID. Prefixed form `org_<id>` is canonical.",
 			"schema": {
 				"type": "string",
+				"description": "Region ID. Prefixed form `reg_<id>` is canonical.",
 				"minLength": 1,
-				"maxLength": 54,
-				"description": "Organization ID. Prefixed form `org_<id>` is canonical."
+				"maxLength": 54
 			}
 		},
 		"path:id:17": {
 			"name": "id",
 			"in": "path",
 			"required": true,
-			"description": "Notification ID. Prefixed form `ntf_<id>` is canonical.",
 			"schema": {
 				"type": "string",
+				"description": "Registry connection ID. Prefixed form `rcon_<id>` is canonical.",
 				"minLength": 1,
-				"maxLength": 54,
-				"description": "Notification ID. Prefixed form `ntf_<id>` is canonical."
+				"maxLength": 55
 			}
 		},
 		"path:id:18": {
 			"name": "id",
 			"in": "path",
 			"required": true,
-			"description": "Region ID. Prefixed form `reg_<id>` is canonical.",
 			"schema": {
 				"type": "string",
+				"description": "Repository ID",
 				"minLength": 1,
-				"maxLength": 54,
-				"description": "Region ID. Prefixed form `reg_<id>` is canonical."
+				"maxLength": 55
 			}
 		},
 		"path:id:19": {
 			"name": "id",
 			"in": "path",
 			"required": true,
-			"description": "Registry connection ID. Prefixed form `rcon_<id>` is canonical.",
 			"schema": {
 				"type": "string",
+				"description": "Secret ID. Prefixed form `sec_<id>` is canonical.",
 				"minLength": 1,
-				"maxLength": 55,
-				"description": "Registry connection ID. Prefixed form `rcon_<id>` is canonical."
+				"maxLength": 54
 			}
 		},
 		"path:id:2": {
@@ -417,20 +397,20 @@ export const contract: ApiContract = {
 			"required": true,
 			"schema": {
 				"type": "string",
+				"description": "Cloudflare connection ID. Prefixed form `cfcon_<id>` is canonical.",
 				"minLength": 1,
-				"maxLength": 54
+				"maxLength": 56
 			}
 		},
 		"path:id:20": {
 			"name": "id",
 			"in": "path",
 			"required": true,
-			"description": "Cloudflare connection ID. Prefixed form `cfcon_<id>` is canonical.",
 			"schema": {
 				"type": "string",
+				"description": "Snippet ID",
 				"minLength": 1,
-				"maxLength": 56,
-				"description": "Cloudflare connection ID. Prefixed form `cfcon_<id>` is canonical."
+				"maxLength": 54
 			}
 		},
 		"path:id:21": {
@@ -445,12 +425,11 @@ export const contract: ApiContract = {
 			"name": "id",
 			"in": "path",
 			"required": true,
-			"description": "Dashboard ID",
 			"schema": {
 				"type": "string",
+				"description": "Cluster ID.",
 				"minLength": 1,
-				"maxLength": 55,
-				"description": "Dashboard ID"
+				"maxLength": 54
 			}
 		},
 		"path:id:4": {
@@ -460,67 +439,61 @@ export const contract: ApiContract = {
 			"schema": {
 				"type": "string",
 				"minLength": 1,
-				"maxLength": 55
+				"maxLength": 54
 			}
 		},
 		"path:id:5": {
 			"name": "id",
 			"in": "path",
 			"required": true,
-			"description": "Product ID",
 			"schema": {
 				"type": "string",
+				"description": "Workspace ID",
 				"minLength": 1,
-				"maxLength": 55,
-				"description": "Product ID"
+				"maxLength": 53
 			}
 		},
 		"path:id:6": {
 			"name": "id",
 			"in": "path",
 			"required": true,
-			"description": "Offer ID",
 			"schema": {
 				"type": "string",
+				"description": "Dashboard ID",
 				"minLength": 1,
-				"maxLength": 56,
-				"description": "Offer ID"
+				"maxLength": 55
 			}
 		},
 		"path:id:7": {
 			"name": "id",
 			"in": "path",
 			"required": true,
-			"description": "Order draft ID",
 			"schema": {
 				"type": "string",
 				"minLength": 1,
-				"maxLength": 55,
-				"description": "Order draft ID"
+				"maxLength": 55
 			}
 		},
 		"path:id:8": {
 			"name": "id",
 			"in": "path",
 			"required": true,
-			"description": "Operation ID. Prefixed form `op_<id>` is canonical; bare IDs accepted during transition.",
 			"schema": {
 				"type": "string",
+				"description": "Install ID",
 				"minLength": 1,
-				"maxLength": 53,
-				"description": "Operation ID. Prefixed form `op_<id>` is canonical; bare IDs accepted during transition."
+				"maxLength": 55
 			}
 		},
 		"path:id:9": {
 			"name": "id",
 			"in": "path",
 			"required": true,
-			"description": "Package ID",
 			"schema": {
 				"type": "string",
+				"description": "Notification ID. Prefixed form `ntf_<id>` is canonical.",
 				"minLength": 1,
-				"maxLength": 54,
-				"description": "Package ID"
+				"maxLength": 54
 			}
 		},
 		"path:invitationId": {
@@ -536,7 +509,6 @@ export const contract: ApiContract = {
 			"name": "metric",
 			"in": "path",
 			"required": true,
-			"description": "Quota metric (URL-encoded service/resource).",
 			"schema": {
 				"type": "string",
 				"description": "Quota metric (URL-encoded service/resource)."
@@ -546,19 +518,17 @@ export const contract: ApiContract = {
 			"name": "offer",
 			"in": "path",
 			"required": true,
-			"description": "Parent offer ID",
 			"schema": {
 				"type": "string",
+				"description": "Parent offer ID",
 				"minLength": 1,
-				"maxLength": 56,
-				"description": "Parent offer ID"
+				"maxLength": 56
 			}
 		},
 		"path:package_id": {
 			"name": "package_id",
 			"in": "path",
 			"required": true,
-			"description": "Artifact Hub package id",
 			"schema": {
 				"type": "string",
 				"description": "Artifact Hub package id"
@@ -568,7 +538,6 @@ export const contract: ApiContract = {
 			"name": "path",
 			"in": "path",
 			"required": true,
-			"description": "Kube API path forwarded verbatim",
 			"schema": {
 				"type": "string",
 				"description": "Kube API path forwarded verbatim"
@@ -578,36 +547,33 @@ export const contract: ApiContract = {
 			"name": "preview_hostname_id",
 			"in": "path",
 			"required": true,
-			"description": "Preview hostname ID",
 			"schema": {
 				"type": "string",
+				"description": "Preview hostname ID",
 				"minLength": 1,
-				"maxLength": 54,
-				"description": "Preview hostname ID"
+				"maxLength": 54
 			}
 		},
 		"path:render_id": {
 			"name": "render_id",
 			"in": "path",
 			"required": true,
-			"description": "Render ID",
 			"schema": {
 				"type": "string",
+				"description": "Render ID",
 				"minLength": 1,
-				"maxLength": 54,
-				"description": "Render ID"
+				"maxLength": 54
 			}
 		},
 		"path:req_id": {
 			"name": "req_id",
 			"in": "path",
 			"required": true,
-			"description": "Subscription change request ID",
 			"schema": {
 				"type": "string",
+				"description": "Subscription change request ID",
 				"minLength": 1,
-				"maxLength": 55,
-				"description": "Subscription change request ID"
+				"maxLength": 55
 			}
 		},
 		"path:revision_id": {
@@ -634,39 +600,35 @@ export const contract: ApiContract = {
 			"name": "userId",
 			"in": "path",
 			"required": true,
-			"description": "Member user ID",
 			"schema": {
 				"type": "string",
-				"description": "Member user ID"
+				"description": "User ID of the member whose role is being updated",
+				"minLength": 1
 			}
 		},
 		"path:userId:2": {
 			"name": "userId",
 			"in": "path",
 			"required": true,
-			"description": "User ID of the member whose role is being updated",
 			"schema": {
 				"type": "string",
-				"minLength": 1,
-				"description": "User ID of the member whose role is being updated"
+				"description": "User ID of the member being removed",
+				"minLength": 1
 			}
 		},
 		"path:userId:3": {
 			"name": "userId",
 			"in": "path",
 			"required": true,
-			"description": "User ID of the member being removed",
 			"schema": {
 				"type": "string",
-				"minLength": 1,
-				"description": "User ID of the member being removed"
+				"description": "Member user ID"
 			}
 		},
 		"path:version": {
 			"name": "version",
 			"in": "path",
 			"required": true,
-			"description": "Chart version",
 			"schema": {
 				"type": "string",
 				"description": "Chart version"
@@ -686,24 +648,22 @@ export const contract: ApiContract = {
 			"name": "vid",
 			"in": "path",
 			"required": true,
-			"description": "SecretVersion ID. Prefixed form `secv_<id>` is canonical.",
 			"schema": {
 				"type": "string",
+				"description": "SecretVersion ID. Prefixed form `secv_<id>` is canonical.",
 				"minLength": 1,
-				"maxLength": 55,
-				"description": "SecretVersion ID. Prefixed form `secv_<id>` is canonical."
+				"maxLength": 55
 			}
 		},
 		"path:vid:2": {
 			"name": "vid",
 			"in": "path",
 			"required": true,
-			"description": "SecretVersion ID (`secv_<id>`), `latest`, or a version alias such as `current`.",
 			"schema": {
 				"type": "string",
+				"description": "SecretVersion ID (`secv_<id>`), `latest`, or a version alias such as `current`.",
 				"minLength": 1,
-				"maxLength": 128,
-				"description": "SecretVersion ID (`secv_<id>`), `latest`, or a version alias such as `current`."
+				"maxLength": 128
 			}
 		},
 		"path:wbs_id": {
@@ -750,12 +710,11 @@ export const contract: ApiContract = {
 			"name": "agent",
 			"in": "query",
 			"required": false,
-			"description": "Filter to change requests created by this agent",
 			"schema": {
 				"type": "string",
+				"description": "Filter to change requests created by this agent",
 				"minLength": 1,
-				"maxLength": 54,
-				"description": "Filter to change requests created by this agent"
+				"maxLength": 54
 			}
 		},
 		"query:agent_role": {
@@ -794,31 +753,28 @@ export const contract: ApiContract = {
 			"name": "cluster_id",
 			"in": "query",
 			"required": false,
-			"description": "Cluster ID to include cluster-scoped concurrency quotas",
 			"schema": {
 				"type": "string",
+				"description": "Cluster ID to include cluster-scoped concurrency quotas",
 				"minLength": 1,
-				"maxLength": 54,
-				"description": "Cluster ID to include cluster-scoped concurrency quotas"
+				"maxLength": 54
 			}
 		},
 		"query:container": {
 			"name": "container",
 			"in": "query",
 			"required": false,
-			"description": "Container name",
 			"schema": {
 				"type": "string",
+				"description": "Container name",
 				"minLength": 1,
-				"maxLength": 253,
-				"description": "Container name"
+				"maxLength": 253
 			}
 		},
 		"query:cursor": {
 			"name": "cursor",
 			"in": "query",
 			"required": false,
-			"description": "Pagination cursor from a previous response's `next_cursor`.",
 			"schema": {
 				"type": "string",
 				"description": "Pagination cursor from a previous response's `next_cursor`."
@@ -883,14 +839,17 @@ export const contract: ApiContract = {
 			"name": "follow",
 			"in": "query",
 			"required": false,
-			"description": "Follow log output",
 			"schema": {
-				"type": [
-					"boolean",
-					"null"
+				"anyOf": [
+					{
+						"type": "boolean"
+					},
+					{
+						"type": "null"
+					}
 				],
-				"default": true,
-				"description": "Follow log output"
+				"description": "Follow log output",
+				"default": true
 			}
 		},
 		"query:follow:2": {
@@ -906,9 +865,13 @@ export const contract: ApiContract = {
 			"in": "query",
 			"required": false,
 			"schema": {
-				"type": [
-					"boolean",
-					"null"
+				"anyOf": [
+					{
+						"type": "boolean"
+					},
+					{
+						"type": "null"
+					}
 				],
 				"default": false
 			}
@@ -917,12 +880,11 @@ export const contract: ApiContract = {
 			"name": "fork_repository",
 			"in": "query",
 			"required": false,
-			"description": "Filter to the change request backed by this fork repository",
 			"schema": {
 				"type": "string",
+				"description": "Filter to the change request backed by this fork repository",
 				"minLength": 1,
-				"maxLength": 55,
-				"description": "Filter to the change request backed by this fork repository"
+				"maxLength": 55
 			}
 		},
 		"query:forked_from_session": {
@@ -938,7 +900,6 @@ export const contract: ApiContract = {
 			"name": "include_schema",
 			"in": "query",
 			"required": false,
-			"description": "Also fetch the chart's published values-schema and merge it in",
 			"schema": {
 				"type": "string",
 				"enum": [
@@ -952,7 +913,6 @@ export const contract: ApiContract = {
 			"name": "kind",
 			"in": "query",
 			"required": false,
-			"description": "Filter by secret kind.",
 			"schema": {
 				"type": "string",
 				"description": "Filter by secret kind."
@@ -962,26 +922,24 @@ export const contract: ApiContract = {
 			"name": "limit",
 			"in": "query",
 			"required": false,
-			"description": "Items per page (1-100, default 50)",
 			"schema": {
 				"type": "integer",
-				"minimum": 1,
-				"maximum": 100,
+				"description": "Items per page (1-100, default 50)",
 				"default": 50,
-				"description": "Items per page (1-100, default 50)"
+				"minimum": 1,
+				"maximum": 100
 			}
 		},
 		"query:limit:2": {
 			"name": "limit",
 			"in": "query",
 			"required": false,
-			"description": "Dashboard revisions per page (1-10, default 10)",
 			"schema": {
 				"type": "integer",
-				"minimum": 1,
-				"maximum": 10,
+				"description": "Dashboard revisions per page (1-10, default 10)",
 				"default": 10,
-				"description": "Dashboard revisions per page (1-10, default 10)"
+				"minimum": 1,
+				"maximum": 10
 			}
 		},
 		"query:limit:3": {
@@ -1014,19 +972,17 @@ export const contract: ApiContract = {
 			"name": "offer",
 			"in": "query",
 			"required": false,
-			"description": "Filter by offer ID",
 			"schema": {
 				"type": "string",
+				"description": "Filter by offer ID",
 				"minLength": 1,
-				"maxLength": 56,
-				"description": "Filter by offer ID"
+				"maxLength": 56
 			}
 		},
 		"query:owner_id": {
 			"name": "owner_id",
 			"in": "query",
 			"required": false,
-			"description": "Required when `owner_type` is set. Ignored otherwise.",
 			"schema": {
 				"type": "string",
 				"description": "Required when `owner_type` is set. Ignored otherwise."
@@ -1053,12 +1009,11 @@ export const contract: ApiContract = {
 			"name": "parent_repository",
 			"in": "query",
 			"required": false,
-			"description": "Filter to change requests targeting this parent repository",
 			"schema": {
 				"type": "string",
+				"description": "Filter to change requests targeting this parent repository",
 				"minLength": 1,
-				"maxLength": 55,
-				"description": "Filter to change requests targeting this parent repository"
+				"maxLength": 55
 			}
 		},
 		"query:parent_session": {
@@ -1074,12 +1029,11 @@ export const contract: ApiContract = {
 			"name": "pod",
 			"in": "query",
 			"required": false,
-			"description": "Pod name (all pods if omitted)",
 			"schema": {
 				"type": "string",
+				"description": "Pod name (all pods if omitted)",
 				"minLength": 1,
-				"maxLength": 253,
-				"description": "Pod name (all pods if omitted)"
+				"maxLength": 253
 			}
 		},
 		"query:product_id": {
@@ -1096,7 +1050,6 @@ export const contract: ApiContract = {
 			"name": "purpose",
 			"in": "query",
 			"required": false,
-			"description": "Filter by repository purpose (deploy / package / repository_change_request / workspace)",
 			"schema": {
 				"type": "string",
 				"enum": [
@@ -1130,26 +1083,28 @@ export const contract: ApiContract = {
 			"name": "short_hash",
 			"in": "query",
 			"required": true,
-			"description": "Offer short hash from the customer-clicked URL",
 			"schema": {
 				"type": "string",
+				"description": "Offer short hash from the customer-clicked URL",
 				"minLength": 1,
-				"maxLength": 64,
-				"description": "Offer short hash from the customer-clicked URL"
+				"maxLength": 64
 			}
 		},
 		"query:since_seconds": {
 			"name": "since_seconds",
 			"in": "query",
 			"required": false,
-			"description": "Only return logs newer than this many seconds",
 			"schema": {
-				"type": [
-					"integer",
-					"null"
+				"anyOf": [
+					{
+						"type": "integer"
+					},
+					{
+						"type": "null"
+					}
 				],
-				"default": 0,
-				"description": "Only return logs newer than this many seconds"
+				"description": "Only return logs newer than this many seconds",
+				"default": 0
 			}
 		},
 		"query:snippet": {
@@ -1192,9 +1147,10 @@ export const contract: ApiContract = {
 			"schema": {
 				"type": "string",
 				"enum": [
-					"succeeded",
+					"provisioning",
+					"active",
 					"failed",
-					"timed_out"
+					"releasing"
 				]
 			}
 		},
@@ -1202,7 +1158,6 @@ export const contract: ApiContract = {
 			"name": "state",
 			"in": "query",
 			"required": false,
-			"description": "Machine lifecycle state.",
 			"schema": {
 				"type": "string",
 				"enum": [
@@ -1220,7 +1175,21 @@ export const contract: ApiContract = {
 			"name": "state",
 			"in": "query",
 			"required": false,
-			"description": "Filter by lifecycle state",
+			"schema": {
+				"type": "string",
+				"enum": [
+					"provisioning",
+					"active",
+					"evicted",
+					"releasing"
+				],
+				"description": "Current preview hostname lifecycle state."
+			}
+		},
+		"query:state:4": {
+			"name": "state",
+			"in": "query",
+			"required": false,
 			"schema": {
 				"type": "string",
 				"enum": [
@@ -1237,11 +1206,10 @@ export const contract: ApiContract = {
 				"description": "Filter by lifecycle state"
 			}
 		},
-		"query:state:4": {
+		"query:state:5": {
 			"name": "state",
 			"in": "query",
 			"required": false,
-			"description": "Filter by secret version state.",
 			"schema": {
 				"type": "string",
 				"enum": [
@@ -1252,22 +1220,6 @@ export const contract: ApiContract = {
 				"description": "Filter by secret version state."
 			}
 		},
-		"query:state:5": {
-			"name": "state",
-			"in": "query",
-			"required": false,
-			"description": "Current preview hostname lifecycle state.",
-			"schema": {
-				"type": "string",
-				"enum": [
-					"provisioning",
-					"active",
-					"evicted",
-					"releasing"
-				],
-				"description": "Current preview hostname lifecycle state."
-			}
-		},
 		"query:state:6": {
 			"name": "state",
 			"in": "query",
@@ -1275,10 +1227,9 @@ export const contract: ApiContract = {
 			"schema": {
 				"type": "string",
 				"enum": [
-					"provisioning",
-					"active",
+					"succeeded",
 					"failed",
-					"releasing"
+					"timed_out"
 				]
 			}
 		},
@@ -1286,20 +1237,29 @@ export const contract: ApiContract = {
 			"name": "status",
 			"in": "query",
 			"required": false,
-			"description": "Wizard phase. Driven by the order draft actor; mirrored on every patch to the row so reactive UIs render one column. `done` and `terminated` are terminal.",
 			"schema": {
-				"$ref": "#/$defs/OrderDraftStatus"
+				"allOf": [
+					{
+						"$ref": "#/$defs/OrderDraftStatus"
+					},
+					{
+						"description": "Wizard phase. Driven by the order draft actor; mirrored on every patch to the row so reactive UIs render one column. `done` and `terminated` are terminal."
+					}
+				]
 			}
 		},
 		"query:tail": {
 			"name": "tail",
 			"in": "query",
 			"required": false,
-			"description": "Lines to tail",
 			"schema": {
-				"type": [
-					"integer",
-					"null"
+				"anyOf": [
+					{
+						"type": "integer"
+					},
+					{
+						"type": "null"
+					}
 				],
 				"description": "Lines to tail"
 			}
@@ -1321,12 +1281,11 @@ export const contract: ApiContract = {
 			"name": "timeout",
 			"in": "query",
 			"required": false,
-			"description": "Max seconds to wait for the operation to reach a terminal state. Default 30, max 60.",
 			"schema": {
 				"type": "integer",
+				"description": "Max seconds to wait for the operation to reach a terminal state. Default 30, max 60.",
 				"minimum": 1,
-				"maximum": 60,
-				"description": "Max seconds to wait for the operation to reach a terminal state. Default 30, max 60."
+				"maximum": 60
 			}
 		},
 		"query:track": {
@@ -1352,7 +1311,6 @@ export const contract: ApiContract = {
 			"name": "unread",
 			"in": "query",
 			"required": false,
-			"description": "When set to `true`, only unread notifications are returned.",
 			"schema": {
 				"type": "string",
 				"enum": [
@@ -1366,15 +1324,13 @@ export const contract: ApiContract = {
 			"name": "view",
 			"in": "query",
 			"required": false,
-			"description": "Control whether output and error details are included.",
 			"schema": {
 				"type": "string",
 				"enum": [
 					"basic",
 					"full"
 				],
-				"default": "basic",
-				"description": "Control whether output and error details are included."
+				"default": "basic"
 			}
 		},
 		"query:view:2": {
@@ -1387,6 +1343,7 @@ export const contract: ApiContract = {
 					"basic",
 					"full"
 				],
+				"description": "Controls whether sensitive source provenance is included. `basic` omits `composed_from_sources`.",
 				"default": "basic"
 			}
 		},
@@ -1394,45 +1351,42 @@ export const contract: ApiContract = {
 			"name": "view",
 			"in": "query",
 			"required": false,
-			"description": "Controls whether sensitive source provenance is included. `basic` omits `composed_from_sources`.",
 			"schema": {
 				"type": "string",
 				"enum": [
 					"basic",
 					"full"
 				],
-				"default": "basic",
-				"description": "Controls whether sensitive source provenance is included. `basic` omits `composed_from_sources`."
+				"description": "Controls inclusion of implementation detail fields.",
+				"default": "basic"
 			}
 		},
 		"query:view:4": {
 			"name": "view",
 			"in": "query",
 			"required": false,
-			"description": "Controls inclusion of implementation detail fields.",
 			"schema": {
 				"type": "string",
 				"enum": [
 					"basic",
 					"full"
 				],
-				"default": "basic",
-				"description": "Controls inclusion of implementation detail fields."
+				"description": "Basic view is the default; full includes implementation details like render hashes and implementation refs.",
+				"default": "basic"
 			}
 		},
 		"query:view:5": {
 			"name": "view",
 			"in": "query",
 			"required": false,
-			"description": "Basic view is the default; full includes implementation details like render hashes and implementation refs.",
 			"schema": {
 				"type": "string",
 				"enum": [
 					"basic",
 					"full"
 				],
-				"default": "basic",
-				"description": "Basic view is the default; full includes implementation details like render hashes and implementation refs."
+				"description": "Control whether output and error details are included.",
+				"default": "basic"
 			}
 		},
 		"query:workspace": {
@@ -1539,9 +1493,9 @@ export const contract: ApiContract = {
 			"summary": "List API tokens",
 			"auth": true,
 			"parameters": [
+				"header:akua-context",
 				"query:cursor",
-				"query:limit",
-				"header:akua-context"
+				"query:limit"
 			]
 		},
 		{
@@ -1551,7 +1505,7 @@ export const contract: ApiContract = {
 			"summary": "Revoke an API token",
 			"auth": true,
 			"parameters": [
-				"path:id:11",
+				"path:id",
 				"header:akua-context"
 			]
 		},
@@ -1578,7 +1532,7 @@ export const contract: ApiContract = {
 			"summary": "Delete Cloudflare credential",
 			"auth": true,
 			"parameters": [
-				"path:id:20",
+				"path:id:2",
 				"header:akua-context"
 			]
 		},
@@ -1589,9 +1543,9 @@ export const contract: ApiContract = {
 			"summary": "List Cloudflare credentials",
 			"auth": true,
 			"parameters": [
+				"header:akua-context",
 				"query:cursor",
-				"query:limit",
-				"header:akua-context"
+				"query:limit"
 			]
 		},
 		{
@@ -1602,7 +1556,7 @@ export const contract: ApiContract = {
 			"auth": true,
 			"parameters": [
 				"header:akua-context",
-				"header:idempotency-key:4"
+				"header:idempotency-key"
 			],
 			"body": {
 				"required": true,
@@ -1611,9 +1565,9 @@ export const contract: ApiContract = {
 					"properties": {
 						"name": {
 							"type": "string",
+							"description": "Display name for the cluster.",
 							"minLength": 2,
-							"maxLength": 32,
-							"description": "Display name for the cluster."
+							"maxLength": 32
 						},
 						"region_id": {
 							"type": "string",
@@ -1626,8 +1580,8 @@ export const contract: ApiContract = {
 								"linux_cilium",
 								"mixed_os_calico"
 							],
-							"default": "linux_cilium",
-							"description": "Immutable networking profile for managed KaaS clusters. Defaults to `linux_cilium`. `mixed_os_calico` adds Windows worker support, which is not generally available yet: creating a cluster with it returns `403 Forbidden` unless Windows worker support is enabled for the workspace."
+							"description": "Immutable networking profile for managed KaaS clusters. Defaults to `linux_cilium`. `mixed_os_calico` adds Windows worker support, which is not generally available yet: creating a cluster with it returns `403 Forbidden` unless Windows worker support is enabled for the workspace.",
+							"default": "linux_cilium"
 						}
 					},
 					"required": [
@@ -1645,9 +1599,9 @@ export const contract: ApiContract = {
 			"summary": "Create worker bootstrap",
 			"auth": true,
 			"parameters": [
-				"path:id:2",
+				"path:id:4",
 				"header:akua-context",
-				"header:idempotency-key"
+				"header:idempotency-key:2"
 			],
 			"body": {
 				"required": false,
@@ -1656,9 +1610,9 @@ export const contract: ApiContract = {
 					"properties": {
 						"ttl_seconds": {
 							"type": "integer",
+							"description": "Token TTL in seconds (optional).",
 							"minimum": 60,
-							"maximum": 86400,
-							"description": "Token TTL in seconds (optional)."
+							"maximum": 86400
 						}
 					},
 					"additionalProperties": false
@@ -1672,9 +1626,9 @@ export const contract: ApiContract = {
 			"summary": "Delete cluster",
 			"auth": true,
 			"parameters": [
-				"path:id:2",
+				"path:id:4",
 				"header:akua-context",
-				"header:idempotency-key",
+				"header:idempotency-key:2",
 				"header:if-match"
 			]
 		},
@@ -1685,9 +1639,9 @@ export const contract: ApiContract = {
 			"summary": "Execute command in cluster",
 			"auth": true,
 			"parameters": [
-				"path:id:2",
+				"path:id:4",
 				"header:akua-context",
-				"header:idempotency-key",
+				"header:idempotency-key:2",
 				"header:if-match"
 			],
 			"body": {
@@ -1704,7 +1658,7 @@ export const contract: ApiContract = {
 			"summary": "Get cluster",
 			"auth": true,
 			"parameters": [
-				"path:id:12",
+				"path:id:3",
 				"header:akua-context"
 			]
 		},
@@ -1715,7 +1669,7 @@ export const contract: ApiContract = {
 			"summary": "Get cluster capabilities",
 			"auth": true,
 			"parameters": [
-				"path:id:12",
+				"path:id:3",
 				"header:akua-context"
 			]
 		},
@@ -1737,7 +1691,7 @@ export const contract: ApiContract = {
 			"summary": "Get cluster kubeconfig",
 			"auth": true,
 			"parameters": [
-				"path:id:2",
+				"path:id:4",
 				"header:akua-context"
 			]
 		},
@@ -1748,7 +1702,7 @@ export const contract: ApiContract = {
 			"summary": "Get cluster worker bootstrap",
 			"auth": true,
 			"parameters": [
-				"path:id:2",
+				"path:id:4",
 				"path:wbs_id",
 				"header:akua-context"
 			]
@@ -1761,7 +1715,7 @@ export const contract: ApiContract = {
 			"auth": true,
 			"parameters": [
 				"header:akua-context",
-				"header:idempotency-key"
+				"header:idempotency-key:2"
 			],
 			"body": {
 				"required": true,
@@ -1799,9 +1753,9 @@ export const contract: ApiContract = {
 			"summary": "List clusters",
 			"auth": true,
 			"parameters": [
+				"header:akua-context",
 				"query:cursor",
-				"query:limit",
-				"header:akua-context"
+				"query:limit"
 			]
 		},
 		{
@@ -1811,10 +1765,10 @@ export const contract: ApiContract = {
 			"summary": "List cluster worker bootstraps",
 			"auth": true,
 			"parameters": [
-				"path:id:2",
+				"path:id:4",
+				"header:akua-context",
 				"query:cursor",
-				"query:limit",
-				"header:akua-context"
+				"query:limit"
 			]
 		},
 		{
@@ -1824,7 +1778,7 @@ export const contract: ApiContract = {
 			"summary": "Proxy cluster API",
 			"auth": true,
 			"parameters": [
-				"path:id:2",
+				"path:id:4",
 				"path:path",
 				"header:akua-context"
 			]
@@ -1836,9 +1790,9 @@ export const contract: ApiContract = {
 			"summary": "Refresh cluster capabilities",
 			"auth": true,
 			"parameters": [
-				"path:id:2",
+				"path:id:4",
 				"header:akua-context",
-				"header:idempotency-key"
+				"header:idempotency-key:2"
 			]
 		},
 		{
@@ -1848,9 +1802,9 @@ export const contract: ApiContract = {
 			"summary": "Resume cluster",
 			"auth": true,
 			"parameters": [
-				"path:id:2",
+				"path:id:4",
 				"header:akua-context",
-				"header:idempotency-key",
+				"header:idempotency-key:2",
 				"header:if-match"
 			]
 		},
@@ -1861,10 +1815,10 @@ export const contract: ApiContract = {
 			"summary": "Revoke worker bootstrap",
 			"auth": true,
 			"parameters": [
-				"path:id:2",
+				"path:id:4",
 				"path:wbs_id",
 				"header:akua-context",
-				"header:idempotency-key",
+				"header:idempotency-key:2",
 				"header:if-match"
 			]
 		},
@@ -1875,9 +1829,9 @@ export const contract: ApiContract = {
 			"summary": "Suspend cluster",
 			"auth": true,
 			"parameters": [
-				"path:id:2",
+				"path:id:4",
 				"header:akua-context",
-				"header:idempotency-key",
+				"header:idempotency-key:2",
 				"header:if-match"
 			]
 		},
@@ -1888,9 +1842,9 @@ export const contract: ApiContract = {
 			"summary": "Update cluster",
 			"auth": true,
 			"parameters": [
-				"path:id:2",
+				"path:id:4",
 				"header:akua-context",
-				"header:idempotency-key",
+				"header:idempotency-key:2",
 				"header:if-match"
 			],
 			"body": {
@@ -2000,7 +1954,7 @@ export const contract: ApiContract = {
 			"auth": true,
 			"parameters": [
 				"header:akua-context",
-				"header:idempotency-key"
+				"header:idempotency-key:2"
 			],
 			"body": {
 				"required": true,
@@ -2036,7 +1990,8 @@ export const contract: ApiContract = {
 							"required": [
 								"region",
 								"image"
-							]
+							],
+							"additionalProperties": false
 						},
 						"credential_scope": {
 							"$ref": "#/$defs/CredentialScope"
@@ -2059,9 +2014,9 @@ export const contract: ApiContract = {
 			"summary": "Delete compute config",
 			"auth": true,
 			"parameters": [
-				"path:id:2",
+				"path:id:4",
 				"header:akua-context",
-				"header:idempotency-key",
+				"header:idempotency-key:2",
 				"header:if-match"
 			]
 		},
@@ -2072,7 +2027,7 @@ export const contract: ApiContract = {
 			"summary": "Get compute config",
 			"auth": true,
 			"parameters": [
-				"path:id:2",
+				"path:id:4",
 				"header:akua-context"
 			]
 		},
@@ -2083,10 +2038,10 @@ export const contract: ApiContract = {
 			"summary": "List compute configs",
 			"auth": true,
 			"parameters": [
+				"header:akua-context",
 				"query:cursor",
 				"query:limit",
-				"query:view:2",
-				"header:akua-context"
+				"query:view"
 			]
 		},
 		{
@@ -2096,9 +2051,9 @@ export const contract: ApiContract = {
 			"summary": "Update compute config",
 			"auth": true,
 			"parameters": [
-				"path:id:2",
+				"path:id:4",
 				"header:akua-context",
-				"header:idempotency-key",
+				"header:idempotency-key:2",
 				"header:if-match"
 			],
 			"body": {
@@ -2125,7 +2080,8 @@ export const contract: ApiContract = {
 								"machine_type_filter": {
 									"type": "string"
 								}
-							}
+							},
+							"additionalProperties": false
 						},
 						"credential_scope": {
 							"$ref": "#/$defs/CredentialScope"
@@ -2142,8 +2098,8 @@ export const contract: ApiContract = {
 			"summary": "Create custom domain",
 			"auth": true,
 			"parameters": [
-				"path:id:10",
-				"header:idempotency-key:2"
+				"path:id:5",
+				"header:idempotency-key:3"
 			],
 			"body": {
 				"required": true,
@@ -2159,10 +2115,10 @@ export const contract: ApiContract = {
 			"summary": "Delete custom domain",
 			"auth": true,
 			"parameters": [
-				"path:id:10",
+				"path:id:5",
 				"path:custom_domain_id",
 				"header:if-match",
-				"header:idempotency-key:2"
+				"header:idempotency-key:3"
 			]
 		},
 		{
@@ -2172,7 +2128,7 @@ export const contract: ApiContract = {
 			"summary": "Get custom domain",
 			"auth": true,
 			"parameters": [
-				"path:id:10",
+				"path:id:5",
 				"path:custom_domain_id"
 			]
 		},
@@ -2183,11 +2139,11 @@ export const contract: ApiContract = {
 			"summary": "List custom domains",
 			"auth": true,
 			"parameters": [
-				"path:id:10",
+				"path:id:5",
 				"query:cursor",
 				"query:limit",
 				"query:target_kind",
-				"query:state:6"
+				"query:state"
 			]
 		},
 		{
@@ -2197,10 +2153,10 @@ export const contract: ApiContract = {
 			"summary": "Update custom domain",
 			"auth": true,
 			"parameters": [
-				"path:id:10",
+				"path:id:5",
 				"path:custom_domain_id",
 				"header:if-match",
-				"header:idempotency-key:2"
+				"header:idempotency-key:3"
 			],
 			"body": {
 				"required": false,
@@ -2260,31 +2216,12 @@ export const contract: ApiContract = {
 												"description": "Controls how the snippet result is rendered in dashboard widgets"
 											},
 											"col_span": {
-												"anyOf": [
-													{
-														"type": "number",
-														"enum": [
-															1
-														]
-													},
-													{
-														"type": "number",
-														"enum": [
-															2
-														]
-													},
-													{
-														"type": "number",
-														"enum": [
-															3
-														]
-													},
-													{
-														"type": "number",
-														"enum": [
-															4
-														]
-													}
+												"type": "number",
+												"enum": [
+													1,
+													2,
+													3,
+													4
 												],
 												"default": 2
 											}
@@ -2309,9 +2246,13 @@ export const contract: ApiContract = {
 												"maxLength": 54
 											},
 											"snippet_etag": {
-												"type": [
-													"string",
-													"null"
+												"anyOf": [
+													{
+														"type": "string"
+													},
+													{
+														"type": "null"
+													}
 												],
 												"default": null
 											},
@@ -2320,31 +2261,12 @@ export const contract: ApiContract = {
 												"maxLength": 100
 											},
 											"col_span": {
-												"anyOf": [
-													{
-														"type": "number",
-														"enum": [
-															1
-														]
-													},
-													{
-														"type": "number",
-														"enum": [
-															2
-														]
-													},
-													{
-														"type": "number",
-														"enum": [
-															3
-														]
-													},
-													{
-														"type": "number",
-														"enum": [
-															4
-														]
-													}
+												"type": "number",
+												"enum": [
+													1,
+													2,
+													3,
+													4
 												],
 												"default": 2
 											},
@@ -2358,17 +2280,20 @@ export const contract: ApiContract = {
 												"default": "standard"
 											},
 											"drill_down": {
-												"type": [
-													"string",
-													"null"
+												"anyOf": [
+													{
+														"type": "string",
+														"minLength": 1,
+														"maxLength": 2048
+													},
+													{
+														"type": "null"
+													}
 												],
-												"minLength": 1,
-												"maxLength": 2048,
 												"default": null
 											},
 											"visualization_options": {
 												"type": "object",
-												"additionalProperties": {},
 												"default": {}
 											},
 											"freshness_policy": {
@@ -2492,22 +2417,25 @@ export const contract: ApiContract = {
 												"default": {}
 											},
 											"visualization": {
-												"type": [
-													"string",
-													"null"
-												],
-												"enum": [
-													"stat",
-													"sparkline",
-													"line",
-													"area",
-													"bar",
-													"donut",
-													"table",
-													"status_list",
-													"logs",
-													"json",
-													null
+												"anyOf": [
+													{
+														"type": "string",
+														"enum": [
+															"stat",
+															"sparkline",
+															"line",
+															"area",
+															"bar",
+															"donut",
+															"table",
+															"status_list",
+															"logs",
+															"json"
+														]
+													},
+													{
+														"type": "null"
+													}
 												],
 												"default": null
 											},
@@ -2570,20 +2498,23 @@ export const contract: ApiContract = {
 												}
 											},
 											"display_type": {
-												"type": [
-													"string",
-													"null"
+												"anyOf": [
+													{
+														"type": "string",
+														"enum": [
+															"table",
+															"stat",
+															"json",
+															"logs",
+															"timeseries"
+														]
+													},
+													{
+														"type": "null"
+													}
 												],
-												"enum": [
-													"table",
-													"stat",
-													"json",
-													"logs",
-													"timeseries",
-													null
-												],
-												"default": null,
-												"description": "Controls how the snippet result is rendered in dashboard widgets"
+												"description": "Controls how the snippet result is rendered in dashboard widgets",
+												"default": null
 											}
 										},
 										"required": [
@@ -2693,31 +2624,12 @@ export const contract: ApiContract = {
 												"maxLength": 100
 											},
 											"col_span": {
-												"anyOf": [
-													{
-														"type": "number",
-														"enum": [
-															1
-														]
-													},
-													{
-														"type": "number",
-														"enum": [
-															2
-														]
-													},
-													{
-														"type": "number",
-														"enum": [
-															3
-														]
-													},
-													{
-														"type": "number",
-														"enum": [
-															4
-														]
-													}
+												"type": "number",
+												"enum": [
+													1,
+													2,
+													3,
+													4
 												],
 												"default": 2
 											},
@@ -2731,17 +2643,20 @@ export const contract: ApiContract = {
 												"default": "standard"
 											},
 											"drill_down": {
-												"type": [
-													"string",
-													"null"
+												"anyOf": [
+													{
+														"type": "string",
+														"minLength": 1,
+														"maxLength": 2048
+													},
+													{
+														"type": "null"
+													}
 												],
-												"minLength": 1,
-												"maxLength": 2048,
 												"default": null
 											},
 											"visualization_options": {
 												"type": "object",
-												"additionalProperties": {},
 												"default": {}
 											},
 											"freshness_policy": {
@@ -2814,9 +2729,9 @@ export const contract: ApiContract = {
 			"summary": "Create dashboard revision",
 			"auth": true,
 			"parameters": [
-				"path:id:4",
+				"path:id:7",
 				"header:if-match",
-				"header:idempotency-key:2"
+				"header:idempotency-key:3"
 			],
 			"body": {
 				"required": true,
@@ -2829,11 +2744,15 @@ export const contract: ApiContract = {
 							"maxLength": 100
 						},
 						"description": {
-							"type": [
-								"string",
-								"null"
-							],
-							"maxLength": 500
+							"anyOf": [
+								{
+									"type": "string",
+									"maxLength": 500
+								},
+								{
+									"type": "null"
+								}
+							]
 						},
 						"filter_definitions": {
 							"type": "array",
@@ -3289,8 +3208,7 @@ export const contract: ApiContract = {
 							"maxItems": 24
 						},
 						"default_filter_values": {
-							"type": "object",
-							"additionalProperties": {}
+							"type": "object"
 						},
 						"summary": {
 							"type": "string",
@@ -3313,31 +3231,12 @@ export const contract: ApiContract = {
 												"maxLength": 100
 											},
 											"col_span": {
-												"anyOf": [
-													{
-														"type": "number",
-														"enum": [
-															1
-														]
-													},
-													{
-														"type": "number",
-														"enum": [
-															2
-														]
-													},
-													{
-														"type": "number",
-														"enum": [
-															3
-														]
-													},
-													{
-														"type": "number",
-														"enum": [
-															4
-														]
-													}
+												"type": "number",
+												"enum": [
+													1,
+													2,
+													3,
+													4
 												]
 											},
 											"height": {
@@ -3349,16 +3248,19 @@ export const contract: ApiContract = {
 												]
 											},
 											"drill_down": {
-												"type": [
-													"string",
-													"null"
-												],
-												"minLength": 1,
-												"maxLength": 2048
+												"anyOf": [
+													{
+														"type": "string",
+														"minLength": 1,
+														"maxLength": 2048
+													},
+													{
+														"type": "null"
+													}
+												]
 											},
 											"visualization_options": {
-												"type": "object",
-												"additionalProperties": {}
+												"type": "object"
 											},
 											"freshness_policy": {
 												"oneOf": [
@@ -3488,22 +3390,25 @@ export const contract: ApiContract = {
 												}
 											},
 											"visualization": {
-												"type": [
-													"string",
-													"null"
-												],
-												"enum": [
-													"stat",
-													"sparkline",
-													"line",
-													"area",
-													"bar",
-													"donut",
-													"table",
-													"status_list",
-													"logs",
-													"json",
-													null
+												"anyOf": [
+													{
+														"type": "string",
+														"enum": [
+															"stat",
+															"sparkline",
+															"line",
+															"area",
+															"bar",
+															"donut",
+															"table",
+															"status_list",
+															"logs",
+															"json"
+														]
+													},
+													{
+														"type": "null"
+													}
 												]
 											},
 											"refresh_policy": {
@@ -3562,17 +3467,20 @@ export const contract: ApiContract = {
 												]
 											},
 											"display_type": {
-												"type": [
-													"string",
-													"null"
-												],
-												"enum": [
-													"table",
-													"stat",
-													"json",
-													"logs",
-													"timeseries",
-													null
+												"anyOf": [
+													{
+														"type": "string",
+														"enum": [
+															"table",
+															"stat",
+															"json",
+															"logs",
+															"timeseries"
+														]
+													},
+													{
+														"type": "null"
+													}
 												],
 												"description": "Controls how the snippet result is rendered in dashboard widgets"
 											}
@@ -3605,31 +3513,12 @@ export const contract: ApiContract = {
 												"maxLength": 100
 											},
 											"col_span": {
-												"anyOf": [
-													{
-														"type": "number",
-														"enum": [
-															1
-														]
-													},
-													{
-														"type": "number",
-														"enum": [
-															2
-														]
-													},
-													{
-														"type": "number",
-														"enum": [
-															3
-														]
-													},
-													{
-														"type": "number",
-														"enum": [
-															4
-														]
-													}
+												"type": "number",
+												"enum": [
+													1,
+													2,
+													3,
+													4
 												]
 											},
 											"height": {
@@ -3641,16 +3530,19 @@ export const contract: ApiContract = {
 												]
 											},
 											"drill_down": {
-												"type": [
-													"string",
-													"null"
-												],
-												"minLength": 1,
-												"maxLength": 2048
+												"anyOf": [
+													{
+														"type": "string",
+														"minLength": 1,
+														"maxLength": 2048
+													},
+													{
+														"type": "null"
+													}
+												]
 											},
 											"visualization_options": {
-												"type": "object",
-												"additionalProperties": {}
+												"type": "object"
 											},
 											"freshness_policy": {
 												"oneOf": [
@@ -3821,9 +3713,9 @@ export const contract: ApiContract = {
 			"summary": "Create dashboard widget",
 			"auth": true,
 			"parameters": [
-				"path:id:4",
+				"path:id:7",
 				"header:akua-context",
-				"header:idempotency-key"
+				"header:idempotency-key:2"
 			],
 			"body": {
 				"required": true,
@@ -3839,7 +3731,7 @@ export const contract: ApiContract = {
 			"summary": "Delete dashboard",
 			"auth": true,
 			"parameters": [
-				"path:id:3",
+				"path:id:6",
 				"header:if-match"
 			]
 		},
@@ -3850,7 +3742,7 @@ export const contract: ApiContract = {
 			"summary": "Delete dashboard widget",
 			"auth": true,
 			"parameters": [
-				"path:id:4",
+				"path:id:7",
 				"path:wgt_id",
 				"header:akua-context",
 				"header:if-match"
@@ -3863,7 +3755,7 @@ export const contract: ApiContract = {
 			"summary": "Get dashboard details",
 			"auth": true,
 			"parameters": [
-				"path:id:3"
+				"path:id:6"
 			]
 		},
 		{
@@ -3873,7 +3765,7 @@ export const contract: ApiContract = {
 			"summary": "Get dashboard revision",
 			"auth": true,
 			"parameters": [
-				"path:id:4",
+				"path:id:7",
 				"path:revision_id"
 			]
 		},
@@ -3884,7 +3776,7 @@ export const contract: ApiContract = {
 			"summary": "Get dashboard widget",
 			"auth": true,
 			"parameters": [
-				"path:id:4",
+				"path:id:7",
 				"path:wgt_id"
 			]
 		},
@@ -3905,9 +3797,9 @@ export const contract: ApiContract = {
 			"summary": "List dashboards in workspace",
 			"auth": true,
 			"parameters": [
+				"header:akua-context",
 				"query:cursor",
-				"query:limit",
-				"header:akua-context"
+				"query:limit"
 			]
 		},
 		{
@@ -3917,7 +3809,7 @@ export const contract: ApiContract = {
 			"summary": "List dashboard revisions",
 			"auth": true,
 			"parameters": [
-				"path:id:4",
+				"path:id:7",
 				"query:cursor",
 				"query:limit:2"
 			]
@@ -3929,7 +3821,7 @@ export const contract: ApiContract = {
 			"summary": "List dashboard widgets",
 			"auth": true,
 			"parameters": [
-				"path:id:4",
+				"path:id:7",
 				"query:cursor",
 				"query:limit"
 			]
@@ -3941,9 +3833,9 @@ export const contract: ApiContract = {
 			"summary": "Reset the Workspace overview to the recommended configuration",
 			"auth": true,
 			"parameters": [
-				"path:id:4",
+				"path:id:7",
 				"header:if-match",
-				"header:idempotency-key:2"
+				"header:idempotency-key:3"
 			]
 		},
 		{
@@ -3953,10 +3845,10 @@ export const contract: ApiContract = {
 			"summary": "Restore dashboard revision",
 			"auth": true,
 			"parameters": [
-				"path:id:4",
+				"path:id:7",
 				"path:revision_id",
 				"header:if-match",
-				"header:idempotency-key:2"
+				"header:idempotency-key:3"
 			],
 			"body": {
 				"required": true,
@@ -3964,11 +3856,15 @@ export const contract: ApiContract = {
 					"type": "object",
 					"properties": {
 						"summary": {
-							"type": [
-								"string",
-								"null"
-							],
-							"maxLength": 500
+							"anyOf": [
+								{
+									"type": "string",
+									"maxLength": 500
+								},
+								{
+									"type": "null"
+								}
+							]
 						}
 					},
 					"required": [
@@ -3985,7 +3881,7 @@ export const contract: ApiContract = {
 			"summary": "Update dashboard",
 			"auth": true,
 			"parameters": [
-				"path:id:3",
+				"path:id:6",
 				"header:if-match"
 			],
 			"body": {
@@ -4014,10 +3910,10 @@ export const contract: ApiContract = {
 			"summary": "Update dashboard widget",
 			"auth": true,
 			"parameters": [
-				"path:id:4",
+				"path:id:7",
 				"path:wgt_id",
 				"header:akua-context",
-				"header:idempotency-key",
+				"header:idempotency-key:2",
 				"header:if-match"
 			],
 			"body": {
@@ -4050,7 +3946,7 @@ export const contract: ApiContract = {
 			"auth": true,
 			"parameters": [
 				"header:akua-context",
-				"header:idempotency-key"
+				"header:idempotency-key:2"
 			],
 			"body": {
 				"required": true,
@@ -4066,9 +3962,9 @@ export const contract: ApiContract = {
 			"summary": "Create install render",
 			"auth": true,
 			"parameters": [
-				"path:id:13",
+				"path:id:8",
 				"header:akua-context",
-				"header:idempotency-key"
+				"header:idempotency-key:2"
 			],
 			"body": {
 				"required": false,
@@ -4084,9 +3980,9 @@ export const contract: ApiContract = {
 			"summary": "Delete install",
 			"auth": true,
 			"parameters": [
-				"path:id:13",
+				"path:id:8",
 				"header:akua-context",
-				"header:idempotency-key",
+				"header:idempotency-key:2",
 				"header:if-match"
 			]
 		},
@@ -4097,7 +3993,7 @@ export const contract: ApiContract = {
 			"summary": "Get install details",
 			"auth": true,
 			"parameters": [
-				"path:id:13",
+				"path:id:8",
 				"header:akua-context"
 			]
 		},
@@ -4108,13 +4004,13 @@ export const contract: ApiContract = {
 			"summary": "Stream install logs",
 			"auth": true,
 			"parameters": [
-				"path:id:13",
+				"path:id:8",
+				"header:akua-context",
 				"query:pod",
 				"query:container",
 				"query:follow",
 				"query:tail",
-				"query:since_seconds",
-				"header:akua-context"
+				"query:since_seconds"
 			],
 			"stream": {
 				"failureEvent": "effect/http-api/stream/failure"
@@ -4127,7 +4023,7 @@ export const contract: ApiContract = {
 			"summary": "Get install render",
 			"auth": true,
 			"parameters": [
-				"path:id:13",
+				"path:id:8",
 				"path:render_id",
 				"header:akua-context"
 			]
@@ -4139,7 +4035,7 @@ export const contract: ApiContract = {
 			"summary": "Get install status",
 			"auth": true,
 			"parameters": [
-				"path:id:13",
+				"path:id:8",
 				"header:akua-context"
 			]
 		},
@@ -4150,10 +4046,10 @@ export const contract: ApiContract = {
 			"summary": "List installs",
 			"auth": true,
 			"parameters": [
+				"header:akua-context",
 				"query:cursor",
 				"query:limit",
-				"query:product_id",
-				"header:akua-context"
+				"query:product_id"
 			]
 		},
 		{
@@ -4163,7 +4059,7 @@ export const contract: ApiContract = {
 			"summary": "List install pods",
 			"auth": true,
 			"parameters": [
-				"path:id:13",
+				"path:id:8",
 				"header:akua-context"
 			]
 		},
@@ -4174,10 +4070,10 @@ export const contract: ApiContract = {
 			"summary": "List install renders",
 			"auth": true,
 			"parameters": [
-				"path:id:13",
+				"path:id:8",
+				"header:akua-context",
 				"query:cursor",
-				"query:limit",
-				"header:akua-context"
+				"query:limit"
 			]
 		},
 		{
@@ -4187,10 +4083,10 @@ export const contract: ApiContract = {
 			"summary": "Restore install render",
 			"auth": true,
 			"parameters": [
-				"path:id:4",
+				"path:id:7",
 				"header:akua-context",
 				"header:if-match",
-				"header:idempotency-key:2"
+				"header:idempotency-key:3"
 			],
 			"body": {
 				"required": true,
@@ -4206,10 +4102,10 @@ export const contract: ApiContract = {
 			"summary": "Set automatic install updates",
 			"auth": true,
 			"parameters": [
-				"path:id:4",
+				"path:id:7",
 				"header:akua-context",
 				"header:if-match",
-				"header:idempotency-key:2"
+				"header:idempotency-key:3"
 			],
 			"body": {
 				"required": true,
@@ -4225,10 +4121,10 @@ export const contract: ApiContract = {
 			"summary": "Update install version",
 			"auth": true,
 			"parameters": [
-				"path:id:4",
+				"path:id:7",
 				"header:akua-context",
 				"header:if-match",
-				"header:idempotency-key:2"
+				"header:idempotency-key:3"
 			],
 			"body": {
 				"required": true,
@@ -4245,7 +4141,7 @@ export const contract: ApiContract = {
 			"auth": true,
 			"parameters": [
 				"header:akua-context",
-				"header:idempotency-key"
+				"header:idempotency-key:2"
 			],
 			"body": {
 				"required": true,
@@ -4263,17 +4159,16 @@ export const contract: ApiContract = {
 						},
 						"compute_config_id": {
 							"type": "string",
+							"description": "Compute config that supplies the provider account for this machine. Omit it to explicitly request an Akua system-managed machine on platform infrastructure; free-tier instance types and machine quotas then apply.",
 							"minLength": 1,
-							"maxLength": 54,
-							"description": "Compute config that supplies the provider account for this machine. Omit it to explicitly request an Akua system-managed machine on platform infrastructure; free-tier instance types and machine quotas then apply."
+							"maxLength": 54
 						},
 						"name": {
 							"type": "string",
 							"maxLength": 120
 						},
 						"node_claim": {
-							"type": "object",
-							"additionalProperties": {}
+							"type": "object"
 						}
 					},
 					"required": [
@@ -4291,9 +4186,9 @@ export const contract: ApiContract = {
 			"summary": "Delete machine",
 			"auth": true,
 			"parameters": [
-				"path:id:2",
+				"path:id:4",
 				"header:akua-context",
-				"header:idempotency-key:3",
+				"header:idempotency-key:4",
 				"header:if-match"
 			]
 		},
@@ -4304,7 +4199,7 @@ export const contract: ApiContract = {
 			"summary": "Get machine",
 			"auth": true,
 			"parameters": [
-				"path:id:2",
+				"path:id:4",
 				"header:akua-context"
 			]
 		},
@@ -4315,12 +4210,12 @@ export const contract: ApiContract = {
 			"summary": "List machines",
 			"auth": true,
 			"parameters": [
+				"header:akua-context",
 				"query:cursor",
 				"query:limit",
 				"query:cluster_id",
 				"query:state:2",
-				"query:view:2",
-				"header:akua-context"
+				"query:view"
 			]
 		},
 		{
@@ -4330,9 +4225,9 @@ export const contract: ApiContract = {
 			"summary": "Resume machine",
 			"auth": true,
 			"parameters": [
-				"path:id:2",
+				"path:id:4",
 				"header:akua-context",
-				"header:idempotency-key:3",
+				"header:idempotency-key:4",
 				"header:if-match"
 			],
 			"body": {
@@ -4349,9 +4244,9 @@ export const contract: ApiContract = {
 			"summary": "Suspend machine",
 			"auth": true,
 			"parameters": [
-				"path:id:2",
+				"path:id:4",
 				"header:akua-context",
-				"header:idempotency-key:3",
+				"header:idempotency-key:4",
 				"header:if-match"
 			],
 			"body": {
@@ -4368,9 +4263,9 @@ export const contract: ApiContract = {
 			"summary": "Update machine",
 			"auth": true,
 			"parameters": [
-				"path:id:2",
+				"path:id:4",
 				"header:akua-context",
-				"header:idempotency-key",
+				"header:idempotency-key:2",
 				"header:if-match"
 			],
 			"body": {
@@ -4427,7 +4322,7 @@ export const contract: ApiContract = {
 			"summary": "Mark a notification as read",
 			"auth": true,
 			"parameters": [
-				"path:id:17"
+				"path:id:9"
 			]
 		},
 		{
@@ -4437,9 +4332,9 @@ export const contract: ApiContract = {
 			"summary": "Archive offer",
 			"auth": true,
 			"parameters": [
-				"path:id:6",
+				"path:id:10",
 				"header:akua-context",
-				"header:idempotency-key",
+				"header:idempotency-key:2",
 				"header:if-match"
 			]
 		},
@@ -4451,7 +4346,7 @@ export const contract: ApiContract = {
 			"auth": true,
 			"parameters": [
 				"header:akua-context",
-				"header:idempotency-key"
+				"header:idempotency-key:2"
 			],
 			"body": {
 				"required": true,
@@ -4467,7 +4362,7 @@ export const contract: ApiContract = {
 			"summary": "Get offer details",
 			"auth": true,
 			"parameters": [
-				"path:id:6"
+				"path:id:10"
 			]
 		},
 		{
@@ -4477,10 +4372,10 @@ export const contract: ApiContract = {
 			"summary": "List offers in workspace",
 			"auth": true,
 			"parameters": [
+				"header:akua-context",
 				"query:cursor",
 				"query:limit",
-				"query:product_id",
-				"header:akua-context"
+				"query:product_id"
 			]
 		},
 		{
@@ -4500,9 +4395,9 @@ export const contract: ApiContract = {
 			"summary": "Unarchive offer",
 			"auth": true,
 			"parameters": [
-				"path:id:6",
+				"path:id:10",
 				"header:akua-context",
-				"header:idempotency-key",
+				"header:idempotency-key:2",
 				"header:if-match"
 			]
 		},
@@ -4513,9 +4408,9 @@ export const contract: ApiContract = {
 			"summary": "Request operation cancellation",
 			"auth": true,
 			"parameters": [
-				"path:id:8",
+				"path:id:11",
 				"header:akua-context",
-				"header:idempotency-key",
+				"header:idempotency-key:2",
 				"header:if-match:2"
 			]
 		},
@@ -4526,7 +4421,7 @@ export const contract: ApiContract = {
 			"summary": "Get operation details + steps",
 			"auth": true,
 			"parameters": [
-				"path:id:8",
+				"path:id:11",
 				"header:akua-context"
 			]
 		},
@@ -4537,11 +4432,11 @@ export const contract: ApiContract = {
 			"summary": "List operations",
 			"auth": true,
 			"parameters": [
+				"header:akua-context",
 				"query:cursor",
 				"query:limit",
 				"query:owner_type",
-				"query:owner_id",
-				"header:akua-context"
+				"query:owner_id"
 			]
 		},
 		{
@@ -4551,9 +4446,9 @@ export const contract: ApiContract = {
 			"summary": "Wait for an operation to reach a terminal state",
 			"auth": true,
 			"parameters": [
-				"path:id:8",
-				"query:timeout",
-				"header:akua-context"
+				"path:id:11",
+				"header:akua-context",
+				"query:timeout"
 			]
 		},
 		{
@@ -4563,7 +4458,7 @@ export const contract: ApiContract = {
 			"summary": "Cancel order draft",
 			"auth": true,
 			"parameters": [
-				"path:id:7",
+				"path:id:12",
 				"header:if-match"
 			]
 		},
@@ -4574,7 +4469,7 @@ export const contract: ApiContract = {
 			"summary": "Claim order draft",
 			"auth": true,
 			"parameters": [
-				"path:id:7",
+				"path:id:12",
 				"header:if-match"
 			],
 			"body": {
@@ -4592,7 +4487,7 @@ export const contract: ApiContract = {
 			"auth": true,
 			"parameters": [
 				"path:offer",
-				"header:idempotency-key"
+				"header:idempotency-key:2"
 			]
 		},
 		{
@@ -4602,7 +4497,7 @@ export const contract: ApiContract = {
 			"summary": "Create order draft checkout session",
 			"auth": true,
 			"parameters": [
-				"path:id:7",
+				"path:id:12",
 				"header:if-match"
 			]
 		},
@@ -4613,7 +4508,7 @@ export const contract: ApiContract = {
 			"summary": "Create order draft worker bootstrap",
 			"auth": true,
 			"parameters": [
-				"path:id:7"
+				"path:id:12"
 			],
 			"body": {
 				"required": false,
@@ -4637,7 +4532,7 @@ export const contract: ApiContract = {
 			"summary": "Get order draft details",
 			"auth": true,
 			"parameters": [
-				"path:id:7"
+				"path:id:12"
 			]
 		},
 		{
@@ -4647,7 +4542,7 @@ export const contract: ApiContract = {
 			"summary": "Get order draft checkout session",
 			"auth": true,
 			"parameters": [
-				"path:id:7",
+				"path:id:12",
 				"path:chk_id"
 			]
 		},
@@ -4658,11 +4553,11 @@ export const contract: ApiContract = {
 			"summary": "List order drafts",
 			"auth": true,
 			"parameters": [
+				"header:akua-context",
 				"query:cursor",
 				"query:limit",
 				"query:offer",
-				"query:status",
-				"header:akua-context"
+				"query:status"
 			]
 		},
 		{
@@ -4672,7 +4567,7 @@ export const contract: ApiContract = {
 			"summary": "List order draft checkout sessions",
 			"auth": true,
 			"parameters": [
-				"path:id:7",
+				"path:id:12",
 				"query:cursor",
 				"query:limit"
 			]
@@ -4684,7 +4579,7 @@ export const contract: ApiContract = {
 			"summary": "Select order workspace",
 			"auth": true,
 			"parameters": [
-				"path:id:7",
+				"path:id:12",
 				"header:if-match"
 			],
 			"body": {
@@ -4701,7 +4596,7 @@ export const contract: ApiContract = {
 			"summary": "Submit configure values",
 			"auth": true,
 			"parameters": [
-				"path:id:7",
+				"path:id:12",
 				"header:if-match"
 			],
 			"body": {
@@ -4732,8 +4627,8 @@ export const contract: ApiContract = {
 			"summary": "Add organization member",
 			"auth": true,
 			"parameters": [
-				"path:id:16",
-				"header:idempotency-key",
+				"path:id:13",
+				"header:idempotency-key:2",
 				"header:if-match"
 			],
 			"body": {
@@ -4750,7 +4645,7 @@ export const contract: ApiContract = {
 			"summary": "Cancel an organization invitation",
 			"auth": true,
 			"parameters": [
-				"path:id:2",
+				"path:id:4",
 				"path:invitationId"
 			]
 		},
@@ -4761,7 +4656,7 @@ export const contract: ApiContract = {
 			"summary": "Create organization",
 			"auth": true,
 			"parameters": [
-				"header:idempotency-key"
+				"header:idempotency-key:2"
 			],
 			"body": {
 				"required": true,
@@ -4777,7 +4672,7 @@ export const contract: ApiContract = {
 			"summary": "Invite an organization member by email",
 			"auth": true,
 			"parameters": [
-				"path:id:2"
+				"path:id:4"
 			],
 			"body": {
 				"required": true,
@@ -4793,8 +4688,8 @@ export const contract: ApiContract = {
 			"summary": "Delete organization",
 			"auth": true,
 			"parameters": [
-				"path:id:16",
-				"header:idempotency-key",
+				"path:id:13",
+				"header:idempotency-key:2",
 				"header:if-match"
 			]
 		},
@@ -4805,7 +4700,7 @@ export const contract: ApiContract = {
 			"summary": "Get organization details",
 			"auth": true,
 			"parameters": [
-				"path:id:16"
+				"path:id:13"
 			]
 		},
 		{
@@ -4826,7 +4721,7 @@ export const contract: ApiContract = {
 			"summary": "List pending organization invitations",
 			"auth": true,
 			"parameters": [
-				"path:id:2",
+				"path:id:4",
 				"query:cursor",
 				"query:limit"
 			]
@@ -4838,7 +4733,7 @@ export const contract: ApiContract = {
 			"summary": "List managed workspaces",
 			"auth": true,
 			"parameters": [
-				"path:id:16",
+				"path:id:13",
 				"query:cursor",
 				"query:limit"
 			]
@@ -4850,7 +4745,7 @@ export const contract: ApiContract = {
 			"summary": "List organization members",
 			"auth": true,
 			"parameters": [
-				"path:id:16",
+				"path:id:13",
 				"query:cursor",
 				"query:limit"
 			]
@@ -4862,9 +4757,9 @@ export const contract: ApiContract = {
 			"summary": "Remove organization member",
 			"auth": true,
 			"parameters": [
-				"path:id:16",
-				"path:userId:3",
-				"header:idempotency-key",
+				"path:id:13",
+				"path:userId:2",
+				"header:idempotency-key:2",
 				"header:if-match"
 			]
 		},
@@ -4875,7 +4770,7 @@ export const contract: ApiContract = {
 			"summary": "Resend an organization invitation",
 			"auth": true,
 			"parameters": [
-				"path:id:2",
+				"path:id:4",
 				"path:invitationId"
 			]
 		},
@@ -4886,8 +4781,8 @@ export const contract: ApiContract = {
 			"summary": "Update organization",
 			"auth": true,
 			"parameters": [
-				"path:id:16",
-				"header:idempotency-key",
+				"path:id:13",
+				"header:idempotency-key:2",
 				"header:if-match"
 			],
 			"body": {
@@ -4904,9 +4799,9 @@ export const contract: ApiContract = {
 			"summary": "Update member role",
 			"auth": true,
 			"parameters": [
-				"path:id:16",
-				"path:userId:2",
-				"header:idempotency-key",
+				"path:id:13",
+				"path:userId",
+				"header:idempotency-key:2",
 				"header:if-match"
 			],
 			"body": {
@@ -4924,7 +4819,7 @@ export const contract: ApiContract = {
 			"auth": true,
 			"parameters": [
 				"header:akua-context",
-				"header:idempotency-key"
+				"header:idempotency-key:2"
 			],
 			"body": {
 				"required": true,
@@ -4940,9 +4835,9 @@ export const contract: ApiContract = {
 			"summary": "Create package version",
 			"auth": true,
 			"parameters": [
-				"path:id:9",
+				"path:id:14",
 				"header:akua-context",
-				"header:idempotency-key"
+				"header:idempotency-key:2"
 			],
 			"body": {
 				"required": true,
@@ -4958,9 +4853,9 @@ export const contract: ApiContract = {
 			"summary": "Delete package",
 			"auth": true,
 			"parameters": [
-				"path:id:2",
+				"path:id:4",
 				"header:akua-context",
-				"header:idempotency-key",
+				"header:idempotency-key:2",
 				"header:if-match"
 			]
 		},
@@ -4971,9 +4866,9 @@ export const contract: ApiContract = {
 			"summary": "Get package details",
 			"auth": true,
 			"parameters": [
-				"path:id:2",
-				"query:view:3",
-				"header:akua-context"
+				"path:id:4",
+				"header:akua-context",
+				"query:view:2"
 			]
 		},
 		{
@@ -4995,7 +4890,7 @@ export const contract: ApiContract = {
 			"summary": "Get package version details",
 			"auth": true,
 			"parameters": [
-				"path:id:2",
+				"path:id:4",
 				"path:version_id",
 				"header:akua-context"
 			]
@@ -5007,7 +4902,7 @@ export const contract: ApiContract = {
 			"summary": "Get package version input schema",
 			"auth": true,
 			"parameters": [
-				"path:id:2",
+				"path:id:4",
 				"path:version_id",
 				"header:akua-context"
 			]
@@ -5020,7 +4915,7 @@ export const contract: ApiContract = {
 			"auth": true,
 			"parameters": [
 				"header:akua-context",
-				"header:idempotency-key"
+				"header:idempotency-key:2"
 			],
 			"body": {
 				"required": true,
@@ -5036,10 +4931,10 @@ export const contract: ApiContract = {
 			"summary": "List packages",
 			"auth": true,
 			"parameters": [
+				"header:akua-context",
 				"query:cursor",
 				"query:limit",
-				"query:view:3",
-				"header:akua-context"
+				"query:view:2"
 			]
 		},
 		{
@@ -5049,10 +4944,10 @@ export const contract: ApiContract = {
 			"summary": "List package versions",
 			"auth": true,
 			"parameters": [
-				"path:id:2",
+				"path:id:4",
+				"header:akua-context",
 				"query:cursor",
-				"query:limit",
-				"header:akua-context"
+				"query:limit"
 			]
 		},
 		{
@@ -5062,9 +4957,9 @@ export const contract: ApiContract = {
 			"summary": "Bind floating preview hostname",
 			"auth": true,
 			"parameters": [
-				"path:id:13",
+				"path:id:8",
 				"header:akua-context",
-				"header:idempotency-key:2"
+				"header:idempotency-key:3"
 			],
 			"body": {
 				"required": true,
@@ -5080,9 +4975,9 @@ export const contract: ApiContract = {
 			"summary": "Bind pinned preview hostname",
 			"auth": true,
 			"parameters": [
-				"path:id:13",
+				"path:id:8",
 				"header:akua-context",
-				"header:idempotency-key:2"
+				"header:idempotency-key:3"
 			],
 			"body": {
 				"required": true,
@@ -5098,11 +4993,11 @@ export const contract: ApiContract = {
 			"summary": "Delete preview hostname",
 			"auth": true,
 			"parameters": [
-				"path:id:13",
+				"path:id:8",
 				"path:preview_hostname_id",
 				"header:akua-context",
 				"header:if-match",
-				"header:idempotency-key:2"
+				"header:idempotency-key:3"
 			]
 		},
 		{
@@ -5112,7 +5007,7 @@ export const contract: ApiContract = {
 			"summary": "Get preview hostname",
 			"auth": true,
 			"parameters": [
-				"path:id:13",
+				"path:id:8",
 				"path:preview_hostname_id",
 				"header:akua-context"
 			]
@@ -5124,13 +5019,13 @@ export const contract: ApiContract = {
 			"summary": "List preview hostnames",
 			"auth": true,
 			"parameters": [
-				"path:id:13",
+				"path:id:8",
+				"header:akua-context",
 				"query:cursor",
 				"query:limit",
 				"query:binding_kind",
 				"query:track",
-				"query:state:5",
-				"header:akua-context"
+				"query:state:3"
 			]
 		},
 		{
@@ -5140,9 +5035,9 @@ export const contract: ApiContract = {
 			"summary": "Archive product",
 			"auth": true,
 			"parameters": [
-				"path:id:5",
+				"path:id:15",
 				"header:akua-context",
-				"header:idempotency-key",
+				"header:idempotency-key:2",
 				"header:if-match"
 			],
 			"body": {
@@ -5160,7 +5055,7 @@ export const contract: ApiContract = {
 			"auth": true,
 			"parameters": [
 				"header:akua-context",
-				"header:idempotency-key"
+				"header:idempotency-key:2"
 			],
 			"body": {
 				"required": true,
@@ -5176,7 +5071,7 @@ export const contract: ApiContract = {
 			"summary": "Get product details",
 			"auth": true,
 			"parameters": [
-				"path:id:5",
+				"path:id:15",
 				"header:akua-context"
 			]
 		},
@@ -5187,9 +5082,9 @@ export const contract: ApiContract = {
 			"summary": "List products in workspace",
 			"auth": true,
 			"parameters": [
+				"header:akua-context",
 				"query:cursor",
-				"query:limit",
-				"header:akua-context"
+				"query:limit"
 			]
 		},
 		{
@@ -5199,16 +5094,15 @@ export const contract: ApiContract = {
 			"summary": "Unarchive product",
 			"auth": true,
 			"parameters": [
-				"path:id:5",
+				"path:id:15",
 				"header:akua-context",
-				"header:idempotency-key",
+				"header:idempotency-key:2",
 				"header:if-match"
 			],
 			"body": {
 				"required": false,
 				"schema": {
 					"type": "object",
-					"properties": {},
 					"additionalProperties": false
 				}
 			}
@@ -5220,9 +5114,9 @@ export const contract: ApiContract = {
 			"summary": "Update product",
 			"auth": true,
 			"parameters": [
-				"path:id:5",
+				"path:id:15",
 				"header:akua-context",
-				"header:idempotency-key",
+				"header:idempotency-key:2",
 				"header:if-match"
 			],
 			"body": {
@@ -5240,8 +5134,8 @@ export const contract: ApiContract = {
 			"auth": true,
 			"parameters": [
 				"path:metric",
-				"query:cluster_id:2",
-				"header:akua-context"
+				"header:akua-context",
+				"query:cluster_id:2"
 			]
 		},
 		{
@@ -5251,8 +5145,8 @@ export const contract: ApiContract = {
 			"summary": "List quota usage for the authenticated user",
 			"auth": true,
 			"parameters": [
-				"query:cluster_id:2",
-				"header:akua-context"
+				"header:akua-context",
+				"query:cluster_id:2"
 			]
 		},
 		{
@@ -5276,9 +5170,9 @@ export const contract: ApiContract = {
 						},
 						"icon": {
 							"type": "string",
-							"maxLength": 256,
+							"description": "Icon URL",
 							"format": "uri",
-							"description": "Icon URL"
+							"maxLength": 256
 						}
 					},
 					"required": [
@@ -5295,7 +5189,7 @@ export const contract: ApiContract = {
 			"summary": "Delete region",
 			"auth": true,
 			"parameters": [
-				"path:id:18",
+				"path:id:16",
 				"header:akua-context",
 				"header:if-match"
 			]
@@ -5307,9 +5201,9 @@ export const contract: ApiContract = {
 			"summary": "List regions in workspace",
 			"auth": true,
 			"parameters": [
+				"header:akua-context",
 				"query:cursor",
-				"query:limit",
-				"header:akua-context"
+				"query:limit"
 			]
 		},
 		{
@@ -5319,7 +5213,7 @@ export const contract: ApiContract = {
 			"summary": "Update region",
 			"auth": true,
 			"parameters": [
-				"path:id:18",
+				"path:id:16",
 				"header:akua-context",
 				"header:if-match"
 			],
@@ -5334,12 +5228,16 @@ export const contract: ApiContract = {
 							"maxLength": 100
 						},
 						"icon": {
-							"type": [
-								"string",
-								"null"
+							"anyOf": [
+								{
+									"type": "string",
+									"format": "uri",
+									"maxLength": 256
+								},
+								{
+									"type": "null"
+								}
 							],
-							"maxLength": 256,
-							"format": "uri",
 							"description": "Icon URL. Send `null` to remove the icon."
 						}
 					},
@@ -5355,7 +5253,7 @@ export const contract: ApiContract = {
 			"auth": true,
 			"parameters": [
 				"header:akua-context",
-				"header:idempotency-key"
+				"header:idempotency-key:2"
 			],
 			"body": {
 				"required": true,
@@ -5386,41 +5284,42 @@ export const contract: ApiContract = {
 							"properties": {
 								"username": {
 									"type": "string",
+									"description": "Username for basic auth",
 									"minLength": 1,
-									"maxLength": 200,
-									"description": "Username for basic auth"
+									"maxLength": 200
 								},
 								"password": {
 									"type": "string",
+									"description": "Password for basic auth",
 									"minLength": 1,
-									"maxLength": 500,
-									"description": "Password for basic auth"
+									"maxLength": 500
 								},
 								"token": {
 									"type": "string",
+									"description": "Bearer token for token auth",
 									"minLength": 1,
-									"maxLength": 2000,
-									"description": "Bearer token for token auth"
+									"maxLength": 2000
 								},
 								"client_id": {
 									"type": "string",
+									"description": "Client ID for OAuth",
 									"minLength": 1,
-									"maxLength": 200,
-									"description": "Client ID for OAuth"
+									"maxLength": 200
 								},
 								"client_secret": {
 									"type": "string",
+									"description": "Client secret for OAuth",
 									"minLength": 1,
-									"maxLength": 500,
-									"description": "Client secret for OAuth"
+									"maxLength": 500
 								},
 								"token_url": {
 									"type": "string",
+									"description": "Token endpoint URL for OAuth",
 									"minLength": 1,
-									"maxLength": 2048,
-									"description": "Token endpoint URL for OAuth"
+									"maxLength": 2048
 								}
 							},
+							"additionalProperties": false,
 							"description": "Auth credentials (type-dependent)"
 						}
 					},
@@ -5441,7 +5340,7 @@ export const contract: ApiContract = {
 			"summary": "Delete registry credential",
 			"auth": true,
 			"parameters": [
-				"path:id:19",
+				"path:id:17",
 				"header:akua-context"
 			]
 		},
@@ -5452,9 +5351,9 @@ export const contract: ApiContract = {
 			"summary": "List registry credentials",
 			"auth": true,
 			"parameters": [
+				"header:akua-context",
 				"query:cursor",
-				"query:limit",
-				"header:akua-context"
+				"query:limit"
 			]
 		},
 		{
@@ -5465,7 +5364,7 @@ export const contract: ApiContract = {
 			"auth": true,
 			"parameters": [
 				"header:akua-context",
-				"header:idempotency-key:2"
+				"header:idempotency-key:3"
 			],
 			"body": {
 				"required": true,
@@ -5481,9 +5380,9 @@ export const contract: ApiContract = {
 			"summary": "Create workspace repository write token",
 			"auth": true,
 			"parameters": [
-				"path:id:4",
+				"path:id:7",
 				"header:akua-context",
-				"header:idempotency-key:2"
+				"header:idempotency-key:3"
 			],
 			"body": {
 				"required": false,
@@ -5499,9 +5398,9 @@ export const contract: ApiContract = {
 			"summary": "Get repository details",
 			"auth": true,
 			"parameters": [
-				"path:id:14",
-				"query:view:5",
-				"header:akua-context"
+				"path:id:18",
+				"header:akua-context",
+				"query:view:4"
 			]
 		},
 		{
@@ -5511,11 +5410,11 @@ export const contract: ApiContract = {
 			"summary": "List repositories in workspace",
 			"auth": true,
 			"parameters": [
+				"header:akua-context",
 				"query:cursor",
 				"query:limit",
 				"query:purpose",
-				"query:view:4",
-				"header:akua-context"
+				"query:view:3"
 			]
 		},
 		{
@@ -5525,10 +5424,10 @@ export const contract: ApiContract = {
 			"summary": "Accept repository change request",
 			"auth": true,
 			"parameters": [
-				"path:id:2",
+				"path:id:4",
 				"header:akua-context",
 				"header:if-match",
-				"header:idempotency-key:2"
+				"header:idempotency-key:3"
 			]
 		},
 		{
@@ -5539,7 +5438,7 @@ export const contract: ApiContract = {
 			"auth": true,
 			"parameters": [
 				"header:akua-context",
-				"header:idempotency-key:2"
+				"header:idempotency-key:3"
 			],
 			"body": {
 				"required": true,
@@ -5555,9 +5454,9 @@ export const contract: ApiContract = {
 			"summary": "Create repository change request token",
 			"auth": true,
 			"parameters": [
-				"path:id:2",
+				"path:id:4",
 				"header:akua-context",
-				"header:idempotency-key:2"
+				"header:idempotency-key:3"
 			],
 			"body": {
 				"required": false,
@@ -5573,7 +5472,7 @@ export const contract: ApiContract = {
 			"summary": "Get repository change request",
 			"auth": true,
 			"parameters": [
-				"path:id:2",
+				"path:id:4",
 				"header:akua-context"
 			]
 		},
@@ -5584,13 +5483,13 @@ export const contract: ApiContract = {
 			"summary": "List repository change requests",
 			"auth": true,
 			"parameters": [
+				"header:akua-context",
 				"query:cursor",
 				"query:limit",
-				"query:state:3",
+				"query:state:4",
 				"query:parent_repository",
 				"query:fork_repository",
-				"query:agent",
-				"header:akua-context"
+				"query:agent"
 			]
 		},
 		{
@@ -5600,10 +5499,10 @@ export const contract: ApiContract = {
 			"summary": "Reject repository change request",
 			"auth": true,
 			"parameters": [
-				"path:id:2",
+				"path:id:4",
 				"header:akua-context",
 				"header:if-match",
-				"header:idempotency-key:2"
+				"header:idempotency-key:3"
 			],
 			"body": {
 				"required": true,
@@ -5619,10 +5518,10 @@ export const contract: ApiContract = {
 			"summary": "Withdraw repository change request",
 			"auth": true,
 			"parameters": [
-				"path:id:2",
+				"path:id:4",
 				"header:akua-context",
 				"header:if-match",
-				"header:idempotency-key:2"
+				"header:idempotency-key:3"
 			]
 		},
 		{
@@ -5632,7 +5531,7 @@ export const contract: ApiContract = {
 			"summary": "Access secret version plaintext",
 			"auth": true,
 			"parameters": [
-				"path:id:15",
+				"path:id:19",
 				"path:vid:2",
 				"header:akua-context"
 			]
@@ -5645,7 +5544,7 @@ export const contract: ApiContract = {
 			"auth": true,
 			"parameters": [
 				"header:akua-context",
-				"header:idempotency-key"
+				"header:idempotency-key:2"
 			],
 			"body": {
 				"required": true,
@@ -5661,9 +5560,9 @@ export const contract: ApiContract = {
 			"summary": "Create secret version",
 			"auth": true,
 			"parameters": [
-				"path:id:15",
+				"path:id:19",
 				"header:akua-context",
-				"header:idempotency-key"
+				"header:idempotency-key:2"
 			],
 			"body": {
 				"required": true,
@@ -5679,10 +5578,10 @@ export const contract: ApiContract = {
 			"summary": "Delete secret",
 			"auth": true,
 			"parameters": [
-				"path:id:15",
-				"query:force",
+				"path:id:19",
 				"header:akua-context",
-				"header:if-match"
+				"header:if-match",
+				"query:force"
 			]
 		},
 		{
@@ -5692,7 +5591,7 @@ export const contract: ApiContract = {
 			"summary": "Destroy secret version",
 			"auth": true,
 			"parameters": [
-				"path:id:15",
+				"path:id:19",
 				"path:vid",
 				"header:akua-context",
 				"header:if-match"
@@ -5705,7 +5604,7 @@ export const contract: ApiContract = {
 			"summary": "Disable secret version",
 			"auth": true,
 			"parameters": [
-				"path:id:15",
+				"path:id:19",
 				"path:vid",
 				"header:akua-context",
 				"header:if-match"
@@ -5718,10 +5617,10 @@ export const contract: ApiContract = {
 			"summary": "Enable a disabled secret version",
 			"auth": true,
 			"parameters": [
-				"path:id:15",
+				"path:id:19",
 				"path:vid",
 				"header:akua-context",
-				"header:idempotency-key",
+				"header:idempotency-key:2",
 				"header:if-match"
 			]
 		},
@@ -5732,7 +5631,7 @@ export const contract: ApiContract = {
 			"summary": "Get secret",
 			"auth": true,
 			"parameters": [
-				"path:id:15",
+				"path:id:19",
 				"header:akua-context"
 			]
 		},
@@ -5743,7 +5642,7 @@ export const contract: ApiContract = {
 			"summary": "Get secret version",
 			"auth": true,
 			"parameters": [
-				"path:id:15",
+				"path:id:19",
 				"path:vid",
 				"header:akua-context"
 			]
@@ -5755,10 +5654,10 @@ export const contract: ApiContract = {
 			"summary": "List secrets",
 			"auth": true,
 			"parameters": [
+				"header:akua-context",
 				"query:cursor",
 				"query:limit",
-				"query:kind",
-				"header:akua-context"
+				"query:kind"
 			]
 		},
 		{
@@ -5768,11 +5667,11 @@ export const contract: ApiContract = {
 			"summary": "List secret versions",
 			"auth": true,
 			"parameters": [
-				"path:id:15",
+				"path:id:19",
+				"header:akua-context",
 				"query:cursor",
 				"query:limit",
-				"query:state:4",
-				"header:akua-context"
+				"query:state:5"
 			]
 		},
 		{
@@ -5782,9 +5681,9 @@ export const contract: ApiContract = {
 			"summary": "Restore a soft-deleted secret",
 			"auth": true,
 			"parameters": [
-				"path:id:15",
+				"path:id:19",
 				"header:akua-context",
-				"header:idempotency-key",
+				"header:idempotency-key:2",
 				"header:if-match"
 			]
 		},
@@ -5795,7 +5694,7 @@ export const contract: ApiContract = {
 			"summary": "Update secret",
 			"auth": true,
 			"parameters": [
-				"path:id:15",
+				"path:id:19",
 				"header:akua-context",
 				"header:if-match"
 			],
@@ -5827,7 +5726,7 @@ export const contract: ApiContract = {
 			"summary": "Get workspace snippet run",
 			"auth": true,
 			"parameters": [
-				"path:id:2",
+				"path:id:4",
 				"header:akua-context"
 			]
 		},
@@ -5838,14 +5737,14 @@ export const contract: ApiContract = {
 			"summary": "List workspace snippet runs",
 			"auth": true,
 			"parameters": [
+				"header:akua-context",
 				"query:cursor",
 				"query:limit",
-				"query:state",
+				"query:state:6",
 				"query:source",
 				"query:snippet",
 				"query:dashboard",
-				"query:view",
-				"header:akua-context"
+				"query:view:5"
 			]
 		},
 		{
@@ -5869,9 +5768,9 @@ export const contract: ApiContract = {
 			"summary": "Create snippet run",
 			"auth": true,
 			"parameters": [
-				"path:id:2",
+				"path:id:4",
 				"header:akua-context",
-				"header:idempotency-key"
+				"header:idempotency-key:2"
 			],
 			"body": {
 				"required": false,
@@ -5887,7 +5786,7 @@ export const contract: ApiContract = {
 			"summary": "Archive snippet",
 			"auth": true,
 			"parameters": [
-				"path:id",
+				"path:id:20",
 				"header:if-match"
 			]
 		},
@@ -5914,7 +5813,7 @@ export const contract: ApiContract = {
 			"summary": "Execute stored snippet",
 			"auth": true,
 			"parameters": [
-				"path:id:2"
+				"path:id:4"
 			],
 			"body": {
 				"required": false,
@@ -5930,7 +5829,7 @@ export const contract: ApiContract = {
 			"summary": "Get snippet details",
 			"auth": true,
 			"parameters": [
-				"path:id"
+				"path:id:20"
 			]
 		},
 		{
@@ -5940,7 +5839,7 @@ export const contract: ApiContract = {
 			"summary": "Get snippet run",
 			"auth": true,
 			"parameters": [
-				"path:id:2",
+				"path:id:4",
 				"path:run_id"
 			]
 		},
@@ -5951,7 +5850,7 @@ export const contract: ApiContract = {
 			"summary": "Get snippet dashboard usage",
 			"auth": true,
 			"parameters": [
-				"path:id"
+				"path:id:20"
 			]
 		},
 		{
@@ -5961,9 +5860,9 @@ export const contract: ApiContract = {
 			"summary": "List snippets in workspace",
 			"auth": true,
 			"parameters": [
+				"header:akua-context",
 				"query:cursor",
-				"query:limit",
-				"header:akua-context"
+				"query:limit"
 			]
 		},
 		{
@@ -5973,11 +5872,11 @@ export const contract: ApiContract = {
 			"summary": "List snippet runs",
 			"auth": true,
 			"parameters": [
-				"path:id:2",
+				"path:id:4",
 				"query:cursor",
 				"query:limit",
-				"query:state",
-				"query:view"
+				"query:state:6",
+				"query:view:5"
 			]
 		},
 		{
@@ -5997,7 +5896,7 @@ export const contract: ApiContract = {
 			"summary": "Update snippet",
 			"auth": true,
 			"parameters": [
-				"path:id",
+				"path:id:20",
 				"header:if-match"
 			],
 			"body": {
@@ -6014,9 +5913,9 @@ export const contract: ApiContract = {
 			"summary": "Add workspace member",
 			"auth": true,
 			"parameters": [
-				"path:id:10",
+				"path:id:5",
 				"header:akua-context",
-				"header:idempotency-key"
+				"header:idempotency-key:2"
 			],
 			"body": {
 				"required": true,
@@ -6050,9 +5949,9 @@ export const contract: ApiContract = {
 			"summary": "Cancel workspace subscription",
 			"auth": true,
 			"parameters": [
-				"path:id:10",
+				"path:id:5",
 				"header:akua-context",
-				"header:idempotency-key",
+				"header:idempotency-key:2",
 				"header:if-match"
 			],
 			"body": {
@@ -6081,7 +5980,7 @@ export const contract: ApiContract = {
 			"summary": "Change workspace subscription tier",
 			"auth": true,
 			"parameters": [
-				"path:id:10",
+				"path:id:5",
 				"header:akua-context",
 				"header:if-match"
 			],
@@ -6138,9 +6037,9 @@ export const contract: ApiContract = {
 			"summary": "Delete workspace",
 			"auth": true,
 			"parameters": [
-				"path:id:10",
+				"path:id:5",
 				"header:akua-context",
-				"header:idempotency-key",
+				"header:idempotency-key:2",
 				"header:if-match"
 			]
 		},
@@ -6151,7 +6050,7 @@ export const contract: ApiContract = {
 			"summary": "Get workspace",
 			"auth": true,
 			"parameters": [
-				"path:id:10"
+				"path:id:5"
 			]
 		},
 		{
@@ -6161,7 +6060,7 @@ export const contract: ApiContract = {
 			"summary": "Get workspace access state",
 			"auth": true,
 			"parameters": [
-				"path:id:10",
+				"path:id:5",
 				"header:akua-context"
 			]
 		},
@@ -6172,7 +6071,7 @@ export const contract: ApiContract = {
 			"summary": "Get workspace management access",
 			"auth": true,
 			"parameters": [
-				"path:id:10",
+				"path:id:5",
 				"header:akua-context"
 			]
 		},
@@ -6183,7 +6082,7 @@ export const contract: ApiContract = {
 			"summary": "Get workspace subscription",
 			"auth": true,
 			"parameters": [
-				"path:id:10",
+				"path:id:5",
 				"header:akua-context"
 			]
 		},
@@ -6194,7 +6093,7 @@ export const contract: ApiContract = {
 			"summary": "Get subscription change request",
 			"auth": true,
 			"parameters": [
-				"path:id:10",
+				"path:id:5",
 				"path:req_id",
 				"header:akua-context"
 			]
@@ -6217,10 +6116,10 @@ export const contract: ApiContract = {
 			"summary": "List workspace members",
 			"auth": true,
 			"parameters": [
-				"path:id:10",
+				"path:id:5",
+				"header:akua-context",
 				"query:cursor",
-				"query:limit",
-				"header:akua-context"
+				"query:limit"
 			]
 		},
 		{
@@ -6230,10 +6129,10 @@ export const contract: ApiContract = {
 			"summary": "List subscription change requests",
 			"auth": true,
 			"parameters": [
-				"path:id:10",
+				"path:id:5",
+				"header:akua-context",
 				"query:cursor",
-				"query:limit",
-				"header:akua-context"
+				"query:limit"
 			]
 		},
 		{
@@ -6243,7 +6142,7 @@ export const contract: ApiContract = {
 			"summary": "Reactivate workspace subscription",
 			"auth": true,
 			"parameters": [
-				"path:id:10",
+				"path:id:5",
 				"header:akua-context",
 				"header:if-match"
 			],
@@ -6251,7 +6150,6 @@ export const contract: ApiContract = {
 				"required": false,
 				"schema": {
 					"type": "object",
-					"properties": {},
 					"additionalProperties": false
 				}
 			}
@@ -6263,10 +6161,10 @@ export const contract: ApiContract = {
 			"summary": "Remove workspace member",
 			"auth": true,
 			"parameters": [
-				"path:id:10",
-				"path:userId",
+				"path:id:5",
+				"path:userId:3",
 				"header:akua-context",
-				"header:idempotency-key"
+				"header:idempotency-key:2"
 			]
 		},
 		{
@@ -6276,9 +6174,9 @@ export const contract: ApiContract = {
 			"summary": "Revoke workspace management access",
 			"auth": true,
 			"parameters": [
-				"path:id:10",
+				"path:id:5",
 				"header:akua-context",
-				"header:idempotency-key",
+				"header:idempotency-key:2",
 				"header:if-match"
 			]
 		},
@@ -6289,7 +6187,7 @@ export const contract: ApiContract = {
 			"summary": "Update workspace",
 			"auth": true,
 			"parameters": [
-				"path:id:10",
+				"path:id:5",
 				"header:akua-context",
 				"header:if-match"
 			],
@@ -6320,10 +6218,10 @@ export const contract: ApiContract = {
 			"summary": "Update workspace member role",
 			"auth": true,
 			"parameters": [
-				"path:id:10",
-				"path:userId",
+				"path:id:5",
+				"path:userId:3",
 				"header:akua-context",
-				"header:idempotency-key"
+				"header:idempotency-key:2"
 			],
 			"body": {
 				"required": true,
@@ -6352,7 +6250,7 @@ export const contract: ApiContract = {
 			"summary": "Get workspace subdomain",
 			"auth": true,
 			"parameters": [
-				"path:id:10"
+				"path:id:5"
 			]
 		},
 		{
@@ -6362,9 +6260,9 @@ export const contract: ApiContract = {
 			"summary": "Set workspace subdomain name",
 			"auth": true,
 			"parameters": [
-				"path:id:10",
+				"path:id:5",
 				"header:if-match",
-				"header:idempotency-key:2"
+				"header:idempotency-key:3"
 			],
 			"body": {
 				"required": true,
@@ -6429,8 +6327,8 @@ export const contract: ApiContract = {
 						"websocket",
 						"grpc"
 					],
-					"default": "http",
-					"description": "Transport class for route forwarding."
+					"description": "Transport class for route forwarding.",
+					"default": "http"
 				},
 				"routing_mode": {
 					"type": "string",
@@ -6438,8 +6336,8 @@ export const contract: ApiContract = {
 						"through_dispatcher",
 						"bypass_dispatcher"
 					],
-					"default": "through_dispatcher",
-					"description": "Whether traffic uses the dispatcher Worker or bypasses it."
+					"description": "Whether traffic uses the dispatcher Worker or bypasses it.",
+					"default": "through_dispatcher"
 				}
 			},
 			"required": [
@@ -6463,8 +6361,8 @@ export const contract: ApiContract = {
 						"websocket",
 						"grpc"
 					],
-					"default": "http",
-					"description": "Transport class for route forwarding."
+					"description": "Transport class for route forwarding.",
+					"default": "http"
 				},
 				"routing_mode": {
 					"type": "string",
@@ -6472,8 +6370,8 @@ export const contract: ApiContract = {
 						"through_dispatcher",
 						"bypass_dispatcher"
 					],
-					"default": "through_dispatcher",
-					"description": "Whether traffic uses the dispatcher Worker or bypasses it."
+					"description": "Whether traffic uses the dispatcher Worker or bypasses it.",
+					"default": "through_dispatcher"
 				}
 			},
 			"required": [
@@ -6592,16 +6490,20 @@ export const contract: ApiContract = {
 			"properties": {
 				"name": {
 					"type": "string",
+					"description": "Human-readable name for the token",
 					"minLength": 1,
-					"maxLength": 100,
-					"description": "Human-readable name for the token"
+					"maxLength": 100
 				},
 				"expires_at": {
-					"type": [
-						"integer",
-						"null"
+					"anyOf": [
+						{
+							"type": "integer",
+							"minimum": 0
+						},
+						{
+							"type": "null"
+						}
 					],
-					"minimum": 0,
 					"description": "Unix timestamp (seconds) when the token expires. Omit or pass null for no expiry."
 				}
 			},
@@ -6620,29 +6522,29 @@ export const contract: ApiContract = {
 				},
 				"account_id": {
 					"type": "string",
+					"description": "Cloudflare account ID.",
 					"minLength": 1,
 					"maxLength": 200,
-					"pattern": "^[A-Za-z0-9_-]+$",
-					"description": "Cloudflare account ID."
+					"pattern": "^[A-Za-z0-9_-]+$"
 				},
 				"origin_zone_id": {
 					"type": "string",
+					"description": "Cloudflare zone ID used for Access-protected origin hostnames.",
 					"minLength": 1,
 					"maxLength": 200,
-					"pattern": "^[A-Za-z0-9_-]+$",
-					"description": "Cloudflare zone ID used for Access-protected origin hostnames."
+					"pattern": "^[A-Za-z0-9_-]+$"
 				},
 				"origin_hostname_suffix": {
 					"type": "string",
+					"description": "Hostname suffix used for Access-protected origin hostnames.",
 					"minLength": 1,
-					"maxLength": 253,
-					"description": "Hostname suffix used for Access-protected origin hostnames."
+					"maxLength": 253
 				},
 				"api_token": {
 					"type": "string",
+					"description": "Cloudflare API token. Stored as a platform Secret; never returned.",
 					"minLength": 1,
-					"maxLength": 2000,
-					"description": "Cloudflare API token. Stored as a platform Secret; never returned."
+					"maxLength": 2000
 				}
 			},
 			"required": [
@@ -6740,8 +6642,8 @@ export const contract: ApiContract = {
 						"websocket",
 						"grpc"
 					],
-					"default": "http",
-					"description": "Transport class for route forwarding."
+					"description": "Transport class for route forwarding.",
+					"default": "http"
 				},
 				"routing_mode": {
 					"type": "string",
@@ -6749,8 +6651,8 @@ export const contract: ApiContract = {
 						"through_dispatcher",
 						"bypass_dispatcher"
 					],
-					"default": "through_dispatcher",
-					"description": "Whether traffic uses the dispatcher Worker or bypasses it."
+					"description": "Whether traffic uses the dispatcher Worker or bypasses it.",
+					"default": "through_dispatcher"
 				}
 			},
 			"required": [
@@ -6774,45 +6676,29 @@ export const contract: ApiContract = {
 							"maxLength": 100
 						},
 						"col_span": {
-							"anyOf": [
-								{
-									"type": "number",
-									"enum": [
-										1
-									]
-								},
-								{
-									"type": "number",
-									"enum": [
-										2
-									]
-								},
-								{
-									"type": "number",
-									"enum": [
-										3
-									]
-								},
-								{
-									"type": "number",
-									"enum": [
-										4
-									]
-								}
+							"type": "number",
+							"enum": [
+								1,
+								2,
+								3,
+								4
 							]
 						},
 						"display_type": {
-							"type": [
-								"string",
-								"null"
-							],
-							"enum": [
-								"table",
-								"stat",
-								"json",
-								"logs",
-								"timeseries",
-								null
+							"anyOf": [
+								{
+									"type": "string",
+									"enum": [
+										"table",
+										"stat",
+										"json",
+										"logs",
+										"timeseries"
+									]
+								},
+								{
+									"type": "null"
+								}
 							],
 							"description": "Controls how the snippet result is rendered in dashboard widgets"
 						},
@@ -6834,31 +6720,12 @@ export const contract: ApiContract = {
 							"maxLength": 100
 						},
 						"col_span": {
-							"anyOf": [
-								{
-									"type": "number",
-									"enum": [
-										1
-									]
-								},
-								{
-									"type": "number",
-									"enum": [
-										2
-									]
-								},
-								{
-									"type": "number",
-									"enum": [
-										3
-									]
-								},
-								{
-									"type": "number",
-									"enum": [
-										4
-									]
-								}
+							"type": "number",
+							"enum": [
+								1,
+								2,
+								3,
+								4
 							]
 						},
 						"position": {
@@ -6874,17 +6741,20 @@ export const contract: ApiContract = {
 							"default": "standard"
 						},
 						"drill_down": {
-							"type": [
-								"string",
-								"null"
+							"anyOf": [
+								{
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 2048
+								},
+								{
+									"type": "null"
+								}
 							],
-							"minLength": 1,
-							"maxLength": 2048,
 							"default": null
 						},
 						"visualization_options": {
 							"type": "object",
-							"additionalProperties": {},
 							"default": {}
 						},
 						"freshness_policy": {
@@ -6942,9 +6812,13 @@ export const contract: ApiContract = {
 							"maxLength": 54
 						},
 						"snippet_etag": {
-							"type": [
-								"string",
-								"null"
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
 							],
 							"default": null
 						},
@@ -7026,22 +6900,25 @@ export const contract: ApiContract = {
 							"default": {}
 						},
 						"visualization": {
-							"type": [
-								"string",
-								"null"
-							],
-							"enum": [
-								"stat",
-								"sparkline",
-								"line",
-								"area",
-								"bar",
-								"donut",
-								"table",
-								"status_list",
-								"logs",
-								"json",
-								null
+							"anyOf": [
+								{
+									"type": "string",
+									"enum": [
+										"stat",
+										"sparkline",
+										"line",
+										"area",
+										"bar",
+										"donut",
+										"table",
+										"status_list",
+										"logs",
+										"json"
+									]
+								},
+								{
+									"type": "null"
+								}
 							],
 							"default": null
 						},
@@ -7104,20 +6981,23 @@ export const contract: ApiContract = {
 							}
 						},
 						"display_type": {
-							"type": [
-								"string",
-								"null"
+							"anyOf": [
+								{
+									"type": "string",
+									"enum": [
+										"table",
+										"stat",
+										"json",
+										"logs",
+										"timeseries"
+									]
+								},
+								{
+									"type": "null"
+								}
 							],
-							"enum": [
-								"table",
-								"stat",
-								"json",
-								"logs",
-								"timeseries",
-								null
-							],
-							"default": null,
-							"description": "Controls how the snippet result is rendered in dashboard widgets"
+							"description": "Controls how the snippet result is rendered in dashboard widgets",
+							"default": null
 						}
 					},
 					"required": [
@@ -7135,31 +7015,12 @@ export const contract: ApiContract = {
 							"maxLength": 100
 						},
 						"col_span": {
-							"anyOf": [
-								{
-									"type": "number",
-									"enum": [
-										1
-									]
-								},
-								{
-									"type": "number",
-									"enum": [
-										2
-									]
-								},
-								{
-									"type": "number",
-									"enum": [
-										3
-									]
-								},
-								{
-									"type": "number",
-									"enum": [
-										4
-									]
-								}
+							"type": "number",
+							"enum": [
+								1,
+								2,
+								3,
+								4
 							]
 						},
 						"position": {
@@ -7175,17 +7036,20 @@ export const contract: ApiContract = {
 							"default": "standard"
 						},
 						"drill_down": {
-							"type": [
-								"string",
-								"null"
+							"anyOf": [
+								{
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 2048
+								},
+								{
+									"type": "null"
+								}
 							],
-							"minLength": 1,
-							"maxLength": 2048,
 							"default": null
 						},
 						"visualization_options": {
 							"type": "object",
-							"additionalProperties": {},
 							"default": {}
 						},
 						"freshness_policy": {
@@ -7348,8 +7212,8 @@ export const contract: ApiContract = {
 						},
 						"ref": {
 							"type": "string",
-							"pattern": "^[0-9a-f]{40}$",
-							"description": "Immutable lowercase 40-character commit SHA in the authored workspace repository. Akua validates that exact checkout and reads its package version from akua.toml."
+							"description": "Immutable lowercase 40-character commit SHA in the authored workspace repository. Akua validates that exact checkout and reads its package version from akua.toml.",
+							"pattern": "^[0-9a-f]{40}$"
 						}
 					},
 					"required": [
@@ -7385,8 +7249,7 @@ export const contract: ApiContract = {
 							"maxLength": 54
 						},
 						"initial_values": {
-							"type": "object",
-							"additionalProperties": {}
+							"type": "object"
 						}
 					},
 					"required": [
@@ -7417,8 +7280,7 @@ export const contract: ApiContract = {
 							"maxLength": 54
 						},
 						"initial_values": {
-							"type": "object",
-							"additionalProperties": {}
+							"type": "object"
 						}
 					},
 					"required": [
@@ -7439,9 +7301,13 @@ export const contract: ApiContract = {
 					"maxLength": 255
 				},
 				"skip_unchanged": {
-					"type": [
-						"boolean",
-						"null"
+					"anyOf": [
+						{
+							"type": "boolean"
+						},
+						{
+							"type": "null"
+						}
 					],
 					"default": true
 				},
@@ -7461,25 +7327,25 @@ export const contract: ApiContract = {
 					"properties": {
 						"product_id": {
 							"type": "string",
+							"description": "Product ID for attribution and package-version resolution. Required for channel-backed offers. When `package_version_id` is omitted, the server uses the product’s current package version pin.",
 							"minLength": 1,
-							"maxLength": 55,
-							"description": "Product ID for attribution and package-version resolution. Required for channel-backed offers. When `package_version_id` is omitted, the server uses the product’s current package version pin."
+							"maxLength": 55
 						},
 						"package_version_id": {
 							"type": "string",
+							"description": "Package version ID to pin explicitly at create time. Optional when `product_id` is supplied; if both are supplied, this value overrides the product’s current package version pin.",
 							"minLength": 1,
-							"maxLength": 55,
-							"description": "Package version ID to pin explicitly at create time. Optional when `product_id` is supplied; if both are supplied, this value overrides the product’s current package version pin."
+							"maxLength": 55
 						},
 						"allowed_emails": {
 							"type": "array",
 							"items": {
 								"type": "string",
-								"maxLength": 254,
-								"format": "email"
+								"format": "email",
+								"maxLength": 254
 							},
-							"maxItems": 50,
-							"description": "Verified customer email allowlist. Empty or omitted means any authenticated customer can redeem the offer."
+							"description": "Verified customer email allowlist. Empty or omitted means any authenticated customer can redeem the offer.",
+							"maxItems": 50
 						},
 						"field_values": {
 							"type": "object",
@@ -7497,7 +7363,8 @@ export const contract: ApiContract = {
 								"required": [
 									"value",
 									"locked"
-								]
+								],
+								"additionalProperties": false
 							},
 							"description": "Package input pre-fills keyed by input-schema property name. Values are validated against the resolved package version input schema before the offer is created."
 						},
@@ -7506,8 +7373,8 @@ export const contract: ApiContract = {
 						},
 						"internal_note": {
 							"type": "string",
-							"maxLength": 500,
-							"description": "Seller-only internal context for this offer. Never returned by customer resolve."
+							"description": "Seller-only internal context for this offer. Never returned by customer resolve.",
+							"maxLength": 500
 						},
 						"commercial_mode": {
 							"allOf": [
@@ -7524,33 +7391,37 @@ export const contract: ApiContract = {
 						},
 						"notes": {
 							"type": "string",
-							"maxLength": 500,
-							"description": "Seller-authored offer note. Customer resolve returns it only to authenticated callers authorized through an open allowlist or a verified-email match."
+							"description": "Seller-authored offer note. Customer resolve returns it only to authenticated callers authorized through an open allowlist or a verified-email match.",
+							"maxLength": 500
 						},
 						"expires_at": {
 							"type": "integer",
-							"exclusiveMinimum": 0,
-							"description": "Unix timestamp in seconds after which the offer can no longer be redeemed. Omit for no explicit expiration."
+							"description": "Unix timestamp in seconds after which the offer can no longer be redeemed. Omit for no explicit expiration.",
+							"exclusiveMinimum": 0
 						},
 						"max_uses": {
-							"type": [
-								"integer",
-								"null"
+							"anyOf": [
+								{
+									"type": "integer",
+									"maximum": 10000,
+									"exclusiveMinimum": 0
+								},
+								{
+									"type": "null"
+								}
 							],
-							"exclusiveMinimum": 0,
-							"maximum": 10000,
 							"description": "Maximum number of successful redemptions allowed for this offer. Omit for the default single-use behavior; send null for unlimited redemptions."
 						},
 						"order_ttl_minutes": {
 							"type": "integer",
-							"exclusiveMinimum": 0,
+							"description": "Per-redemption order TTL in minutes. Defaults to 120; capped at 1440 (24h).",
 							"maximum": 1440,
-							"description": "Per-redemption order TTL in minutes. Defaults to 120; capped at 1440 (24h)."
+							"exclusiveMinimum": 0
 						},
 						"tier": {
 							"type": "string",
-							"maxLength": 32,
-							"description": "Legacy advisory billing tier for non-channel offers. Channel-backed offers use `commercial_mode` and `pricing_request`."
+							"description": "Legacy advisory billing tier for non-channel offers. Channel-backed offers use `commercial_mode` and `pricing_request`.",
+							"maxLength": 32
 						}
 					},
 					"required": [
@@ -7563,19 +7434,19 @@ export const contract: ApiContract = {
 					"properties": {
 						"package_version_id": {
 							"type": "string",
+							"description": "Package version ID to pin explicitly at create time. Optional when `product_id` is supplied; if both are supplied, this value overrides the product’s current package version pin.",
 							"minLength": 1,
-							"maxLength": 55,
-							"description": "Package version ID to pin explicitly at create time. Optional when `product_id` is supplied; if both are supplied, this value overrides the product’s current package version pin."
+							"maxLength": 55
 						},
 						"allowed_emails": {
 							"type": "array",
 							"items": {
 								"type": "string",
-								"maxLength": 254,
-								"format": "email"
+								"format": "email",
+								"maxLength": 254
 							},
-							"maxItems": 50,
-							"description": "Verified customer email allowlist. Empty or omitted means any authenticated customer can redeem the offer."
+							"description": "Verified customer email allowlist. Empty or omitted means any authenticated customer can redeem the offer.",
+							"maxItems": 50
 						},
 						"field_values": {
 							"type": "object",
@@ -7593,7 +7464,8 @@ export const contract: ApiContract = {
 								"required": [
 									"value",
 									"locked"
-								]
+								],
+								"additionalProperties": false
 							},
 							"description": "Package input pre-fills keyed by input-schema property name. Values are validated against the resolved package version input schema before the offer is created."
 						},
@@ -7602,8 +7474,8 @@ export const contract: ApiContract = {
 						},
 						"internal_note": {
 							"type": "string",
-							"maxLength": 500,
-							"description": "Seller-only internal context for this offer. Never returned by customer resolve."
+							"description": "Seller-only internal context for this offer. Never returned by customer resolve.",
+							"maxLength": 500
 						},
 						"commercial_mode": {
 							"allOf": [
@@ -7620,33 +7492,37 @@ export const contract: ApiContract = {
 						},
 						"notes": {
 							"type": "string",
-							"maxLength": 500,
-							"description": "Seller-authored offer note. Customer resolve returns it only to authenticated callers authorized through an open allowlist or a verified-email match."
+							"description": "Seller-authored offer note. Customer resolve returns it only to authenticated callers authorized through an open allowlist or a verified-email match.",
+							"maxLength": 500
 						},
 						"expires_at": {
 							"type": "integer",
-							"exclusiveMinimum": 0,
-							"description": "Unix timestamp in seconds after which the offer can no longer be redeemed. Omit for no explicit expiration."
+							"description": "Unix timestamp in seconds after which the offer can no longer be redeemed. Omit for no explicit expiration.",
+							"exclusiveMinimum": 0
 						},
 						"max_uses": {
-							"type": [
-								"integer",
-								"null"
+							"anyOf": [
+								{
+									"type": "integer",
+									"maximum": 10000,
+									"exclusiveMinimum": 0
+								},
+								{
+									"type": "null"
+								}
 							],
-							"exclusiveMinimum": 0,
-							"maximum": 10000,
 							"description": "Maximum number of successful redemptions allowed for this offer. Omit for the default single-use behavior; send null for unlimited redemptions."
 						},
 						"order_ttl_minutes": {
 							"type": "integer",
-							"exclusiveMinimum": 0,
+							"description": "Per-redemption order TTL in minutes. Defaults to 120; capped at 1440 (24h).",
 							"maximum": 1440,
-							"description": "Per-redemption order TTL in minutes. Defaults to 120; capped at 1440 (24h)."
+							"exclusiveMinimum": 0
 						},
 						"tier": {
 							"type": "string",
-							"maxLength": 32,
-							"description": "Legacy advisory billing tier for non-channel offers. Channel-backed offers use `commercial_mode` and `pricing_request`."
+							"description": "Legacy advisory billing tier for non-channel offers. Channel-backed offers use `commercial_mode` and `pricing_request`.",
+							"maxLength": 32
 						}
 					},
 					"required": [
@@ -7659,25 +7535,25 @@ export const contract: ApiContract = {
 					"properties": {
 						"product_id": {
 							"type": "string",
+							"description": "Product ID for attribution and package-version resolution. Required for channel-backed offers. When `package_version_id` is omitted, the server uses the product’s current package version pin.",
 							"minLength": 1,
-							"maxLength": 55,
-							"description": "Product ID for attribution and package-version resolution. Required for channel-backed offers. When `package_version_id` is omitted, the server uses the product’s current package version pin."
+							"maxLength": 55
 						},
 						"package_version_id": {
 							"type": "string",
+							"description": "Package version ID to pin explicitly at create time. Optional when `product_id` is supplied; if both are supplied, this value overrides the product’s current package version pin.",
 							"minLength": 1,
-							"maxLength": 55,
-							"description": "Package version ID to pin explicitly at create time. Optional when `product_id` is supplied; if both are supplied, this value overrides the product’s current package version pin."
+							"maxLength": 55
 						},
 						"allowed_emails": {
 							"type": "array",
 							"items": {
 								"type": "string",
-								"maxLength": 254,
-								"format": "email"
+								"format": "email",
+								"maxLength": 254
 							},
-							"maxItems": 50,
-							"description": "Verified customer email allowlist. Empty or omitted means any authenticated customer can redeem the offer."
+							"description": "Verified customer email allowlist. Empty or omitted means any authenticated customer can redeem the offer.",
+							"maxItems": 50
 						},
 						"field_values": {
 							"type": "object",
@@ -7695,7 +7571,8 @@ export const contract: ApiContract = {
 								"required": [
 									"value",
 									"locked"
-								]
+								],
+								"additionalProperties": false
 							},
 							"description": "Package input pre-fills keyed by input-schema property name. Values are validated against the resolved package version input schema before the offer is created."
 						},
@@ -7704,8 +7581,8 @@ export const contract: ApiContract = {
 						},
 						"internal_note": {
 							"type": "string",
-							"maxLength": 500,
-							"description": "Seller-only internal context for this offer. Never returned by customer resolve."
+							"description": "Seller-only internal context for this offer. Never returned by customer resolve.",
+							"maxLength": 500
 						},
 						"commercial_mode": {
 							"allOf": [
@@ -7722,34 +7599,38 @@ export const contract: ApiContract = {
 						},
 						"notes": {
 							"type": "string",
-							"maxLength": 500,
-							"description": "Seller-authored offer note. Customer resolve returns it only to authenticated callers authorized through an open allowlist or a verified-email match."
+							"description": "Seller-authored offer note. Customer resolve returns it only to authenticated callers authorized through an open allowlist or a verified-email match.",
+							"maxLength": 500
 						},
 						"expires_at": {
 							"type": "integer",
-							"exclusiveMinimum": 0,
-							"description": "Unix timestamp in seconds after which the offer can no longer be redeemed. Omit for no explicit expiration."
+							"description": "Unix timestamp in seconds after which the offer can no longer be redeemed. Omit for no explicit expiration.",
+							"exclusiveMinimum": 0
 						},
 						"max_uses": {
-							"type": [
-								"integer",
-								"null"
+							"anyOf": [
+								{
+									"type": "integer",
+									"maximum": 10000,
+									"exclusiveMinimum": 0
+								},
+								{
+									"type": "null"
+								}
 							],
-							"exclusiveMinimum": 0,
-							"maximum": 10000,
 							"description": "Maximum number of successful redemptions allowed for this offer. Omit for the default single-use behavior; send null for unlimited redemptions."
 						},
 						"order_ttl_minutes": {
 							"type": "integer",
-							"exclusiveMinimum": 0,
+							"description": "Per-redemption order TTL in minutes. Defaults to 120; capped at 1440 (24h).",
 							"maximum": 1440,
-							"description": "Per-redemption order TTL in minutes. Defaults to 120; capped at 1440 (24h)."
+							"exclusiveMinimum": 0
 						},
 						"offer_channel_id": {
 							"type": "string",
+							"description": "Offer Channel whose active policy resolves approval, checkout, support, and pricing terms.",
 							"minLength": 1,
-							"maxLength": 54,
-							"description": "Offer Channel whose active policy resolves approval, checkout, support, and pricing terms."
+							"maxLength": 54
 						}
 					},
 					"required": [
@@ -7771,8 +7652,8 @@ export const contract: ApiContract = {
 				},
 				"display_image_url": {
 					"type": "string",
-					"maxLength": 2048,
-					"format": "uri"
+					"format": "uri",
+					"maxLength": 2048
 				},
 				"keep_source_repository": {
 					"type": "boolean",
@@ -7788,14 +7669,7 @@ export const contract: ApiContract = {
 							{
 								"$ref": "#/$defs/CreatePackageHostedSource"
 							}
-						],
-						"discriminator": {
-							"propertyName": "kind",
-							"mapping": {
-								"helm": "#/components/schemas/CreatePackageHelmSource",
-								"hosted": "#/components/schemas/CreatePackageHostedSource"
-							}
-						}
+						]
 					},
 					"minItems": 1,
 					"maxItems": 1
@@ -7836,8 +7710,7 @@ export const contract: ApiContract = {
 					"maxLength": 2048
 				},
 				"values": {
-					"type": "object",
-					"additionalProperties": {}
+					"type": "object"
 				}
 			},
 			"required": [
@@ -7858,9 +7731,9 @@ export const contract: ApiContract = {
 				},
 				"repository_id": {
 					"type": "string",
+					"description": "Ephemeral platform-hosted workspace repository containing authored source.",
 					"minLength": 1,
-					"maxLength": 55,
-					"description": "Ephemeral platform-hosted workspace repository containing authored source."
+					"maxLength": 55
 				},
 				"ref": {
 					"type": "string",
@@ -7896,9 +7769,9 @@ export const contract: ApiContract = {
 				},
 				"ref": {
 					"type": "string",
+					"description": "Immutable package content reference. For OCI-backed packages this is normally the digest returned by `akua publish`; Akua verifies it against the published artifact before registering the version.",
 					"minLength": 1,
-					"maxLength": 512,
-					"description": "Immutable package content reference. For OCI-backed packages this is normally the digest returned by `akua publish`; Akua verifies it against the published artifact before registering the version."
+					"maxLength": 512
 				},
 				"input_schema": {
 					"allOf": [
@@ -7928,7 +7801,8 @@ export const contract: ApiContract = {
 								"maxVersion": {
 									"type": "string"
 								}
-							}
+							},
+							"additionalProperties": false
 						},
 						"placement": {
 							"type": "object",
@@ -7969,7 +7843,8 @@ export const contract: ApiContract = {
 							"required": [
 								"providers",
 								"regions"
-							]
+							],
+							"additionalProperties": false
 						},
 						"kaas": {
 							"type": "object",
@@ -7984,14 +7859,16 @@ export const contract: ApiContract = {
 							},
 							"required": [
 								"networkProfile"
-							]
+							],
+							"additionalProperties": false
 						}
 					},
 					"required": [
 						"clusterTypes",
 						"kubernetes",
 						"placement"
-					]
+					],
+					"additionalProperties": false
 				}
 			},
 			"required": [
@@ -8019,19 +7896,19 @@ export const contract: ApiContract = {
 				},
 				"custom_image": {
 					"type": "string",
-					"format": "uri",
-					"description": "Custom display image URL — overrides the package logo"
+					"description": "Custom display image URL — overrides the package logo",
+					"format": "uri"
 				},
 				"custom_description": {
 					"type": "string",
-					"maxLength": 500,
-					"description": "Custom display description — overrides the package description"
+					"description": "Custom display description — overrides the package description",
+					"maxLength": 500
 				},
 				"support_email": {
 					"type": "string",
-					"maxLength": 254,
+					"description": "Seller support email shown to customers when an install or offer link needs help.",
 					"format": "email",
-					"description": "Seller support email shown to customers when an install or offer link needs help."
+					"maxLength": 254
 				},
 				"marketplace": {
 					"$ref": "#/$defs/ProductMarketplace"
@@ -8066,14 +7943,14 @@ export const contract: ApiContract = {
 					"properties": {
 						"parent_repository_id": {
 							"type": "string",
+							"description": "Repository that will receive the accepted change request.",
 							"minLength": 1,
-							"maxLength": 55,
-							"description": "Repository that will receive the accepted change request."
+							"maxLength": 55
 						},
 						"expires_at_seconds": {
 							"type": "integer",
-							"exclusiveMinimum": 0,
-							"description": "Seconds until the repository change request expires."
+							"description": "Seconds until the repository change request expires.",
+							"exclusiveMinimum": 0
 						},
 						"kind": {
 							"type": "string",
@@ -8093,14 +7970,14 @@ export const contract: ApiContract = {
 					"properties": {
 						"parent_repository_id": {
 							"type": "string",
+							"description": "Repository that will receive the accepted change request.",
 							"minLength": 1,
-							"maxLength": 55,
-							"description": "Repository that will receive the accepted change request."
+							"maxLength": 55
 						},
 						"expires_at_seconds": {
 							"type": "integer",
-							"exclusiveMinimum": 0,
-							"description": "Seconds until the repository change request expires."
+							"description": "Seconds until the repository change request expires.",
+							"exclusiveMinimum": 0
 						},
 						"kind": {
 							"type": "string",
@@ -8120,14 +7997,14 @@ export const contract: ApiContract = {
 					"properties": {
 						"parent_repository_id": {
 							"type": "string",
+							"description": "Repository that will receive the accepted change request.",
 							"minLength": 1,
-							"maxLength": 55,
-							"description": "Repository that will receive the accepted change request."
+							"maxLength": 55
 						},
 						"expires_at_seconds": {
 							"type": "integer",
-							"exclusiveMinimum": 0,
-							"description": "Seconds until the repository change request expires."
+							"description": "Seconds until the repository change request expires.",
+							"exclusiveMinimum": 0
 						},
 						"kind": {
 							"type": "string",
@@ -8138,9 +8015,9 @@ export const contract: ApiContract = {
 						},
 						"agent_id": {
 							"type": "string",
+							"description": "Agent that found the likely source or configuration fix.",
 							"minLength": 1,
-							"maxLength": 54,
-							"description": "Agent that found the likely source or configuration fix."
+							"maxLength": 54
 						},
 						"remediation_evidence": {
 							"type": "object",
@@ -8213,9 +8090,9 @@ export const contract: ApiContract = {
 				},
 				"expires_in_seconds": {
 					"type": "integer",
-					"exclusiveMinimum": 0,
+					"description": "Seconds until the fork write token expires. Maximum is one hour.",
 					"maximum": 3600,
-					"description": "Seconds until the fork write token expires. Maximum is one hour."
+					"exclusiveMinimum": 0
 				}
 			},
 			"additionalProperties": false
@@ -8225,9 +8102,9 @@ export const contract: ApiContract = {
 			"properties": {
 				"revoke_after_seconds": {
 					"type": "integer",
+					"description": "Seconds until the platform begins scheduled token revocation. Minimum is 60 seconds, maximum is one hour, and the schedule is capped to the remaining repository lifetime.",
 					"minimum": 60,
-					"maximum": 3600,
-					"description": "Seconds until the platform begins scheduled token revocation. Minimum is 60 seconds, maximum is one hour, and the schedule is capped to the remaining repository lifetime."
+					"maximum": 3600
 				}
 			},
 			"additionalProperties": false
@@ -8567,14 +8444,14 @@ export const contract: ApiContract = {
 						},
 						"description": {
 							"type": "string",
-							"maxLength": 500,
-							"description": "Optional human-readable description"
+							"description": "Optional human-readable description",
+							"maxLength": 500
 						},
 						"code": {
 							"type": "string",
+							"description": "Async JavaScript function body. Executed in a sandboxed runtime with access to platform.request().",
 							"minLength": 1,
-							"maxLength": 50000,
-							"description": "Async JavaScript function body. Executed in a sandboxed runtime with access to platform.request()."
+							"maxLength": 50000
 						},
 						"display_type": {
 							"type": "string",
@@ -8931,14 +8808,14 @@ export const contract: ApiContract = {
 						},
 						"description": {
 							"type": "string",
-							"maxLength": 500,
-							"description": "Optional human-readable description"
+							"description": "Optional human-readable description",
+							"maxLength": 500
 						},
 						"code": {
 							"type": "string",
+							"description": "Async JavaScript function body. Executed in a sandboxed runtime with access to platform.request().",
 							"minLength": 1,
-							"maxLength": 50000,
-							"description": "Async JavaScript function body. Executed in a sandboxed runtime with access to platform.request()."
+							"maxLength": 50000
 						},
 						"display_type": {
 							"type": "string",
@@ -9327,12 +9204,10 @@ export const contract: ApiContract = {
 			"type": "object",
 			"properties": {
 				"inputs": {
-					"type": "object",
-					"additionalProperties": {}
+					"type": "object"
 				},
 				"overrides": {
 					"type": "object",
-					"additionalProperties": {},
 					"description": "Legacy execution metadata retained for compatibility. It is not applied as runtime input."
 				},
 				"agent_turn_id": {
@@ -9519,13 +9394,12 @@ export const contract: ApiContract = {
 			"properties": {
 				"code": {
 					"type": "string",
+					"description": "Async JavaScript function body. Executed in a sandboxed runtime with access to platform.request().",
 					"minLength": 1,
-					"maxLength": 50000,
-					"description": "Async JavaScript function body. Executed in a sandboxed runtime with access to platform.request()."
+					"maxLength": 50000
 				},
 				"inputs": {
-					"type": "object",
-					"additionalProperties": {}
+					"type": "object"
 				}
 			},
 			"required": [
@@ -9537,8 +9411,7 @@ export const contract: ApiContract = {
 			"type": "object",
 			"properties": {
 				"inputs": {
-					"type": "object",
-					"additionalProperties": {}
+					"type": "object"
 				}
 			},
 			"additionalProperties": false
@@ -10807,23 +10680,27 @@ export const contract: ApiContract = {
 					"maxLength": 120
 				},
 				"description": {
-					"type": [
-						"string",
-						"null"
-					],
-					"maxLength": 1000
+					"anyOf": [
+						{
+							"type": "string",
+							"maxLength": 1000
+						},
+						{
+							"type": "null"
+						}
+					]
 				},
 				"display_image_url": {
 					"type": "string",
-					"maxLength": 2048,
-					"format": "uri"
+					"format": "uri",
+					"maxLength": 2048
 				},
 				"oci_ref": {
 					"type": "string",
+					"description": "OCI reference for the published Akua Package repository. If this registry matches an active workspace registry credential, Akua uses that credential to inspect the artifact.",
 					"minLength": 1,
 					"maxLength": 2048,
-					"pattern": "^oci:\\/\\/",
-					"description": "OCI reference for the published Akua Package repository. If this registry matches an active workspace registry credential, Akua uses that credential to inspect the artifact."
+					"pattern": "^oci:\\/\\/"
 				},
 				"version": {
 					"$ref": "#/$defs/CreatePackageVersionOciBody"
@@ -11154,9 +11031,9 @@ export const contract: ApiContract = {
 				},
 				"unit_amount": {
 					"type": "integer",
+					"description": "Requested price in the smallest currency unit, for example cents for EUR or USD.",
 					"minimum": 0,
-					"maximum": 100000000,
-					"description": "Requested price in the smallest currency unit, for example cents for EUR or USD."
+					"maximum": 100000000
 				},
 				"interval": {
 					"allOf": [
@@ -11207,8 +11084,8 @@ export const contract: ApiContract = {
 						"admin",
 						"member"
 					],
-					"default": "member",
-					"description": "Membership role in the organization"
+					"description": "Membership role in the organization",
+					"default": "member"
 				}
 			},
 			"required": [
@@ -11264,8 +11141,8 @@ export const contract: ApiContract = {
 						"admin",
 						"member"
 					],
-					"default": "member",
-					"description": "Membership role in the organization"
+					"description": "Membership role in the organization",
+					"default": "member"
 				}
 			},
 			"required": [
@@ -11307,12 +11184,16 @@ export const contract: ApiContract = {
 					"pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
 				},
 				"icon": {
-					"type": [
-						"string",
-						"null"
-					],
-					"maxLength": 256,
-					"format": "uri"
+					"anyOf": [
+						{
+							"type": "string",
+							"format": "uri",
+							"maxLength": 256
+						},
+						{
+							"type": "null"
+						}
+					]
 				}
 			},
 			"additionalProperties": false
@@ -11342,8 +11223,7 @@ export const contract: ApiContract = {
 			"additionalProperties": false
 		},
 		"PackageVersionInputs": {
-			"type": "object",
-			"additionalProperties": {}
+			"type": "object"
 		},
 		"PackageVersionPin": {
 			"oneOf": [
@@ -11449,9 +11329,9 @@ export const contract: ApiContract = {
 			"properties": {
 				"rejection_reason": {
 					"type": "string",
+					"description": "Reason shown in audit logs and review UI.",
 					"minLength": 1,
-					"maxLength": 2000,
-					"description": "Reason shown in audit logs and review UI."
+					"maxLength": 2000
 				}
 			},
 			"required": [
@@ -11475,7 +11355,6 @@ export const contract: ApiContract = {
 		},
 		"ResumeMachineBody": {
 			"type": "object",
-			"properties": {},
 			"additionalProperties": false
 		},
 		"SelectOrderDraftWorkspaceBody": {
@@ -11558,7 +11437,6 @@ export const contract: ApiContract = {
 			"properties": {
 				"field_values": {
 					"type": "object",
-					"additionalProperties": {},
 					"description": "Customer-supplied configure form values, keyed by field name"
 				}
 			},
@@ -11680,55 +11558,43 @@ export const contract: ApiContract = {
 					"type": "object",
 					"properties": {
 						"title": {
-							"type": [
-								"string",
-								"null"
-							],
-							"maxLength": 100
-						},
-						"col_span": {
 							"anyOf": [
 								{
-									"type": "number",
-									"enum": [
-										1
-									]
+									"type": "string",
+									"maxLength": 100
 								},
 								{
-									"type": "number",
-									"enum": [
-										2
-									]
-								},
-								{
-									"type": "number",
-									"enum": [
-										3
-									]
-								},
-								{
-									"type": "number",
-									"enum": [
-										4
-									]
+									"type": "null"
 								}
+							]
+						},
+						"col_span": {
+							"type": "number",
+							"enum": [
+								1,
+								2,
+								3,
+								4
 							]
 						},
 						"position": {
 							"type": "integer"
 						},
 						"display_type": {
-							"type": [
-								"string",
-								"null"
-							],
-							"enum": [
-								"table",
-								"stat",
-								"json",
-								"logs",
-								"timeseries",
-								null
+							"anyOf": [
+								{
+									"type": "string",
+									"enum": [
+										"table",
+										"stat",
+										"json",
+										"logs",
+										"timeseries"
+									]
+								},
+								{
+									"type": "null"
+								}
 							],
 							"description": "Controls how the snippet result is rendered in dashboard widgets"
 						}
@@ -11739,38 +11605,23 @@ export const contract: ApiContract = {
 					"type": "object",
 					"properties": {
 						"title": {
-							"type": [
-								"string",
-								"null"
-							],
-							"maxLength": 100
-						},
-						"col_span": {
 							"anyOf": [
 								{
-									"type": "number",
-									"enum": [
-										1
-									]
+									"type": "string",
+									"maxLength": 100
 								},
 								{
-									"type": "number",
-									"enum": [
-										2
-									]
-								},
-								{
-									"type": "number",
-									"enum": [
-										3
-									]
-								},
-								{
-									"type": "number",
-									"enum": [
-										4
-									]
+									"type": "null"
 								}
+							]
+						},
+						"col_span": {
+							"type": "number",
+							"enum": [
+								1,
+								2,
+								3,
+								4
 							]
 						},
 						"position": {
@@ -11785,16 +11636,19 @@ export const contract: ApiContract = {
 							]
 						},
 						"drill_down": {
-							"type": [
-								"string",
-								"null"
-							],
-							"minLength": 1,
-							"maxLength": 2048
+							"anyOf": [
+								{
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 2048
+								},
+								{
+									"type": "null"
+								}
+							]
 						},
 						"visualization_options": {
-							"type": "object",
-							"additionalProperties": {}
+							"type": "object"
 						},
 						"freshness_policy": {
 							"oneOf": [
@@ -11843,9 +11697,13 @@ export const contract: ApiContract = {
 							]
 						},
 						"snippet_etag": {
-							"type": [
-								"string",
-								"null"
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
 							]
 						},
 						"input_bindings": {
@@ -11925,22 +11783,25 @@ export const contract: ApiContract = {
 							}
 						},
 						"visualization": {
-							"type": [
-								"string",
-								"null"
-							],
-							"enum": [
-								"stat",
-								"sparkline",
-								"line",
-								"area",
-								"bar",
-								"donut",
-								"table",
-								"status_list",
-								"logs",
-								"json",
-								null
+							"anyOf": [
+								{
+									"type": "string",
+									"enum": [
+										"stat",
+										"sparkline",
+										"line",
+										"area",
+										"bar",
+										"donut",
+										"table",
+										"status_list",
+										"logs",
+										"json"
+									]
+								},
+								{
+									"type": "null"
+								}
 							]
 						},
 						"refresh_policy": {
@@ -11999,17 +11860,20 @@ export const contract: ApiContract = {
 							]
 						},
 						"display_type": {
-							"type": [
-								"string",
-								"null"
-							],
-							"enum": [
-								"table",
-								"stat",
-								"json",
-								"logs",
-								"timeseries",
-								null
+							"anyOf": [
+								{
+									"type": "string",
+									"enum": [
+										"table",
+										"stat",
+										"json",
+										"logs",
+										"timeseries"
+									]
+								},
+								{
+									"type": "null"
+								}
 							],
 							"description": "Controls how the snippet result is rendered in dashboard widgets"
 						}
@@ -12023,38 +11887,23 @@ export const contract: ApiContract = {
 					"type": "object",
 					"properties": {
 						"title": {
-							"type": [
-								"string",
-								"null"
-							],
-							"maxLength": 100
-						},
-						"col_span": {
 							"anyOf": [
 								{
-									"type": "number",
-									"enum": [
-										1
-									]
+									"type": "string",
+									"maxLength": 100
 								},
 								{
-									"type": "number",
-									"enum": [
-										2
-									]
-								},
-								{
-									"type": "number",
-									"enum": [
-										3
-									]
-								},
-								{
-									"type": "number",
-									"enum": [
-										4
-									]
+									"type": "null"
 								}
+							]
+						},
+						"col_span": {
+							"type": "number",
+							"enum": [
+								1,
+								2,
+								3,
+								4
 							]
 						},
 						"position": {
@@ -12069,16 +11918,19 @@ export const contract: ApiContract = {
 							]
 						},
 						"drill_down": {
-							"type": [
-								"string",
-								"null"
-							],
-							"minLength": 1,
-							"maxLength": 2048
+							"anyOf": [
+								{
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 2048
+								},
+								{
+									"type": "null"
+								}
+							]
 						},
 						"visualization_options": {
-							"type": "object",
-							"additionalProperties": {}
+							"type": "object"
 						},
 						"freshness_policy": {
 							"oneOf": [
@@ -12246,25 +12098,33 @@ export const contract: ApiContract = {
 					"$ref": "#/$defs/PackageVersionPin"
 				},
 				"custom_image": {
-					"type": [
-						"string",
-						"null"
-					],
-					"format": "uri"
+					"anyOf": [
+						{
+							"type": "string",
+							"format": "uri"
+						},
+						{
+							"type": "null"
+						}
+					]
 				},
 				"custom_description": {
-					"type": [
-						"string",
-						"null"
-					],
-					"maxLength": 500
+					"anyOf": [
+						{
+							"type": "string",
+							"maxLength": 500
+						},
+						{
+							"type": "null"
+						}
+					]
 				},
 				"support_email": {
 					"anyOf": [
 						{
 							"type": "string",
-							"maxLength": 254,
-							"format": "email"
+							"format": "email",
+							"maxLength": 254
 						},
 						{
 							"type": "string",
@@ -13074,14 +12934,15 @@ export const contract: ApiContract = {
 				},
 				"value": {
 					"type": "string",
-					"minLength": 1,
-					"description": "The provider API token to probe. Consumed, never stored."
+					"description": "The provider API token to probe. Consumed, never stored.",
+					"minLength": 1
 				}
 			},
 			"required": [
 				"provider",
 				"value"
-			]
+			],
+			"additionalProperties": false
 		},
 		"WorkspaceClassResource": {
 			"type": "object",
