@@ -1,5 +1,10 @@
+import { BunServices } from '@effect/platform-bun';
 import { describe, expect, it } from '@effect/vitest';
 import { Effect } from 'effect';
+import { Command } from 'effect/cli';
+
+import { resourceCommands } from '../src/cli/api-commands';
+import { contract } from '../src/generated/contract.gen';
 
 import { runAkua, temporaryHome, writeConfigFile } from './fake-api';
 
@@ -11,6 +16,177 @@ const signedIn = Effect.gen(function* () {
 });
 
 const accepted = () => ({ status: 202, body: { id: 'op_1', done: false } });
+
+describe('secret values', () => {
+	const createGeneric = ['secrets', 'create', '--name', 'token', '--kind', 'generic'];
+
+	it.effect('keeps inline secrets redacted in parsed command diagnostics', () =>
+		Effect.gen(function* () {
+			const group = yield* Effect.fromNullishOr(
+				resourceCommands(contract, {}).find((resource) => resource.name === 'secrets')
+			);
+			const create = yield* Effect.fromNullishOr(
+				group.subcommands
+					.flatMap((commands) => commands.commands)
+					.find((command) => command.name === 'create')
+			);
+			const diagnosticCommand = create.pipe(
+				Command.withHandler((input) =>
+					Effect.sync(() => {
+						expect(JSON.stringify(input)).not.toContain('private-inline-value');
+					})
+				)
+			);
+			yield* Command.runWith(diagnosticCommand, { version: 'test' })([
+				'--name',
+				'token',
+				'--kind',
+				'generic',
+				'--value',
+				'private-inline-value'
+			]);
+		}).pipe(Effect.provide(BunServices.layer))
+	);
+
+	it.effect('reads a secret from stdin with --<flag>-file - and does not warn', () =>
+		Effect.gen(function* () {
+			const env = yield* signedIn;
+
+			const result = yield* runAkua([...createGeneric, '--value-file', '-', '--json'], {
+				env,
+				inputs: { '-': 's3cret-from-stdin\n' },
+				api: accepted
+			});
+
+			expect(result.exitCode).toBe(0);
+			expect(result.requests[0]?.body).toMatchObject({ value: 's3cret-from-stdin' });
+			expect(result.stderr).toBe('');
+		}).pipe(Effect.scoped)
+	);
+
+	it.effect('still accepts a secret typed as a flag, with a warning on stderr', () =>
+		Effect.gen(function* () {
+			const env = yield* signedIn;
+
+			const result = yield* runAkua([...createGeneric, '--value', 's3cret', '--json'], {
+				env,
+				api: accepted
+			});
+
+			expect(result.exitCode).toBe(0);
+			expect(result.requests[0]?.body).toMatchObject({ value: 's3cret' });
+			expect(result.stderr).toContain('--value-file -');
+			expect(result.stderr).not.toContain('s3cret');
+		}).pipe(Effect.scoped)
+	);
+
+	it.effect('rejects a secret given both ways before sending anything', () =>
+		Effect.gen(function* () {
+			const env = yield* signedIn;
+
+			const result = yield* runAkua(
+				[...createGeneric, '--value', 'a', '--value-file', 'secret.txt', '--json'],
+				{ env, inputs: { 'secret.txt': 'b' }, api: accepted }
+			);
+
+			expect(result.exitCode).toBe(2);
+			expect(result.requests).toEqual([]);
+		}).pipe(Effect.scoped)
+	);
+
+	it.effect('rejects stdin shared by --input and a secret file flag', () =>
+		Effect.gen(function* () {
+			const env = yield* signedIn;
+			const result = yield* runAkua(
+				[...createGeneric, '--value-file', '-', '--input', '-', '--json'],
+				{
+					env,
+					inputs: { '-': '{"body":{"name":"token","kind":"generic","value":"from-input"}}' },
+					api: accepted
+				}
+			);
+
+			expect(result.exitCode).toBe(2);
+			expect(JSON.parse(result.stdout).error.message).toContain('stdin');
+			expect(result.requests).toEqual([]);
+		}).pipe(Effect.scoped)
+	);
+
+	it.effect('names the secret file flag when its file cannot be read', () =>
+		Effect.gen(function* () {
+			const env = yield* signedIn;
+			const result = yield* runAkua([...createGeneric, '--value-file', 'missing.txt', '--json'], {
+				env,
+				api: accepted
+			});
+
+			expect(result.exitCode).toBe(2);
+			expect(JSON.parse(result.stdout).error.message).toContain('--value-file');
+			expect(JSON.parse(result.stdout).error.message).not.toContain('--input file');
+			expect(result.requests).toEqual([]);
+		}).pipe(Effect.scoped)
+	);
+
+	it.effect('reads a JSON field that contains secrets from a file', () =>
+		Effect.gen(function* () {
+			const env = yield* signedIn;
+
+			const result = yield* runAkua(
+				[
+					'registry',
+					'create-credential',
+					'--name',
+					'ghcr',
+					'--registry-url',
+					'https://ghcr.io',
+					'--type',
+					'basic',
+					'--credentials-file',
+					'credentials.json',
+					'--json'
+				],
+				{
+					env,
+					inputs: { 'credentials.json': '{"username":"bot","password":"pw"}\n' },
+					api: () => ({ status: 201, body: { id: 'rc_1' } })
+				}
+			);
+
+			expect(result.requests[0]?.body).toMatchObject({
+				credentials: { username: 'bot', password: 'pw' }
+			});
+			expect(result.stderr).toBe('');
+		}).pipe(Effect.scoped)
+	);
+
+	it.effect('decodes an inline JSON secret and warns without repeating its value', () =>
+		Effect.gen(function* () {
+			const env = yield* signedIn;
+			const result = yield* runAkua(
+				[
+					'registry',
+					'create-credential',
+					'--name',
+					'ghcr',
+					'--registry-url',
+					'https://ghcr.io',
+					'--type',
+					'basic',
+					'--credentials',
+					'{"username":"bot","password":"private-json-value"}',
+					'--json'
+				],
+				{ env, api: () => ({ status: 201, body: { id: 'rc_1' } }) }
+			);
+			expect(result.exitCode).toBe(0);
+			expect(result.requests[0]?.body).toMatchObject({
+				credentials: { username: 'bot', password: 'private-json-value' }
+			});
+			expect(result.stderr).toContain('--credentials-file');
+			expect(result.stderr).not.toContain('private-json-value');
+		}).pipe(Effect.scoped)
+	);
+});
 
 describe('request assembly', () => {
 	it.effect('encodes path segments and keeps literal custom verbs', () =>

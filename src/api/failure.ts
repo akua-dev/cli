@@ -17,7 +17,7 @@ export class OperationFailure extends Schema.TaggedError<OperationFailure>()('Op
 	reason: Schema.Literals([
 		/** The request input (flags, arguments, or `--input`) is malformed or invalid. */
 		'input',
-		/** `--input` names a file or stream that cannot be read. */
+		/** An input option names a file or stream that cannot be read. */
 		'source',
 		/** The operation needs a credential and none is configured. */
 		'auth',

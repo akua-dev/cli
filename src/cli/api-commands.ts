@@ -1,4 +1,4 @@
-import { Effect, Option, Predicate, Schema, Stream } from 'effect';
+import { Effect, Option, Predicate, Redacted, Schema, Stream } from 'effect';
 import { Argument, Command, Flag } from 'effect/cli';
 
 import { ApiClient, type ApiResult } from '../api/client';
@@ -7,6 +7,7 @@ import { OperationFailure } from '../api/failure';
 import {
 	commandPath,
 	CONTEXT_HEADER,
+	SECRET_FILE_SUFFIX,
 	type InputFlag,
 	type OperationInputs,
 	partitionOf
@@ -16,7 +17,7 @@ import { decodeRequest } from '../api/request';
 import type { CliFailure } from '../runtime/effect-runtime';
 import type { NextStep } from '../runtime/errors';
 import type { RenderEnvelope } from '../runtime/render';
-import { PublicInput, type SecureConfig } from '../runtime/services';
+import { Console, PublicInput, type SecureConfig } from '../runtime/services';
 import { respond } from './invocation';
 import {
 	commandExamples,
@@ -73,6 +74,16 @@ function operationCommand(contract: ApiContract, operation: ApiOperation) {
 			)
 		),
 		flags: context.inputs.flags.map(flagParameter),
+		secretFiles: context.inputs.flags
+			.filter((flag) => flag.secret)
+			.map((flag) =>
+				Flag.String(`${flag.name}${SECRET_FILE_SUFFIX}`).pipe(
+					Flag.optional,
+					Flag.withDescription(
+						`Read --${flag.name} from a file, or - for stdin, so it stays out of shell history`
+					)
+				)
+			),
 		input: Flag.String('input').pipe(
 			Flag.optional,
 			Flag.withDescription(
@@ -83,9 +94,9 @@ function operationCommand(contract: ApiContract, operation: ApiOperation) {
 	return Command.make(
 		context.action,
 		config,
-		Effect.fn(function* ({ args, flags, input }) {
+		Effect.fn(function* ({ args, flags, secretFiles, input }) {
 			const global = yield* akua;
-			yield* respond(runOperation(context, { args, flags, input }, global.workspace));
+			yield* respond(runOperation(context, { args, flags, secretFiles, input }, global.workspace));
 		})
 	).pipe(
 		Command.withDescription(operation.summary),
@@ -93,14 +104,23 @@ function operationCommand(contract: ApiContract, operation: ApiOperation) {
 	);
 }
 
-function flagParameter(flag: InputFlag): Flag.Flag<Option.Option<Schema.Json>> {
+type ParsedFlag = Schema.Json | Redacted.Redacted<string>;
+
+function flagParameter(flag: InputFlag): Flag.Flag<Option.Option<ParsedFlag>> {
 	const description = [
 		firstSentence(flag.description) ?? fieldLabel(flag.key),
-		flag.required ? '(required)' : '',
+		flag.required
+			? flag.secret
+				? `(required, or --${flag.name}${SECRET_FILE_SUFFIX})`
+				: '(required)'
+			: '',
 		flag.kind._tag === 'Json' ? '(JSON)' : ''
 	]
 		.filter((part) => part !== '')
 		.join(' ');
+	if (flag.secret) {
+		return Flag.Redacted(flag.name).pipe(Flag.optional, Flag.withDescription(description));
+	}
 	const base = (): Flag.Flag<Schema.Json> => {
 		switch (flag.kind._tag) {
 			case 'String':
@@ -136,9 +156,15 @@ function firstSentence(text: string | undefined): string | undefined {
 
 interface ParsedInputs {
 	readonly args: ReadonlyArray<Option.Option<string>>;
-	readonly flags: ReadonlyArray<Option.Option<Schema.Json>>;
+	readonly flags: ReadonlyArray<Option.Option<ParsedFlag>>;
+	/** `--<secret>-file` values, in the order of the secret flags. */
+	readonly secretFiles: ReadonlyArray<Option.Option<string>>;
 	readonly input: Option.Option<string>;
 }
+
+type ResolvedInputs = Omit<ParsedInputs, 'flags'> & {
+	readonly flags: ReadonlyArray<Option.Option<Schema.Json>>;
+};
 
 const runOperation = Effect.fnUntraced(function* (
 	context: OperationCommandContext,
@@ -147,7 +173,7 @@ const runOperation = Effect.fnUntraced(function* (
 ): Effect.fn.Return<
 	RenderEnvelope<CliFailure>,
 	CliFailure,
-	ApiClient | PublicInput | SecureConfig
+	ApiClient | Console | PublicInput | SecureConfig
 > {
 	const { envelope, workspaceMissing } = yield* prepareRequest(context, parsed, workspaceFlag);
 	const failureContext = { ...context, workspaceMissing };
@@ -170,12 +196,13 @@ const prepareRequest = Effect.fnUntraced(function* (
 ): Effect.fn.Return<
 	{ readonly envelope: JsonRecord; readonly workspaceMissing: boolean },
 	CliFailure,
-	ApiClient | PublicInput | SecureConfig
+	ApiClient | Console | PublicInput | SecureConfig
 > {
 	const { contract, operation, inputs } = context;
 	const envelope = yield* Effect.gen(function* () {
+		const flags = yield* resolveSecretFlags(context, parsed);
 		const base = Option.isSome(parsed.input) ? yield* readInput(operation, parsed.input.value) : {};
-		return yield* applyInputs(operation, inputs, base, parsed);
+		return yield* applyInputs(operation, inputs, base, { ...parsed, flags });
 	}).pipe(Effect.mapError(toCliFailure(context)));
 	const headers = Option.getOrElse(asJsonRecord(envelope.headers), (): JsonRecord => ({}));
 	// Like every other flag, --workspace overrides --input; the environment and config do not.
@@ -190,6 +217,80 @@ const prepareRequest = Effect.fnUntraced(function* (
 		envelope: { ...envelope, headers: { ...headers, [CONTEXT_HEADER]: id } },
 		workspaceMissing: false
 	};
+});
+
+/**
+ * Secret flags take their value from `--<name>-file` (a path, or `-` for
+ * stdin) when given; a secret typed on the command line still works but
+ * warns, because shell history and the process list keep it.
+ */
+const resolveSecretFlags = Effect.fnUntraced(function* (
+	context: OperationCommandContext,
+	parsed: ParsedInputs
+) {
+	const { operation, inputs } = context;
+	const console = yield* Console;
+	const flags = parsed.flags.map((flag) =>
+		Option.map(flag, (value) => (Redacted.isRedacted(value) ? Redacted.value(value) : value))
+	);
+	const secretFlags = inputs.flags.filter((flag) => flag.secret);
+	const stdinSources =
+		parsed.secretFiles.filter((file) => Option.isSome(file) && file.value === '-').length +
+		(Option.isSome(parsed.input) && parsed.input.value === '-' ? 1 : 0);
+	if (stdinSources > 1) {
+		return yield* new OperationFailure({
+			operationId: operation.id,
+			reason: 'input',
+			issues: [{ path: [], message: 'stdin (-) can be used by only one input source' }]
+		});
+	}
+	for (const [position, flag] of secretFlags.entries()) {
+		const index = inputs.flags.indexOf(flag);
+		const direct = flags[index] ?? Option.none();
+		const file = parsed.secretFiles[position] ?? Option.none();
+		const fileFlag = `--${flag.name}${SECRET_FILE_SUFFIX}`;
+		const issue = (message: string) =>
+			new OperationFailure({
+				operationId: operation.id,
+				reason: 'input',
+				issues: [{ path: [partitionOf(flag.target), flag.key], message }]
+			});
+		if (Option.isNone(file)) {
+			if (Option.isSome(direct)) {
+				if (flag.kind._tag === 'Json' && Predicate.isString(direct.value)) {
+					flags[index] = Option.some(
+						yield* decodeJsonText(direct.value).pipe(
+							Effect.mapError(() => issue('Expected a JSON value'))
+						)
+					);
+				}
+				yield* console.writeStderr(
+					`Warning: --${flag.name} keeps the secret in your shell history and the process list. Pass it with ${fileFlag} <path>, or ${fileFlag} - to read stdin.\n`
+				);
+			}
+			continue;
+		}
+		if (Option.isSome(direct)) {
+			return yield* issue(`Use --${flag.name} or ${fileFlag}, not both`);
+		}
+		const text = yield* (yield* PublicInput).read(file.value).pipe(
+			Effect.mapError(
+				() =>
+					new OperationFailure({
+						operationId: operation.id,
+						reason: 'source',
+						detail: fileFlag
+					})
+			)
+		);
+		const value = text.replace(/\r?\n$/, '');
+		flags[index] = Option.some(
+			flag.kind._tag === 'Json'
+				? yield* decodeJsonText(value).pipe(Effect.mapError(() => issue('Expected a JSON value')))
+				: value
+		);
+	}
+	return flags;
 });
 
 const readInput = Effect.fnUntraced(function* (operation: ApiOperation, source: string) {
@@ -223,7 +324,7 @@ function applyInputs(
 	operation: ApiOperation,
 	inputs: OperationInputs,
 	base: JsonRecord,
-	parsed: ParsedInputs
+	parsed: ResolvedInputs
 ): Effect.Effect<JsonRecord, OperationFailure> {
 	const assignments: Assignment[] = [
 		...inputs.arguments.flatMap((argument, index) =>

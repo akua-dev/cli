@@ -43,8 +43,16 @@ export interface InputFlag {
 	readonly key: string;
 	readonly kind: FlagKind;
 	readonly required: boolean;
+	/**
+	 * The field is (or contains) secret material (`format: password`). Its
+	 * value is also accepted from a file or stdin via `--<name>-file`.
+	 */
+	readonly secret: boolean;
 	readonly description?: string;
 }
+
+/** Suffix of the flag that reads a secret flag's value from a file or stdin. */
+export const SECRET_FILE_SUFFIX = '-file';
 
 /** Header the public API reads the workspace (or other scope) context from. */
 export const CONTEXT_HEADER = 'akua-context';
@@ -106,6 +114,7 @@ export function operationInputs(
 			key: parameter.name,
 			kind: flagKind(contract, parameter.schema),
 			required: parameter.required,
+			secret: isSecret(contract, parameter.schema),
 			...(parameter.description === undefined ? {} : { description: parameter.description })
 		});
 	}
@@ -125,6 +134,15 @@ export function operationInputs(
 		}
 		taken.add(name);
 		flags.push({ ...candidate, name });
+	}
+	for (const flag of flags.filter((candidate) => candidate.secret)) {
+		const fileFlag = `${flag.name}${SECRET_FILE_SUFFIX}`;
+		if (RESERVED_FLAG_NAMES.has(fileFlag) || taken.has(fileFlag)) {
+			return Result.fail(
+				`${operation.id}: secret flag --${flag.name} needs the already used --${fileFlag}`
+			);
+		}
+		taken.add(fileFlag);
 	}
 
 	return Result.succeed({
@@ -153,7 +171,10 @@ function bodyFlags(contract: ApiContract, operation: ApiOperation): InputFlag[] 
 	const objects = branches.map((branch) => resolve(contract, branch));
 	if (!objects.every((branch) => Predicate.isObject(branch.properties))) return [];
 
-	const fields = new Map<string, { kind: FlagKind; required: boolean; description?: string }>();
+	const fields = new Map<
+		string,
+		{ kind: FlagKind; required: boolean; secret: boolean; description?: string }
+	>();
 	for (const branch of objects) {
 		const properties = Predicate.isObject(branch.properties) ? branch.properties : {};
 		const required = stringArray(branch.required);
@@ -165,6 +186,7 @@ function bodyFlags(contract: ApiContract, operation: ApiOperation): InputFlag[] 
 			fields.set(key, {
 				kind: existing === undefined ? kind : mergeKinds(existing.kind, kind),
 				required: (existing?.required ?? true) && required.includes(key),
+				secret: (existing?.secret ?? false) || isSecret(contract, value),
 				...((existing?.description ?? description) === undefined
 					? {}
 					: { description: existing?.description ?? description })
@@ -184,8 +206,29 @@ function bodyFlags(contract: ApiContract, operation: ApiOperation): InputFlag[] 
 		key,
 		kind: field.kind,
 		required: field.required,
+		secret: field.secret,
 		...(field.description === undefined ? {} : { description: field.description })
 	}));
+}
+
+/** A schema is secret when it, a union branch, or a nested property has `format: password`. */
+export function isSecret(
+	contract: ApiContract,
+	schema: JsonSchema,
+	seen = new Set<JsonSchema>()
+): boolean {
+	const resolved = resolve(contract, schema);
+	if (seen.has(resolved)) return false;
+	seen.add(resolved);
+	if (resolved.format === 'password') return true;
+	const nested = [
+		...(unionBranches(resolved) ?? []),
+		...(Predicate.isObject(resolved.properties)
+			? Object.values(resolved.properties).filter(Predicate.isObject)
+			: []),
+		...(Predicate.isObject(resolved.items) ? [resolved.items] : [])
+	];
+	return nested.some((child) => isSecret(contract, child, seen));
 }
 
 export function flagKind(contract: ApiContract, schema: JsonSchema): FlagKind {

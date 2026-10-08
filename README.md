@@ -154,7 +154,9 @@ to fix and the command to run next.
 Scripts and agents can also send the whole request as one JSON object from
 stdin or a named file. Generated commands accept one JSON object whose only
 keys are `path`, `query`, `headers`, and `body`; flags override its fields.
-Use it for secret values, which never belong on a command line:
+Secret fields also take a `--<flag>-file` form that reads a file or stdin
+(`akua secrets create --name db --kind generic --value-file -`), so secrets
+stay off the command line; typing them as plain flags prints a warning:
 
 ```sh
 printf '{"query":{"limit":5}}' | akua workspaces list --input -

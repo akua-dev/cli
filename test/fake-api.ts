@@ -45,6 +45,7 @@ export interface RunOptions {
 export interface RunResult {
 	readonly exitCode: number;
 	readonly stdout: string;
+	readonly stderr: string;
 	readonly requests: readonly RecordedRequest[];
 }
 
@@ -61,6 +62,7 @@ export const runAkua = Effect.fnUntraced(function* (
 ) {
 	const requests = yield* Ref.make<RecordedRequest[]>([]);
 	const stdout = yield* Ref.make('');
+	const stderr = yield* Ref.make('');
 	const api: FakeApi = options.api ?? (() => ({ status: 404, body: { message: 'no route' } }));
 
 	const httpClient = HttpClient.make((request, url) =>
@@ -94,7 +96,7 @@ export const runAkua = Effect.fnUntraced(function* (
 			stdoutIsTTY: options.tty === true,
 			stdinIsTTY: options.tty === true,
 			writeStdout: (value) => Ref.update(stdout, (all) => all + value),
-			writeStderr: () => Effect.void
+			writeStderr: (value) => Ref.update(stderr, (all) => all + value)
 		}),
 		Layer.succeed(PublicInput, {
 			read: (source) => {
@@ -117,6 +119,7 @@ export const runAkua = Effect.fnUntraced(function* (
 	return {
 		exitCode,
 		stdout: yield* Ref.get(stdout),
+		stderr: yield* Ref.get(stderr),
 		requests: yield* Ref.get(requests)
 	} satisfies RunResult;
 });
