@@ -8,6 +8,10 @@ export const contract: ApiContract = {
 			"title": "Access Decisions"
 		},
 		{
+			"name": "agent-commands",
+			"title": "Agent commands"
+		},
+		{
 			"name": "agent-events",
 			"title": "Agent events",
 			"description": "Persisted agent transcripts and response recovery."
@@ -220,6 +224,17 @@ export const contract: ApiContract = {
 				"maxLength": 64
 			}
 		},
+		"header:idempotency-key:5": {
+			"name": "idempotency-key",
+			"in": "header",
+			"required": true,
+			"schema": {
+				"type": "string",
+				"minLength": 1,
+				"maxLength": 64,
+				"description": "Required stable key. Retry the identical key and input after an uncertain response."
+			}
+		},
 		"header:if-match": {
 			"name": "if-match",
 			"in": "header",
@@ -414,6 +429,15 @@ export const contract: ApiContract = {
 			}
 		},
 		"path:id:21": {
+			"name": "id",
+			"in": "path",
+			"required": true,
+			"schema": {
+				"type": "string",
+				"pattern": "^(?:ags_)?[a-zA-Z0-9]{1,50}$"
+			}
+		},
+		"path:id:22": {
 			"name": "id",
 			"in": "path",
 			"required": true,
@@ -1439,6 +1463,82 @@ export const contract: ApiContract = {
 			}
 		},
 		{
+			"id": "agentCommands.decideApproval",
+			"method": "POST",
+			"path": "/agent_approvals:decide",
+			"summary": "Decide an exact agent tool approval",
+			"auth": true,
+			"parameters": [
+				"header:akua-context:2"
+			],
+			"body": {
+				"required": true,
+				"schema": {
+					"$ref": "#/$defs/AgentApprovalDecision"
+				}
+			}
+		},
+		{
+			"id": "agentCommands.openSession",
+			"method": "POST",
+			"path": "/agent_sessions",
+			"summary": "Open an agent conversation",
+			"auth": true,
+			"parameters": [
+				"header:akua-context:2",
+				"header:idempotency-key:5"
+			],
+			"body": {
+				"required": true,
+				"schema": {
+					"$ref": "#/$defs/AgentSessionOpenRequest"
+				}
+			}
+		},
+		{
+			"id": "agentCommands.stopTurn",
+			"method": "POST",
+			"path": "/agent_turns:stop",
+			"summary": "Stop an exact agent Turn",
+			"auth": true,
+			"parameters": [
+				"header:akua-context:2"
+			],
+			"body": {
+				"required": true,
+				"schema": {
+					"$ref": "#/$defs/AgentStopRequest"
+				}
+			}
+		},
+		{
+			"id": "agentCommands.submitPrompt",
+			"method": "POST",
+			"path": "/agent_prompts",
+			"summary": "Submit an agent prompt",
+			"auth": true,
+			"parameters": [
+				"header:akua-context:2"
+			],
+			"body": {
+				"required": true,
+				"schema": {
+					"$ref": "#/$defs/AgentPromptRequest"
+				}
+			}
+		},
+		{
+			"id": "agentEvents.getSession",
+			"method": "GET",
+			"path": "/agent_sessions/{id}",
+			"summary": "Recover persisted agent Session state",
+			"auth": true,
+			"parameters": [
+				"path:id:21",
+				"header:akua-context:2"
+			]
+		},
+		{
 			"id": "agentEvents.list",
 			"method": "GET",
 			"path": "/agent_events",
@@ -1469,6 +1569,21 @@ export const contract: ApiContract = {
 				"query:after:2",
 				"query:limit:3"
 			]
+		},
+		{
+			"id": "agentEvents.streamResponseParts",
+			"method": "GET",
+			"path": "/agent_response_parts:stream",
+			"summary": "Follow committed agent response parts",
+			"auth": true,
+			"parameters": [
+				"header:akua-context:2",
+				"query:session:2",
+				"query:after:2"
+			],
+			"stream": {
+				"failureEvent": "effect/http-api/stream/failure"
+			}
 		},
 		{
 			"id": "apiTokens.create",
@@ -1680,7 +1795,7 @@ export const contract: ApiContract = {
 			"summary": "Get cluster compute settings",
 			"auth": true,
 			"parameters": [
-				"path:id:21",
+				"path:id:22",
 				"header:akua-context:3"
 			]
 		},
@@ -1886,7 +2001,7 @@ export const contract: ApiContract = {
 			"summary": "Update cluster compute settings",
 			"auth": true,
 			"parameters": [
-				"path:id:21",
+				"path:id:22",
 				"header:if-match:3",
 				"header:akua-context:3"
 			],
@@ -6294,6 +6409,208 @@ export const contract: ApiContract = {
 					"maxLength": 53
 				}
 			},
+			"additionalProperties": false
+		},
+		"AgentApprovalDecision": {
+			"type": "object",
+			"properties": {
+				"approval_id": {
+					"type": "string",
+					"pattern": "^(?:apr_)?[a-zA-Z0-9]{1,50}$"
+				},
+				"binding": {
+					"type": "string",
+					"pattern": "^[a-f0-9]{64}$"
+				},
+				"revision": {
+					"type": "integer",
+					"minimum": 1,
+					"maximum": 9007199254740990
+				},
+				"decision": {
+					"type": "string",
+					"enum": [
+						"APPROVE",
+						"REJECT"
+					]
+				}
+			},
+			"required": [
+				"approval_id",
+				"binding",
+				"revision",
+				"decision"
+			],
+			"additionalProperties": false
+		},
+		"AgentPromptRequest": {
+			"type": "object",
+			"properties": {
+				"session_id": {
+					"type": "string",
+					"pattern": "^(?:ags_)?[a-zA-Z0-9]{1,50}$"
+				},
+				"message": {
+					"type": "object",
+					"properties": {
+						"id": {
+							"type": "string",
+							"minLength": 1,
+							"maxLength": 200
+						},
+						"role": {
+							"type": "string",
+							"enum": [
+								"user"
+							]
+						},
+						"parts": {
+							"type": "array",
+							"items": {
+								"type": "object",
+								"properties": {
+									"type": {
+										"type": "string",
+										"enum": [
+											"text"
+										]
+									},
+									"text": {
+										"type": "string",
+										"minLength": 1,
+										"maxLength": 32768
+									}
+								},
+								"required": [
+									"type",
+									"text"
+								],
+								"additionalProperties": false
+							},
+							"minItems": 1,
+							"maxItems": 16
+						}
+					},
+					"required": [
+						"id",
+						"role",
+						"parts"
+					],
+					"additionalProperties": false
+				}
+			},
+			"required": [
+				"session_id",
+				"message"
+			],
+			"additionalProperties": false
+		},
+		"AgentSessionOpenRequest": {
+			"anyOf": [
+				{
+					"type": "object",
+					"properties": {
+						"agent_id": {
+							"type": "string",
+							"pattern": "^(?:agt_)?[a-zA-Z0-9]{1,50}$"
+						},
+						"agent": {
+							"not": {}
+						},
+						"title": {
+							"type": "string",
+							"minLength": 1,
+							"maxLength": 200
+						}
+					},
+					"required": [
+						"agent_id"
+					],
+					"additionalProperties": false
+				},
+				{
+					"type": "object",
+					"properties": {
+						"agent": {
+							"type": "object",
+							"properties": {
+								"name": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 200,
+									"pattern": "^[^\\p{Cc}\\p{Cf}]+$"
+								},
+								"instructions": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 262144
+								},
+								"model": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 200
+								},
+								"billing_mode": {
+									"type": "string",
+									"enum": [
+										"PLATFORM_SUBSCRIPTION",
+										"PLATFORM_API",
+										"WORKSPACE_BYOK",
+										"EXTERNAL_SUBSCRIPTION"
+									]
+								},
+								"mode": {
+									"type": "string",
+									"enum": [
+										"CODING"
+									]
+								}
+							},
+							"required": [
+								"name",
+								"instructions",
+								"model",
+								"billing_mode"
+							],
+							"additionalProperties": false
+						},
+						"agent_id": {
+							"not": {}
+						},
+						"title": {
+							"type": "string",
+							"minLength": 1,
+							"maxLength": 200
+						}
+					},
+					"required": [
+						"agent"
+					],
+					"additionalProperties": false
+				}
+			]
+		},
+		"AgentStopRequest": {
+			"type": "object",
+			"properties": {
+				"session_id": {
+					"type": "string",
+					"pattern": "^(?:ags_)?[a-zA-Z0-9]{1,50}$"
+				},
+				"turn_id": {
+					"type": "string",
+					"pattern": "^(?:atn_)?[a-zA-Z0-9]{1,50}$"
+				},
+				"reason": {
+					"type": "string",
+					"minLength": 1,
+					"maxLength": 1024
+				}
+			},
+			"required": [
+				"session_id",
+				"turn_id"
+			],
 			"additionalProperties": false
 		},
 		"ArchiveProductBody": {
