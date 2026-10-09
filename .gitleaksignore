@@ -1,0 +1,4 @@
+# Reviewed synthetic inline-credential assertions in the CLI test suite.
+# Each entry binds one immutable projected commit, file, rule, and line.
+86f93201342268eb90520d52b67182c7f344ad81:test/api-execution.test.ts:generic-password:176
+86f93201342268eb90520d52b67182c7f344ad81:test/api-execution.test.ts:generic-password:183
